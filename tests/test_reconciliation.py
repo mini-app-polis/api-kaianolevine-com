@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from deejay_sets_api.models import Set as DbSet
 from deejay_sets_api.models import Track as DbTrack
 from deejay_sets_api.models import TrackCatalog as DbCatalog
+from deejay_sets_api.schemas import IngestTrack
 from deejay_sets_api.services.normalization import normalize_for_matching
 from deejay_sets_api.services.reconciliation import reconcile_set_tracks
 
@@ -43,12 +45,7 @@ async def test_reconciliation_confidence_escalation(async_engine) -> None:
         session.add(catalog)
         await session.flush()
 
-        # First play: minimal payload (title+artist only).
-        # Should low -> medium when play_count becomes 2.
-        track1 = DbTrack(
-            owner_id=owner_id,
-            set_id=db_set.id,
-            catalog_id=None,
+        ingest_track1 = IngestTrack(
             play_order=None,
             play_time=None,
             title=raw_title,
@@ -57,13 +54,19 @@ async def test_reconciliation_confidence_escalation(async_engine) -> None:
             bpm=None,
             release_year=None,
             length_secs=None,
-            data_quality=None,
+            label=None,
+            remix=None,
+            comment=None,
         )
-        session.add(track1)
-        await session.flush()
 
+        # First play: minimal payload (title+artist only).
+        # Should low -> medium when play_count becomes 2.
         result1 = await reconcile_set_tracks(
-            session=session, owner_id=owner_id, set_date=set_date, tracks=[track1]
+            session=session,
+            owner_id=owner_id,
+            set_id=db_set.id,
+            set_date=set_date,
+            tracks=[ingest_track1],
         )
         await session.flush()
         assert result1.catalog_new == 0
@@ -73,15 +76,23 @@ async def test_reconciliation_confidence_escalation(async_engine) -> None:
         await session.refresh(catalog)
         assert catalog.play_count == 2
         assert catalog.confidence == "medium"
-        assert track1.catalog_id == catalog.id
-        assert track1.data_quality == "minimal"
+
+        track_rows = (
+            (
+                await session.execute(
+                    select(DbTrack).where(DbTrack.set_id == db_set.id).order_by(DbTrack.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(track_rows) == 1
+        assert track_rows[0].catalog_id == catalog.id
+        assert track_rows[0].data_quality == "minimal"
 
         # Second play: provide BPM consistent within +/-2.
         # Should medium -> high when play_count becomes 3.
-        track2 = DbTrack(
-            owner_id=owner_id,
-            set_id=db_set.id,
-            catalog_id=None,
+        ingest_track2 = IngestTrack(
             play_order=None,
             play_time=None,
             title=raw_title,
@@ -90,13 +101,19 @@ async def test_reconciliation_confidence_escalation(async_engine) -> None:
             bpm=101.0,
             release_year=None,
             length_secs=None,
-            data_quality=None,
+            label=None,
+            remix=None,
+            comment=None,
         )
-        session.add(track2)
-        await session.flush()
 
+        # Second play: provide BPM consistent within +/-2.
+        # Should medium -> high when play_count becomes 3.
         result2 = await reconcile_set_tracks(
-            session=session, owner_id=owner_id, set_date=set_date, tracks=[track2]
+            session=session,
+            owner_id=owner_id,
+            set_id=db_set.id,
+            set_date=set_date,
+            tracks=[ingest_track2],
         )
         await session.flush()
         assert result2.catalog_new == 0
@@ -104,4 +121,14 @@ async def test_reconciliation_confidence_escalation(async_engine) -> None:
         await session.refresh(catalog)
         assert catalog.play_count == 3
         assert catalog.confidence == "high"
-        assert track2.catalog_id == catalog.id
+        track_rows = (
+            (
+                await session.execute(
+                    select(DbTrack).where(DbTrack.set_id == db_set.id).order_by(DbTrack.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(track_rows) == 2
+        assert track_rows[1].catalog_id == catalog.id

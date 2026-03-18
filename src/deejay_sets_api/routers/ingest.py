@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_current_owner, get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
-from ..models import Track as DbTrack
 from ..schemas import Envelope, IngestResponseData, IngestSet, success_envelope
 from ..services.reconciliation import reconcile_set_tracks
 
@@ -35,38 +34,19 @@ async def ingest_set(
     session.add(db_set)
     await session.flush()
 
-    tracks = [
-        DbTrack(
-            owner_id=owner_id,
-            set_id=db_set.id,
-            catalog_id=None,
-            play_order=track.play_order,
-            play_time=track.play_time,
-            title=track.title,
-            artist=track.artist,
-            genre=track.genre,
-            bpm=track.bpm,
-            release_year=track.release_year,
-            length_secs=track.length_secs,
-            data_quality=None,
-        )
-        for track in payload.tracks
-    ]
-    session.add_all(tracks)
-    await session.flush()
-
     result = await reconcile_set_tracks(
         session=session,
         owner_id=owner_id,
+        set_id=db_set.id,
         set_date=payload.set_date,
-        tracks=tracks,
+        tracks=payload.tracks,
     )
 
     await session.commit()
 
     data = IngestResponseData(
         set_id=db_set.id,
-        tracks_created=len(tracks),
+        tracks_created=len(payload.tracks),
         catalog_new=result.catalog_new,
         catalog_updated=result.catalog_updated,
         catalog_unchanged=result.catalog_unchanged,

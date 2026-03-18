@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import uuid
 from collections.abc import Iterable
 from datetime import date as dt_date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Track, TrackCatalog
+from ..models import Track as DbTrack
+from ..models import TrackCatalog
+from ..schemas import IngestTrack
 from .normalization import normalize_for_matching
 
 
@@ -19,7 +22,7 @@ class ReconciliationResult:
     catalog_unchanged: int
 
 
-def _data_quality_for_track(track: Track) -> str:
+def _data_quality_for_ingest_track(track: IngestTrack) -> str:
     # Core fields used to assess completeness for later matching/enrichment.
     core = [
         track.title,
@@ -72,15 +75,39 @@ async def reconcile_set_tracks(
     *,
     session: AsyncSession,
     owner_id: str,
+    set_id: uuid.UUID,
     set_date: dt_date,
-    tracks: Iterable[Track],
+    tracks: Iterable[IngestTrack],
 ) -> ReconciliationResult:
     catalog_new = 0
     catalog_updated = 0
     catalog_unchanged = 0
 
-    for track in tracks:
-        norm_title, norm_artist = normalize_for_matching(track.title, track.artist)
+    for ingest_track in tracks:
+        norm_title, norm_artist = normalize_for_matching(ingest_track.title, ingest_track.artist)
+
+        # Persist missing play_order as 0 (DB constraint). For data_quality,
+        # we still use ingest_track.play_order.
+        play_order_db = ingest_track.play_order if ingest_track.play_order is not None else 0
+        db_track = DbTrack(
+            owner_id=owner_id,
+            set_id=set_id,
+            catalog_id=None,
+            play_order=play_order_db,
+            play_time=ingest_track.play_time,
+            label=ingest_track.label,
+            title=ingest_track.title,
+            remix=ingest_track.remix,
+            artist=ingest_track.artist,
+            comment=ingest_track.comment,
+            genre=ingest_track.genre,
+            bpm=ingest_track.bpm,
+            release_year=ingest_track.release_year,
+            length_secs=ingest_track.length_secs,
+            data_quality=None,
+        )
+        db_track.data_quality = _data_quality_for_ingest_track(ingest_track)
+        session.add(db_track)
 
         result = await session.execute(
             select(TrackCatalog).where(
@@ -91,21 +118,18 @@ async def reconcile_set_tracks(
         )
         catalog = result.scalar_one_or_none()
 
-        # Always compute data_quality on the immutable play ledger row.
-        track.data_quality = _data_quality_for_track(track)
-
         if catalog is None:
             catalog = TrackCatalog(
                 owner_id=owner_id,
-                title=track.title,
-                artist=track.artist,
+                title=ingest_track.title,
+                artist=ingest_track.artist,
                 title_normalized=norm_title,
                 artist_normalized=norm_artist,
                 source="play_history",
                 confidence="low",
-                genre=track.genre,
-                bpm=track.bpm,
-                release_year=track.release_year,
+                genre=ingest_track.genre,
+                bpm=ingest_track.bpm,
+                release_year=ingest_track.release_year,
                 play_count=1,
                 first_played=set_date,
                 last_played=set_date,
@@ -118,16 +142,16 @@ async def reconcile_set_tracks(
                 catalog.confidence,
                 catalog.play_count,
                 catalog_bpm=catalog.bpm,
-                track_bpm=track.bpm,
-                track_genre=track.genre,
+                track_bpm=ingest_track.bpm,
+                track_genre=ingest_track.genre,
             )
 
-            track.catalog_id = catalog.id
+            db_track.catalog_id = catalog.id
             catalog_new += 1
             continue
 
         # Track is a play-unaltered ledger row; reconciliation links it to the best-known catalog.
-        track.catalog_id = catalog.id
+        db_track.catalog_id = catalog.id
 
         before = (
             catalog.genre,
@@ -138,14 +162,14 @@ async def reconcile_set_tracks(
         )
 
         updated_any_metadata = False
-        if track.genre is not None and catalog.genre is None:
-            catalog.genre = track.genre
+        if ingest_track.genre is not None and catalog.genre is None:
+            catalog.genre = ingest_track.genre
             updated_any_metadata = True
-        if track.bpm is not None and catalog.bpm is None:
-            catalog.bpm = track.bpm
+        if ingest_track.bpm is not None and catalog.bpm is None:
+            catalog.bpm = ingest_track.bpm
             updated_any_metadata = True
-        if track.release_year is not None and catalog.release_year is None:
-            catalog.release_year = track.release_year
+        if ingest_track.release_year is not None and catalog.release_year is None:
+            catalog.release_year = ingest_track.release_year
             updated_any_metadata = True
 
         if updated_any_metadata:
@@ -158,8 +182,8 @@ async def reconcile_set_tracks(
             catalog.confidence,
             catalog.play_count,
             catalog_bpm=catalog.bpm,
-            track_bpm=track.bpm,
-            track_genre=track.genre,
+            track_bpm=ingest_track.bpm,
+            track_genre=ingest_track.genre,
         )
 
         after = (

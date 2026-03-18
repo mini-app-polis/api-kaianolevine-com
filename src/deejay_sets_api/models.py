@@ -63,11 +63,15 @@ class Track(Base):
         ForeignKey("track_catalog.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
-    play_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    play_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     play_time: Mapped[Time | None] = mapped_column(Time, nullable=True)
 
+    # CSV column order (subset): label, title, remix, artist, comment, genre
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    remix: Mapped[str | None] = mapped_column(String, nullable=True)
     artist: Mapped[str] = mapped_column(String, nullable=False)
+    comment: Mapped[str | None] = mapped_column(String, nullable=True)
 
     genre: Mapped[str | None] = mapped_column(String, nullable=True)  # raw genre from CSV
     bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -101,6 +105,9 @@ class TrackCatalog(Base):
 
     title_normalized: Mapped[str] = mapped_column(String, nullable=False)
     artist_normalized: Mapped[str] = mapped_column(String, nullable=False)
+
+    remix: Mapped[str | None] = mapped_column(String, nullable=True)
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
 
     source: Mapped[str] = mapped_column(String, nullable=False, default="play_history")
     confidence: Mapped[str] = mapped_column(String, nullable=False, default="low")
@@ -147,6 +154,8 @@ class PipelineEvaluation(Base):
     dimension: Mapped[str] = mapped_column(String, nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
+    # TODO: Phase 3 (AI evaluation) will expand this from freeform details into:
+    # run_id, finding, suggestion, standards_version.
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(

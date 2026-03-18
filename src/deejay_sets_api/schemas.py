@@ -47,8 +47,11 @@ class TrackListItem(BaseModel):
     play_order: int | None = None
     play_time: dt.time | None = None
 
+    label: str | None = None
     title: str
+    remix: str | None = None
     artist: str
+    comment: str | None = None
     genre: str | None = None
     bpm: float | None = None
     release_year: int | None = None
@@ -189,8 +192,11 @@ class IngestTrack(BaseModel):
     play_order: int | None = None
     play_time: dt.time | None = None
 
+    label: str | None = None
     title: str
+    remix: str | None = None
     artist: str
+    comment: str | None = None
 
     genre: str | None = None
     bpm: float | None = None

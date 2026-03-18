@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS track_catalog (
   artist TEXT NOT NULL,
   artist_normalized TEXT NOT NULL,
 
+  remix TEXT,
+  label TEXT,
+
   source TEXT NOT NULL,
   confidence TEXT NOT NULL,
 
@@ -46,12 +49,15 @@ CREATE TABLE IF NOT EXISTS tracks (
   set_id UUID NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
   catalog_id UUID REFERENCES track_catalog(id) ON DELETE SET NULL,
 
-  play_order INTEGER,
+  play_order INTEGER NOT NULL DEFAULT 0,
   play_time TIME,
 
+  label TEXT,
   title TEXT NOT NULL,
+  remix TEXT,
   artist TEXT NOT NULL,
 
+  comment TEXT,
   genre TEXT,
   bpm DOUBLE PRECISION,
   release_year INTEGER,
