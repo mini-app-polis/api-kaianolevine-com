@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 
 import httpx
 import pytest
@@ -17,13 +16,6 @@ os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 from deejay_sets_api.database import get_db_session  # noqa: E402
 from deejay_sets_api.main import app  # noqa: E402
 from deejay_sets_api.models import Base  # noqa: E402
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(scope="session")
