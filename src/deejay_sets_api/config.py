@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,11 +21,13 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def get_current_owner(settings: Settings = Depends(get_settings)) -> str:
+def get_current_owner(
+    x_owner_id: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+) -> str:
     """
-    Placeholder owner resolution for now.
-
-    TODO: Replace with Clerk JWT verification before going to production.
+    Reads owner from X-Owner-Id request header.
+    Falls back to settings.OWNER_ID if header not present.
+    TODO: Replace with Clerk JWT verification before production.
     """
-
-    return settings.OWNER_ID
+    return x_owner_id or settings.OWNER_ID

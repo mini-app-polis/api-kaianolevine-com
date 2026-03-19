@@ -59,7 +59,11 @@ async def client(async_engine) -> AsyncIterator[httpx.AsyncClient]:
     app.dependency_overrides[get_db_session] = override_get_db_session
 
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"X-Owner-Id": "dev-owner"},
+    ) as client:
         yield client
 
     app.dependency_overrides.pop(get_db_session, None)

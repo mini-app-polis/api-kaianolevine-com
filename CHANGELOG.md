@@ -20,3 +20,7 @@
 - Date: 2026-03-18
 - Entry: "Redefined data_quality to use 4 enrichment fields (genre, length_secs, bpm, release_year) instead of 8. play_time and play_order are operational fields, not data quality signals."
 
+## Version 0.1.4
+- Date: 2026-03-18
+- Entry: "Updated get_current_owner to read X-Owner-Id request header. Falls back to settings.OWNER_ID if header not present."
+
