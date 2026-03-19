@@ -18,24 +18,31 @@ async def test_evaluations_endpoints(client) -> None:
         "/v1/evaluations",
         json={
             "repo": "deejay-sets-api",
-            "dimension": "conformance",
-            "severity": "high",
-            "details": {"rule": "response_envelope", "status": "pass"},
+            "dimension": "pipeline_consistency",
+            "severity": "ERROR",
+            "run_id": "run-123",
+            "finding": "Pipeline did not complete ingestion as expected.",
+            "suggestion": "Ensure the ingest step is called and fails fast on unrecoverable errors.",
+            "standards_version": "6.0",
         },
     )
     assert post_resp.status_code == 200
     created = post_resp.json()["data"]
     assert created["repo"] == "deejay-sets-api"
-    assert created["dimension"] == "conformance"
-    assert created["severity"] == "high"
-    assert created["details"] is not None
+    assert created["dimension"] == "pipeline_consistency"
+    assert created["severity"] == "ERROR"
+    assert created["run_id"] == "run-123"
+    assert created["finding"]
+    assert created["suggestion"]
+    assert created["standards_version"] == "6.0"
+    assert created["evaluated_at"]
 
     list_resp2 = await client.get(
         "/v1/evaluations",
         params={
             "repo": "deejay-sets-api",
-            "dimension": "conformance",
-            "severity": "high",
+            "dimension": "pipeline_consistency",
+            "severity": "ERROR",
             "limit": 10,
             "offset": 0,
         },
@@ -48,14 +55,16 @@ async def test_evaluations_endpoints(client) -> None:
     summary_resp2 = await client.get("/v1/evaluations/summary")
     s2 = summary_resp2.json()
     assert s2["meta"]["count"] == 1
-    assert s2["data"][0]["severity"] == "high"
-    assert s2["data"][0]["dimension"] == "conformance"
-    assert s2["data"][0]["count"] == 1
+    assert s2["data"][0]["dimension"] == "pipeline_consistency"
+    assert s2["data"][0]["error_count"] == 1
+    assert s2["data"][0]["warn_count"] == 0
+    assert s2["data"][0]["info_count"] == 0
+    assert s2["data"][0]["most_recent"]
 
     # Validation error envelope
     bad = await client.post(
         "/v1/evaluations",
-        json={"repo": "deejay-sets-api", "severity": "high"},
+        json={"repo": "deejay-sets-api", "dimension": "pipeline_consistency", "severity": "ERROR"},
     )
     assert bad.status_code == 422
     bad_json = bad.json()

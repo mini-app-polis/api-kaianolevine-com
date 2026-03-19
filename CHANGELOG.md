@@ -29,3 +29,9 @@
 - Entry: "Added CORSMiddleware. Configurable via CORS_ORIGINS
   environment variable."
 
+## Version 0.2.0
+- Date: 2026-03-19
+- Entry: "Expanded pipeline_evaluations table with structured fields.
+  Updated POST /v1/evaluations to accept structured findings.
+  Updated GET /v1/evaluations and summary endpoints."
+

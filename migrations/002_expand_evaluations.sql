@@ -1,0 +1,7 @@
+ALTER TABLE pipeline_evaluations
+  ADD COLUMN IF NOT EXISTS run_id TEXT,
+  ADD COLUMN IF NOT EXISTS finding TEXT,
+  ADD COLUMN IF NOT EXISTS suggestion TEXT,
+  ADD COLUMN IF NOT EXISTS standards_version TEXT,
+  ADD COLUMN IF NOT EXISTS evaluated_at TIMESTAMPTZ DEFAULT now();
+

@@ -140,28 +140,38 @@ class CatalogDetail(BaseModel):
     play_history: list[CatalogPlayHistoryItem]
 
 
-class EvaluationFinding(BaseModel):
-    id: uuid.UUID | None = None
+class PipelineEvaluationCreate(BaseModel):
+    run_id: str | None = None
     repo: str
-    dimension: str
-    severity: str
-    details: dict[str, Any] | str | None = None
-    created_at: dt.datetime | None = None
-
-
-class EvaluationCreateRequest(BaseModel):
-    repo: str
-    dimension: str
-    severity: str
-    details: dict[str, Any] | str | None = None
+    dimension: str  # structural_conformance | pipeline_consistency |
+    # testing_coverage | documentation_coverage |
+    # cd_readiness | cross_repo_coherence | standards_currency
+    severity: str  # ERROR | WARN | INFO
+    finding: str
+    suggestion: str | None = None
+    standards_version: str = "6.0"
 
     model_config = ConfigDict(extra="forbid")
 
 
-class EvaluationSummaryItem(BaseModel):
-    severity: str
+class PipelineEvaluationItem(BaseModel):
+    id: uuid.UUID
+    run_id: str | None
+    repo: str
     dimension: str
-    count: int
+    severity: str
+    finding: str
+    suggestion: str | None
+    standards_version: str | None
+    evaluated_at: dt.datetime
+
+
+class EvaluationSummaryItem(BaseModel):
+    dimension: str
+    error_count: int
+    warn_count: int
+    info_count: int
+    most_recent: dt.datetime | None
 
 
 class StatsOverview(BaseModel):

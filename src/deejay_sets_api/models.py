@@ -154,9 +154,16 @@ class PipelineEvaluation(Base):
     dimension: Mapped[str] = mapped_column(String, nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
-    # TODO: Phase 3 (AI evaluation) will expand this from freeform details into:
-    # run_id, finding, suggestion, standards_version.
+    # Legacy catch-all field. Prefer structured fields above.
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    finding: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    standards_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    evaluated_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
