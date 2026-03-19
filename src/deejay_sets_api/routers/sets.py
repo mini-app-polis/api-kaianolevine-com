@@ -71,7 +71,7 @@ async def list_sets(
             year=set_date.year,
             venue=set_venue,
             source_file=source_file,
-            track_count=track_count,
+            track_count=track_count or 0,
         )
         for set_id, set_date, set_venue, source_file, track_count in rows
     ]

@@ -42,3 +42,7 @@
   GET /v1/flags and PATCH /v1/flags/{name} endpoints.
   Added flag check to ingest endpoint."
 
+## Version 0.3.1
+- Date: 2026-03-19
+- Entry: "Added track_count to SetListItem and SetDetail responses."
+

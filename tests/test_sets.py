@@ -48,6 +48,7 @@ async def test_sets_endpoints_contract(client) -> None:
     assert list_json["meta"]["count"] == len(list_json["data"])
     matching = next(item for item in list_json["data"] if item["id"] == set_id)
     assert "track_count" in matching
+    assert isinstance(matching["track_count"], int)
     assert matching["track_count"] == 2
 
     # Set detail includes ordered track list.
@@ -55,6 +56,7 @@ async def test_sets_endpoints_contract(client) -> None:
     assert detail_resp.status_code == 200
     detail = detail_resp.json()["data"]
     assert detail["venue"] == "MADjam"
+    assert isinstance(detail["track_count"], int)
     assert detail["track_count"] == 2
     assert len(detail["tracks"]) == 2
     assert detail["tracks"][0]["play_order"] == 1
