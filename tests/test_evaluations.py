@@ -27,6 +27,7 @@ async def test_evaluations_endpoints(client) -> None:
             ),
             "standards_version": "6.0",
             "source": "flow_inline",
+            "flow_name": "update-dj-set-collection",
         },
     )
     assert post_resp.status_code == 200
@@ -39,6 +40,7 @@ async def test_evaluations_endpoints(client) -> None:
     assert created["suggestion"]
     assert created["standards_version"] == "6.0"
     assert created["source"] == "flow_inline"
+    assert created["flow_name"] == "update-dj-set-collection"
     assert created["evaluated_at"]
 
     list_resp2 = await client.get(
@@ -88,3 +90,19 @@ async def test_evaluation_source_is_none_when_omitted(client) -> None:
     assert resp.status_code == 200
     created = resp.json()["data"]
     assert created["source"] is None
+
+
+async def test_evaluation_flow_name_is_none_when_omitted(client) -> None:
+    resp = await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "deejay-sets-api",
+            "dimension": "pipeline_consistency",
+            "severity": "INFO",
+            "finding": "Pipeline completed normally.",
+            "source": "flow_inline",
+        },
+    )
+    assert resp.status_code == 200
+    created = resp.json()["data"]
+    assert created["flow_name"] is None

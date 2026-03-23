@@ -63,6 +63,7 @@ async def prefect_webhook(
         suggestion=None,
         standards_version=standards_version,
         source="prefect_webhook",
+        flow_name=payload.flow_name,
         details=None,
     )
     session.add(row)
@@ -80,6 +81,7 @@ async def prefect_webhook(
         suggestion=row.suggestion,
         standards_version=row.standards_version,
         source=row.source,
+        flow_name=row.flow_name,
         evaluated_at=row.evaluated_at,
     )
     return success_envelope(data, count=1, version=settings.API_VERSION)

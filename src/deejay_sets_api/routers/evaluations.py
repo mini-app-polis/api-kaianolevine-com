@@ -58,6 +58,7 @@ async def list_evaluations(
             suggestion=row.suggestion,
             standards_version=row.standards_version,
             source=row.source,
+            flow_name=row.flow_name,
             evaluated_at=row.evaluated_at,
         )
         for row in rows
@@ -130,6 +131,7 @@ async def create_evaluation(
         suggestion=payload.suggestion,
         standards_version=payload.standards_version,
         source=payload.source,
+        flow_name=payload.flow_name,
     )
     session.add(row)
     await session.flush()
@@ -146,6 +148,7 @@ async def create_evaluation(
         suggestion=row.suggestion,
         standards_version=row.standards_version,
         source=row.source,
+        flow_name=row.flow_name,
         evaluated_at=row.evaluated_at,
     )
     return success_envelope(data, count=1, version=settings.API_VERSION)
