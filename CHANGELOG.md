@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.2.1...v1.3.0) (2026-03-23)
+
+
+### Features
+
+* Adding webhook endpoints for prefect ([41d05bb](https://github.com/kaianolevine/deejay-marvel-api/commit/41d05bbad64c0e1ee68ccfd4bba52179bd0e234b))
+
 ## [1.2.1](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.2.0...v1.2.1) (2026-03-23)
 
 
