@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.4.0...v1.5.0) (2026-03-23)
+
+
+### Features
+
+* adding flow name information ([e29fee7](https://github.com/kaianolevine/deejay-marvel-api/commit/e29fee71e5d0cd6607d1c1d69ca175e5a274c5ee))
+
 # [1.4.0](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.3.0...v1.4.0) (2026-03-23)
 
 
