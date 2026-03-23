@@ -41,9 +41,9 @@ class SetListItem(BaseModel):
 
 class TrackListItem(BaseModel):
     id: uuid.UUID
-    set_id: uuid.UUID
-    set_date: dt.date
-    venue: str
+    set_id: uuid.UUID | None = None
+    set_date: dt.date | None = None
+    venue: str | None = None
 
     play_order: int | None = None
     play_time: dt.time | None = None
@@ -111,9 +111,9 @@ class CatalogPatch(BaseModel):
 
 class CatalogPlayHistoryItem(BaseModel):
     id: uuid.UUID
-    set_id: uuid.UUID
-    set_date: dt.date
-    venue: str
+    set_id: uuid.UUID | None = None
+    set_date: dt.date | None = None
+    venue: str | None = None
 
     play_order: int | None = None
     play_time: dt.time | None = None

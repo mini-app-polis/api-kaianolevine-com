@@ -96,10 +96,10 @@ async def get_catalog(
 
     stmt = (
         select(DbTrack, DbSet)
-        .join(DbSet, DbTrack.set_id == DbSet.id)
+        .join(DbSet, DbTrack.set_id == DbSet.id, isouter=True)
         .where(DbTrack.catalog_id == id)
         .order_by(
-            DbSet.set_date.asc(),
+            DbSet.set_date.asc().nulls_last(),
             DbTrack.play_order.asc().nulls_last(),
             DbTrack.play_time.asc().nulls_last(),
         )
@@ -109,9 +109,9 @@ async def get_catalog(
     play_history = [
         CatalogPlayHistoryItem(
             id=track.id,
-            set_id=set_row.id,
-            set_date=set_row.set_date,
-            venue=set_row.venue,
+            set_id=set_row.id if set_row else None,
+            set_date=set_row.set_date if set_row else None,
+            venue=set_row.venue if set_row else None,
             play_order=track.play_order,
             play_time=track.play_time,
             data_quality=track.data_quality,

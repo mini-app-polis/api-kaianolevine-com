@@ -37,7 +37,7 @@ async def list_tracks(
 ) -> Envelope[list[TrackListItem]]:
     settings = get_settings()
 
-    stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id)
+    stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id, isouter=True)
 
     if artist:
         stmt = stmt.where(func.lower(DbTrack.artist).like(f"%{artist.lower()}%"))
@@ -52,12 +52,16 @@ async def list_tracks(
     if year is not None:
         start = dt.date(year, 1, 1)
         end = dt.date(year, 12, 31)
-        stmt = stmt.where(DbSet.set_date >= start, DbSet.set_date <= end)
+        stmt = stmt.where(
+            DbTrack.set_id.is_not(None),
+            DbSet.set_date >= start,
+            DbSet.set_date <= end,
+        )
     if data_quality:
         stmt = stmt.where(DbTrack.data_quality == data_quality)
 
     stmt = stmt.order_by(
-        DbSet.set_date.desc(),
+        DbSet.set_date.desc().nulls_last(),
         DbTrack.play_order.asc().nulls_last(),
         DbTrack.play_time.asc().nulls_last(),
     )
@@ -68,9 +72,9 @@ async def list_tracks(
     data = [
         TrackListItem(
             id=track.id,
-            set_id=set_row.id,
-            set_date=set_row.set_date,
-            venue=set_row.venue,
+            set_id=set_row.id if set_row else None,
+            set_date=set_row.set_date if set_row else None,
+            venue=set_row.venue if set_row else None,
             play_order=track.play_order,
             play_time=track.play_time,
             title=track.title,
@@ -100,7 +104,11 @@ async def get_track(
 ) -> Envelope[TrackDetail]:
     settings = get_settings()
 
-    stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id).where(DbTrack.id == id)
+    stmt = (
+        select(DbTrack, DbSet)
+        .join(DbSet, DbTrack.set_id == DbSet.id, isouter=True)
+        .where(DbTrack.id == id)
+    )
     row = (await session.execute(stmt)).first()
     if row is None:
         from ..schemas import api_error
@@ -110,9 +118,9 @@ async def get_track(
     track, set_row = row
     data = TrackDetail(
         id=track.id,
-        set_id=set_row.id,
-        set_date=set_row.set_date,
-        venue=set_row.venue,
+        set_id=set_row.id if set_row else None,
+        set_date=set_row.set_date if set_row else None,
+        venue=set_row.venue if set_row else None,
         play_order=track.play_order,
         play_time=track.play_time,
         title=track.title,
