@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_current_owner, get_settings
@@ -31,14 +32,29 @@ async def ingest_set(
             detail={"code": "feature_disabled", "message": "Ingest is currently disabled"},
         )
 
-    db_set = DbSet(
-        owner_id=owner_id,
-        set_date=payload.set_date,
-        venue=payload.venue,
-        source_file=payload.source_file,
-    )
-    session.add(db_set)
-    await session.flush()
+    existing_set = None
+    if payload.source_file:
+        lookup = await session.execute(
+            select(DbSet).where(
+                DbSet.owner_id == owner_id,
+                DbSet.source_file == payload.source_file,
+            )
+        )
+        existing_set = lookup.scalars().first()
+
+    if existing_set is not None:
+        db_set = existing_set
+        is_reingestion = True
+    else:
+        db_set = DbSet(
+            owner_id=owner_id,
+            set_date=payload.set_date,
+            venue=payload.venue,
+            source_file=payload.source_file,
+        )
+        session.add(db_set)
+        await session.flush()
+        is_reingestion = False
 
     result = await reconcile_set_tracks(
         session=session,
@@ -46,13 +62,14 @@ async def ingest_set(
         set_id=db_set.id,
         set_date=payload.set_date,
         tracks=payload.tracks,
+        is_reingestion=is_reingestion,
     )
 
     await session.commit()
 
     data = IngestResponseData(
         set_id=db_set.id,
-        tracks_created=len(payload.tracks),
+        tracks_created=result.tracks_inserted,
         catalog_new=result.catalog_new,
         catalog_updated=result.catalog_updated,
         catalog_unchanged=result.catalog_unchanged,

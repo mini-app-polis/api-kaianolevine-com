@@ -20,6 +20,7 @@ class ReconciliationResult:
     catalog_new: int
     catalog_updated: int
     catalog_unchanged: int
+    tracks_inserted: int
 
 
 Track = IngestTrack
@@ -78,10 +79,12 @@ async def reconcile_set_tracks(
     set_id: uuid.UUID,
     set_date: dt_date,
     tracks: Iterable[IngestTrack],
+    is_reingestion: bool = False,
 ) -> ReconciliationResult:
     catalog_new = 0
     catalog_updated = 0
     catalog_unchanged = 0
+    tracks_inserted = 0
 
     ingest_tracks = list(tracks)
 
@@ -98,6 +101,13 @@ async def reconcile_set_tracks(
             normalized_set.add(pair)
             normalized_pairs.append(pair)
         work_items.append((ingest_track, norm_title, norm_artist))
+
+    existing_play_orders: set[int] = set()
+    if is_reingestion:
+        po_result = await session.execute(
+            select(DbTrack.play_order).where(DbTrack.set_id == set_id)
+        )
+        existing_play_orders = {row[0] for row in po_result.all()}
 
     catalog_by_pair: dict[tuple[str, str], TrackCatalog] = {}
     if normalized_pairs:
@@ -118,6 +128,12 @@ async def reconcile_set_tracks(
         # Persist missing play_order as 0 (DB constraint). For data_quality,
         # we still use ingest_track.play_order.
         play_order_db = ingest_track.play_order if ingest_track.play_order is not None else 0
+        if is_reingestion and play_order_db in existing_play_orders:
+            catalog_unchanged += 1
+            continue
+
+        tracks_inserted += 1
+
         db_track = DbTrack(
             owner_id=owner_id,
             set_id=set_id,
@@ -226,4 +242,5 @@ async def reconcile_set_tracks(
         catalog_new=catalog_new,
         catalog_updated=catalog_updated,
         catalog_unchanged=catalog_unchanged,
+        tracks_inserted=tracks_inserted,
     )

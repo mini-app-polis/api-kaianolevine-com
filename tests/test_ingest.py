@@ -141,3 +141,112 @@ async def test_ingest_respects_feature_flag_disable(client, async_engine) -> Non
     assert resp.status_code == 503
     err = resp.json()
     assert err["error"]["code"] == "feature_disabled"
+
+
+async def test_ingest_same_source_file_returns_existing_set(client) -> None:
+    source = "2024-03-15 MADjam"
+    payload = _payload(
+        "2024-03-15",
+        "MADjam",
+        source,
+        [
+            {
+                "play_order": 1,
+                "play_time": None,
+                "title": "Track One",
+                "artist": "Artist One",
+            },
+            {
+                "play_order": 2,
+                "play_time": None,
+                "title": "Track Two",
+                "artist": "Artist Two",
+            },
+        ],
+    )
+    r1 = await client.post("/v1/ingest", json=payload)
+    assert r1.status_code == 200
+    j1 = r1.json()
+    set_id_1 = j1["data"]["set_id"]
+    assert j1["data"]["tracks_created"] == 2
+    assert j1["data"]["catalog_new"] == 2
+
+    r2 = await client.post("/v1/ingest", json=payload)
+    assert r2.status_code == 200
+    j2 = r2.json()
+    assert j2["data"]["set_id"] == set_id_1
+    assert j2["data"]["tracks_created"] == 0
+    assert j2["data"]["catalog_new"] == 0
+    assert j2["data"]["catalog_updated"] == 0
+    assert j2["data"]["catalog_unchanged"] == 2
+
+    cat = await client.get("/v1/catalog", params={"limit": 10, "offset": 0})
+    assert cat.status_code == 200
+    cat_json = cat.json()
+    assert cat_json["meta"]["count"] == 2
+    assert {row["play_count"] for row in cat_json["data"]} == {1}
+
+    sets_resp = await client.get("/v1/sets", params={"year": 2024})
+    assert sets_resp.status_code == 200
+    sets_json = sets_resp.json()
+    assert sets_json["meta"]["count"] == 1
+
+
+async def test_ingest_reingestion_with_new_track_adds_only_new(client) -> None:
+    source = "2024-03-15 MADjam"
+    first = _payload(
+        "2024-03-15",
+        "MADjam",
+        source,
+        [
+            {
+                "play_order": 1,
+                "play_time": None,
+                "title": "Original Only",
+                "artist": "Artist X",
+            },
+        ],
+    )
+    r1 = await client.post("/v1/ingest", json=first)
+    assert r1.status_code == 200
+    j1 = r1.json()
+    set_id = j1["data"]["set_id"]
+    assert j1["data"]["tracks_created"] == 1
+    assert j1["data"]["catalog_new"] == 1
+
+    second = _payload(
+        "2024-03-15",
+        "MADjam",
+        source,
+        [
+            {
+                "play_order": 1,
+                "play_time": None,
+                "title": "Original Only",
+                "artist": "Artist X",
+            },
+            {
+                "play_order": 2,
+                "play_time": None,
+                "title": "Brand New Row",
+                "artist": "Artist Y",
+            },
+        ],
+    )
+    r2 = await client.post("/v1/ingest", json=second)
+    assert r2.status_code == 200
+    j2 = r2.json()
+    assert j2["data"]["set_id"] == set_id
+    assert j2["data"]["tracks_created"] == 1
+    assert j2["data"]["catalog_new"] == 1
+    assert j2["data"]["catalog_unchanged"] == 1
+
+    detail = await client.get(f"/v1/sets/{set_id}")
+    assert detail.status_code == 200
+    assert len(detail.json()["data"]["tracks"]) == 2
+
+    list_resp = await client.get("/v1/catalog", params={"limit": 20, "offset": 0})
+    assert list_resp.status_code == 200
+    originals = [row for row in list_resp.json()["data"] if row["title"] == "Original Only"]
+    assert len(originals) == 1
+    assert originals[0]["play_count"] == 1

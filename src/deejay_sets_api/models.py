@@ -27,6 +27,12 @@ class Base(DeclarativeBase):
 class Set(Base):
     __tablename__ = "sets"
 
+    # TODO: add the following once a migration can be scheduled:
+    # __table_args__ = (
+    #     UniqueConstraint("owner_id", "source_file",
+    #                      name="uq_sets_owner_source_file"),
+    # )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
