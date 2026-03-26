@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.6.0...v1.6.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* contact ([4f87db5](https://github.com/kaianolevine/deejay-marvel-api/commit/4f87db5f83a8f0e3058a2bf86ccf12ada4117e64))
+
 # [1.6.0](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.5.1...v1.6.0) (2026-03-26)
 
 
