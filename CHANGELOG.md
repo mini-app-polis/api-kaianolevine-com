@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/kaianolevine/api-kaianolevine-com/compare/v1.6.1...v1.7.0) (2026-03-26)
+
+
+### Features
+
+* adding resume endpoint to api from legacy api ([77f160c](https://github.com/kaianolevine/api-kaianolevine-com/commit/77f160cbff15fc52ec541450c0af6f61f25e5efd))
+
 ## [1.6.1](https://github.com/kaianolevine/deejay-marvel-api/compare/v1.6.0...v1.6.1) (2026-03-26)
 
 
