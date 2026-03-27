@@ -29,8 +29,10 @@ async def list_flags(
     settings = get_settings()
 
     rows = (
-        await session.execute(select(DbFeatureFlag).order_by(DbFeatureFlag.name.asc()))
-    ).scalars().all()
+        (await session.execute(select(DbFeatureFlag).order_by(DbFeatureFlag.name.asc())))
+        .scalars()
+        .all()
+    )
     data = [
         FeatureFlagItem(
             id=row.id,
@@ -82,4 +84,3 @@ async def patch_flag(
         updated_at=row.updated_at,
     )
     return success_envelope(data, count=1, version=settings.API_VERSION)
-

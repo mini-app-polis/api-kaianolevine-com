@@ -103,7 +103,7 @@ async def _read_fields(
             for k, v in body.items():
                 if k == "redirect":
                     continue
-                if isinstance(v, (str, int, float, bool)):
+                if isinstance(v, str | int | float | bool):
                     fields[k] = str(v)
     else:
         # Starlette's request.form() requires `python-multipart` which isn't always
@@ -187,9 +187,7 @@ async def _send_brevo_email(
 def _error_response(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status,
-        content=ErrorEnvelope(
-            error=ErrorDetail(code=code, message=message)
-        ).model_dump(),
+        content=ErrorEnvelope(error=ErrorDetail(code=code, message=message)).model_dump(),
     )
 
 

@@ -203,11 +203,15 @@ async def test_reconciliation_data_quality_enrichment_fields(async_engine) -> No
         await session.flush()
 
         track_rows = (
-            await session.execute(
-                select(DbTrack)
-                .where(DbTrack.set_id == db_set.id)
-                .order_by(DbTrack.play_order.asc())
+            (
+                await session.execute(
+                    select(DbTrack)
+                    .where(DbTrack.set_id == db_set.id)
+                    .order_by(DbTrack.play_order.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert [t.data_quality for t in track_rows] == ["minimal", "partial", "complete"]

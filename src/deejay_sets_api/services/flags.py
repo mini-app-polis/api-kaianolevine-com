@@ -17,4 +17,3 @@ async def is_enabled(name: str, session: AsyncSession) -> bool:
     if flag is None:
         return True
     return flag.enabled
-

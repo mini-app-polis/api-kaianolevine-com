@@ -58,4 +58,3 @@ async def test_live_plays_simple_insert_skip_and_recent(client, monkeypatch) -> 
     assert recent_json["data"][1]["title"] == "Song A"
     assert "id" in recent_json["data"][0]
     assert "created_at" in recent_json["data"][0]
-

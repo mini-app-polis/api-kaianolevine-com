@@ -44,16 +44,13 @@ async def list_sets(
         .subquery()
     )
 
-    stmt = (
-        select(
-            DbSet.id,
-            DbSet.set_date,
-            DbSet.venue,
-            DbSet.source_file,
-            func.coalesce(track_counts.c.track_count, 0).label("track_count"),
-        )
-        .outerjoin(track_counts, DbSet.id == track_counts.c.set_id)
-    )
+    stmt = select(
+        DbSet.id,
+        DbSet.set_date,
+        DbSet.venue,
+        DbSet.source_file,
+        func.coalesce(track_counts.c.track_count, 0).label("track_count"),
+    ).outerjoin(track_counts, DbSet.id == track_counts.c.set_id)
     if venue:
         stmt = stmt.where(func.lower(DbSet.venue).like(f"%{venue.lower()}%"))
     if date_from:

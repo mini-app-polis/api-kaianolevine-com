@@ -46,4 +46,3 @@ async def test_flags_endpoints_and_service_contract(client, async_engine) -> Non
     async with sessionmaker() as session:
         assert await is_enabled("flags.deejay_api.unknown_flag", session) is True
         assert await is_enabled("flags.deejay_api.ingest_enabled", session) is False
-

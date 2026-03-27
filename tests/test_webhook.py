@@ -77,4 +77,3 @@ async def test_prefect_webhook_missing_fields(client) -> None:
     assert "unknown" in data["finding"]
     assert data["source"] == "prefect_webhook"
     assert data["flow_name"] is None
-

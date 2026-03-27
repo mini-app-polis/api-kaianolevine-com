@@ -43,13 +43,15 @@ async def ingest_live_plays(
     skipped = 0
 
     for play in payload.plays:
-        stmt = pg_insert(DbLivePlay).values(
-            owner_id=owner_id,
-            played_at=play.played_at,
-            title=play.title,
-            artist=play.artist,
-        ).on_conflict_do_nothing(
-            constraint="uq_live_plays_owner_title_artist_played_at"
+        stmt = (
+            pg_insert(DbLivePlay)
+            .values(
+                owner_id=owner_id,
+                played_at=play.played_at,
+                title=play.title,
+                artist=play.artist,
+            )
+            .on_conflict_do_nothing(constraint="uq_live_plays_owner_title_artist_played_at")
         )
         result = await session.execute(stmt)
         if result.rowcount == 1:

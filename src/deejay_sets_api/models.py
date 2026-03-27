@@ -206,9 +206,7 @@ class FeatureFlag(Base):
 class LivePlay(Base):
     __tablename__ = "live_plays"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     played_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)

@@ -103,11 +103,7 @@ async def get_track(
 ) -> Envelope[TrackDetail]:
     settings = get_settings()
 
-    stmt = (
-        select(DbTrack, DbSet)
-        .join(DbSet, DbTrack.set_id == DbSet.id)
-        .where(DbTrack.id == id)
-    )
+    stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id).where(DbTrack.id == id)
     row = (await session.execute(stmt)).first()
     if row is None:
         from ..schemas import api_error

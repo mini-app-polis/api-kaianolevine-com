@@ -85,4 +85,3 @@ async def prefect_webhook(
         evaluated_at=row.evaluated_at,
     )
     return success_envelope(data, count=1, version=settings.API_VERSION)
-
