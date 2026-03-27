@@ -11,8 +11,6 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     API_VERSION: str = "1.0"
     OWNER_ID: str = "dev-owner"
-    CLERK_AUTH_ENABLED: bool = False
-    CLERK_JWKS_URL: str | None = None
     SENTRY_DSN: str | None = None
     CORS_ORIGINS: list[str] = ["*"]
 
