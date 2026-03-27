@@ -7,50 +7,69 @@ FastAPI service providing:
 * Basic usage statistics endpoints
 * An ingest endpoint that runs reconciliation and catalog upsert logic
 
-## Local Development
+## Developer Setup
 
 ### Prerequisites
 
-* Python 3.11+
-* `uv` installed
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+- PostgreSQL (or use the `DATABASE_URL` from Railway for a shared dev DB)
 
-### Environment
+### First-time setup
+```bash
+# 1. Install all dependencies including dev extras
+uv sync --all-extras
 
-Copy `.env.example` to `.env` and adjust values as needed.
-In production, set `CORS_ORIGINS` to the specific Cloudflare Pages domain(s) rather than using the wildcard (`*`).
+# 2. Install pre-commit hooks
+uv run pre-commit install
 
-### CORS: portfolio endpoints
+# 3. Copy env file and fill in values
+cp .env.example .env
+```
 
-The Cloudflare Pages portfolio calls these **GET** routes from the browser (ensure `CORS_ORIGINS` allows your site):
-
-- `GET /v1/sets`
-- `GET /v1/sets/{id}`
-- `GET /v1/sets/{id}/tracks`
-- `GET /v1/tracks`
-- `GET /v1/tracks/{id}`
-- `GET /v1/catalog`
-- `GET /v1/catalog/{id}`
-- `GET /v1/stats/overview`
-- `GET /v1/stats/by-year`
-- `GET /v1/stats/top-artists`
-- `GET /v1/stats/top-tracks`
-- `GET /v1/evaluations`
-- `GET /v1/evaluations/summary`
-- `GET /v1/flags`
-
-## Run the Server
-
-API docs are available at `http://localhost:8000/docs`.
-
+### Run the server
 ```bash
 uv run uvicorn src.deejay_sets_api.main:app --reload
 ```
 
-## Run Tests
+API docs available at http://localhost:8000/docs
 
+### Run tests
 ```bash
-uv run pytest --cov=src --cov-report=term-missing
+# All tests (uses SQLite in-memory — no DATABASE_URL needed)
+uv run pytest
+
+# With coverage detail
+uv run pytest --cov=deejay_sets_api --cov-report=term-missing
 ```
+
+### Lint, format, type check
+```bash
+uv run ruff check src/ tests/ --fix
+uv run ruff format src/ tests/
+uv run mypy src/
+```
+
+### Pre-commit (runs automatically on every commit)
+```bash
+# Run manually against all files
+uv run pre-commit run --all-files
+```
+
+Hooks run on every `git commit`: ruff lint, ruff format, mock method checks, type annotation checks. If a hook fails the commit is blocked — ruff will auto-fix in place, then `git add .` and re-commit.
+
+### Database migrations
+```bash
+# Apply all pending migrations
+uv run alembic upgrade head
+
+# Create a new migration after changing models
+uv run alembic revision --autogenerate -m "description"
+```
+
+Migrations run automatically on Railway at deploy time. For local development, `DATABASE_URL` must point at a reachable PostgreSQL instance (not `railway.internal` — use the public Railway URL or a local Postgres).
 
 ## CI/CD
 
