@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.12.0...v1.13.0) (2026-03-28)
+
+
+### Features
+
+* major support of spotify endpoint ([32431d7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/32431d711123d72be01a95fb6bc6f82450251908))
+
 # [1.12.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.11.0...v1.12.0) (2026-03-27)
 
 
