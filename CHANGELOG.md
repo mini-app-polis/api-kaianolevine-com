@@ -1,3 +1,11 @@
+## [1.14.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.14.0...v1.14.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* applies filters to findings and summaries ([3aa8479](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3aa84794ca4f55e504c58d3da3e5b1d0cfa364b4))
+* updates from comforance test findings ([ffc7bb9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ffc7bb9b5252d304e725213d93a429f2f03fa167))
+
 # [1.14.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.13.2...v1.14.0) (2026-03-30)
 
 
