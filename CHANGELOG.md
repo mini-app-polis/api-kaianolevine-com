@@ -1,3 +1,10 @@
+## [1.14.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.14.1...v1.14.2) (2026-04-02)
+
+
+### Bug Fixes
+
+* updating sentry variable name ([3499d99](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3499d99386620ed825009cf565457a6d3da6c7c5))
+
 ## [1.14.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.14.0...v1.14.1) (2026-03-31)
 
 
