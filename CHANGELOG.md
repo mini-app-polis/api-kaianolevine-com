@@ -1,3 +1,10 @@
+## [1.15.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.15.0...v1.15.1) (2026-04-03)
+
+
+### Bug Fixes
+
+* railway deploy ([ab422a7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ab422a7984110b1994a6dc656c70c1bb1abf1461))
+
 # [1.15.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.14.2...v1.15.0) (2026-04-03)
 
 
