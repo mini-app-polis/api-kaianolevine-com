@@ -4,6 +4,7 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
+    JSON,
     UUID,
     Boolean,
     Date,
@@ -17,7 +18,6 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -321,7 +321,7 @@ class WcsNote(Base):
     )  # private | public
     model: Mapped[str] = mapped_column(String, nullable=False)
     provider: Mapped[str] = mapped_column(String, nullable=False)
-    notes_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    notes_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
