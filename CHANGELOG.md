@@ -1,3 +1,10 @@
+## [1.15.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.15.1...v1.15.2) (2026-04-03)
+
+
+### Bug Fixes
+
+* revert ([095a901](https://github.com/mini-app-polis/api-kaianolevine-com/commit/095a9010feabdb94beb50d13d7c106f856ec6990))
+
 ## [1.15.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.15.0...v1.15.1) (2026-04-03)
 
 
