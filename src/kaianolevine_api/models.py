@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -260,4 +261,71 @@ class LivePlay(Base):
             "played_at",
             name="uq_live_plays_owner_title_artist_played_at",
         ),
+    )
+
+
+# ── WCS Notes ─────────────────────────────────────────────────────────────────
+
+
+class WcsTranscript(Base):
+    """Raw transcript storage. Retained for future RAG/embeddings corpus."""
+
+    __tablename__ = "wcs_transcripts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="unknown"
+    )  # plaud | otter | zoom | google_meet | manual | unknown
+    source_filename: Mapped[str] = mapped_column(String, nullable=False)
+    drive_file_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    notes: Mapped[list[WcsNote]] = relationship(
+        back_populates="transcript",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class WcsNote(Base):
+    """Structured notes produced by the LLM from a WCS lesson transcript."""
+
+    __tablename__ = "wcs_notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    transcript_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("wcs_transcripts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    session_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    session_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="other"
+    )  # private_lesson | class_taught | class_attended | workshop | coaching_session | other
+    visibility: Mapped[str] = mapped_column(
+        String, nullable=False, default="private"
+    )  # private | public
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    notes_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    transcript: Mapped[WcsTranscript] = relationship(
+        back_populates="notes", lazy="selectin"
     )

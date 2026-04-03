@@ -1,0 +1,257 @@
+"""Tests for WCS notes endpoints — contract, happy path, failure paths, output shape."""
+
+from __future__ import annotations
+
+import uuid
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _transcript_payload(**overrides) -> dict:
+    base = {
+        "raw_text": "Instructor said: keep your frame and stay on axis.",
+        "source_type": "plaud",
+        "source_filename": "plaud_2024-01-15_lesson.txt",
+        "drive_file_id": "drive-file-abc123",
+    }
+    return {**base, **overrides}
+
+
+def _note_payload(transcript_id: str, **overrides) -> dict:
+    base = {
+        "transcript_id": transcript_id,
+        "title": "Frame and axis — private lesson",
+        "session_date": "2024-01-15",
+        "session_type": "private_lesson",
+        "visibility": "private",
+        "model": "claude-sonnet-4-6",
+        "provider": "anthropic",
+        "notes_json": {
+            "title": "Frame and axis",
+            "summary": "Worked on frame stability and staying on axis.",
+            "key_concepts": ["frame", "axis"],
+        },
+    }
+    return {**base, **overrides}
+
+
+async def _create_transcript(client, **overrides) -> dict:
+    resp = await client.post(
+        "/v1/wcs/transcripts", json=_transcript_payload(**overrides)
+    )
+    assert resp.status_code == 200
+    return resp.json()["data"]
+
+
+async def _create_note(client, transcript_id: str, **overrides) -> dict:
+    resp = await client.post(
+        "/v1/wcs/notes", json=_note_payload(transcript_id, **overrides)
+    )
+    assert resp.status_code == 200
+    return resp.json()["data"]
+
+
+# ── POST /v1/wcs/transcripts ──────────────────────────────────────────────────
+
+
+async def test_create_transcript_returns_envelope(client) -> None:
+    resp = await client.post("/v1/wcs/transcripts", json=_transcript_payload())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == {"data", "meta"}
+    assert body["meta"]["count"] == 1
+
+
+async def test_create_transcript_output_shape(client) -> None:
+    resp = await client.post("/v1/wcs/transcripts", json=_transcript_payload())
+    data = resp.json()["data"]
+    assert "id" in data
+    assert "created_at" in data
+    assert data["source_type"] == "plaud"
+    assert data["source_filename"] == "plaud_2024-01-15_lesson.txt"
+    assert data["drive_file_id"] == "drive-file-abc123"
+
+
+async def test_create_transcript_validation_error(client) -> None:
+    resp = await client.post("/v1/wcs/transcripts", json={"source_type": "plaud"})
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "validation_error"
+
+
+async def test_create_transcript_invalid_source_type(client) -> None:
+    resp = await client.post(
+        "/v1/wcs/transcripts",
+        json=_transcript_payload(source_type="cassette_tape"),
+    )
+    assert resp.status_code == 422
+
+
+# ── POST /v1/wcs/notes ────────────────────────────────────────────────────────
+
+
+async def test_create_note_happy_path(client) -> None:
+    transcript = await _create_transcript(client)
+    resp = await client.post("/v1/wcs/notes", json=_note_payload(transcript["id"]))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == {"data", "meta"}
+    assert body["meta"]["count"] == 1
+
+
+async def test_create_note_output_shape(client) -> None:
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"])
+    assert "id" in note
+    assert "transcript_id" in note
+    assert "created_at" in note
+    assert note["session_type"] == "private_lesson"
+    assert note["visibility"] == "private"
+    assert note["model"] == "claude-sonnet-4-6"
+    assert note["provider"] == "anthropic"
+    assert isinstance(note["notes_json"], dict)
+
+
+async def test_create_note_invalid_transcript_id(client) -> None:
+    resp = await client.post(
+        "/v1/wcs/notes",
+        json=_note_payload(str(uuid.uuid4())),
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "transcript_not_found"
+
+
+async def test_create_note_invalid_session_type(client) -> None:
+    transcript = await _create_transcript(client)
+    resp = await client.post(
+        "/v1/wcs/notes",
+        json=_note_payload(transcript["id"], session_type="meditation"),
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_note_null_session_date(client) -> None:
+    """session_date is optional — None is valid."""
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"], session_date=None)
+    assert note["session_date"] is None
+
+
+async def test_create_note_malformed_session_date_is_tolerated(client) -> None:
+    """Unparseable session_date from LLM is stored as null rather than erroring."""
+    transcript = await _create_transcript(client)
+    note = await _create_note(
+        client, transcript["id"], session_date="sometime last winter"
+    )
+    assert note["session_date"] is None
+
+
+# ── GET /v1/wcs/notes ─────────────────────────────────────────────────────────
+
+
+async def test_list_notes_empty(client) -> None:
+    resp = await client.get("/v1/wcs/notes")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data"] == []
+    assert body["meta"]["count"] == 0
+
+
+async def test_list_notes_returns_created_notes(client) -> None:
+    transcript = await _create_transcript(client)
+    await _create_note(client, transcript["id"])
+    await _create_note(client, transcript["id"], session_type="class_attended")
+
+    resp = await client.get("/v1/wcs/notes")
+    assert resp.status_code == 200
+    assert resp.json()["meta"]["count"] == 2
+
+
+async def test_list_notes_filter_by_session_type(client) -> None:
+    transcript = await _create_transcript(client)
+    await _create_note(client, transcript["id"], session_type="private_lesson")
+    await _create_note(client, transcript["id"], session_type="class_attended")
+    await _create_note(client, transcript["id"], session_type="class_attended")
+
+    resp = await client.get("/v1/wcs/notes", params={"session_type": "class_attended"})
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) == 2
+    assert all(n["session_type"] == "class_attended" for n in data)
+
+
+async def test_list_notes_filter_by_visibility(client) -> None:
+    transcript = await _create_transcript(client)
+    await _create_note(client, transcript["id"], visibility="private")
+    await _create_note(client, transcript["id"], visibility="public")
+
+    resp = await client.get("/v1/wcs/notes", params={"visibility": "public"})
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) == 1
+    assert data[0]["visibility"] == "public"
+
+
+async def test_list_notes_pagination(client) -> None:
+    transcript = await _create_transcript(client)
+    for _ in range(5):
+        await _create_note(client, transcript["id"])
+
+    resp = await client.get("/v1/wcs/notes", params={"limit": 3, "offset": 0})
+    assert resp.json()["meta"]["count"] == 3
+
+    resp2 = await client.get("/v1/wcs/notes", params={"limit": 3, "offset": 3})
+    assert resp2.json()["meta"]["count"] == 2
+
+
+# ── GET /v1/wcs/notes/{id} ────────────────────────────────────────────────────
+
+
+async def test_get_note_happy_path(client) -> None:
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"])
+
+    resp = await client.get(f"/v1/wcs/notes/{note['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["id"] == note["id"]
+
+
+async def test_get_note_not_found(client) -> None:
+    resp = await client.get(f"/v1/wcs/notes/{uuid.uuid4()}")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "note_not_found"
+
+
+# ── PATCH /v1/wcs/notes/{id} ─────────────────────────────────────────────────
+
+
+async def test_patch_note_visibility(client) -> None:
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"], visibility="private")
+    assert note["visibility"] == "private"
+
+    resp = await client.patch(
+        f"/v1/wcs/notes/{note['id']}",
+        json={"visibility": "public"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["visibility"] == "public"
+
+
+async def test_patch_note_not_found(client) -> None:
+    resp = await client.patch(
+        f"/v1/wcs/notes/{uuid.uuid4()}",
+        json={"visibility": "public"},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "note_not_found"
+
+
+async def test_patch_note_invalid_visibility(client) -> None:
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"])
+
+    resp = await client.patch(
+        f"/v1/wcs/notes/{note['id']}",
+        json={"visibility": "friends_only"},
+    )
+    assert resp.status_code == 422

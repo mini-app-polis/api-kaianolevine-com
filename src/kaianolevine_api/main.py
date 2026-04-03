@@ -22,6 +22,7 @@ from .routers import (
     spotify,
     stats,
     tracks,
+    wcs_notes,
     webhook,
 )
 from .schemas import ErrorDetail, ErrorEnvelope
@@ -124,6 +125,7 @@ def _build_app() -> FastAPI:
     app.include_router(webhook.router, prefix="/v1", tags=["webhook"])
     app.include_router(contact.router, prefix="/v1", tags=["contact"])
     app.include_router(resume.router, prefix="/v1", tags=["resume"])
+    app.include_router(wcs_notes.router, prefix="/v1", tags=["wcs"])
 
     return app
 

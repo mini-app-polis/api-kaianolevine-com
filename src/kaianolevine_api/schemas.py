@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from typing import Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -352,3 +352,81 @@ def api_error(
 
 def success_envelope(data: T, *, count: int, version: str) -> Envelope[T]:
     return Envelope(data=data, meta=Meta(count=count, version=version))
+
+
+# ── WCS Notes schemas ─────────────────────────────────────────────────────────
+
+WcsSessionType = Literal[
+    "private_lesson",
+    "class_taught",
+    "class_attended",
+    "workshop",
+    "coaching_session",
+    "other",
+]
+
+WcsSourceType = Literal[
+    "plaud",
+    "otter",
+    "zoom",
+    "google_meet",
+    "manual",
+    "unknown",
+]
+
+WcsVisibility = Literal["private", "public"]
+
+
+class WcsTranscriptCreate(BaseModel):
+    """POST /v1/wcs/transcripts — called by notes-ingest-cog."""
+
+    raw_text: str
+    source_type: WcsSourceType = "unknown"
+    source_filename: str
+    drive_file_id: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class WcsTranscriptItem(BaseModel):
+    id: uuid.UUID
+    source_type: str
+    source_filename: str
+    drive_file_id: str
+    created_at: dt.datetime
+
+
+class WcsNoteCreate(BaseModel):
+    """POST /v1/wcs/notes — called by notes-ingest-cog."""
+
+    transcript_id: str
+    title: str | None = None
+    session_date: str | None = None  # ISO-8601 date string from LLM
+    session_type: WcsSessionType = "other"
+    visibility: WcsVisibility = "private"
+    model: str
+    provider: str
+    notes_json: dict[str, Any]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class WcsNoteItem(BaseModel):
+    id: uuid.UUID
+    transcript_id: uuid.UUID
+    title: str | None
+    session_date: dt.date | None
+    session_type: str
+    visibility: str
+    model: str
+    provider: str
+    notes_json: dict[str, Any]
+    created_at: dt.datetime
+
+
+class WcsNotePatch(BaseModel):
+    """PATCH /v1/wcs/notes/{id} — user-facing visibility toggle."""
+
+    visibility: WcsVisibility
+
+    model_config = ConfigDict(extra="forbid")
