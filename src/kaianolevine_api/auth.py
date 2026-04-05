@@ -7,7 +7,7 @@ from .config import Settings, get_settings
 # ---------------------------------------------------------------------------
 # Authentication
 #
-# CURRENT: Simple header-based auth using X-Owner-Id or OWNER_ID fallback.
+# CURRENT: Simple header-based auth using X-Owner-Id or KAIANO_API_OWNER_ID fallback.
 # No real security — intended for internal processor-to-API calls only.
 #
 # FUTURE (when deejaytools.com or another frontend has real user accounts):
@@ -33,7 +33,7 @@ def get_current_owner(
     """
     Returns the owner identity for the current request.
 
-    Reads from X-Owner-Id request header, falls back to OWNER_ID
+    Reads from X-Owner-Id request header, falls back to KAIANO_API_OWNER_ID
     from settings if header is not present.
 
     TODO: Replace with Clerk JWT verification before exposing this API
