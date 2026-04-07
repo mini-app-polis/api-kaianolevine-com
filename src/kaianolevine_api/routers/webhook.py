@@ -17,6 +17,15 @@ from ..schemas import (
 router = APIRouter()
 log = logger_mod.get_logger()
 
+_FLOW_REPO_MAP: dict[str, str] = {
+    "conformance-check": "evaluator-cog",
+    "pipeline-eval": "evaluator-cog",
+    "process-transcript": "notes-ingest-cog",
+    "update-dj-set-collection": "deejay-cog",
+    "generate-summaries": "deejay-cog",
+    "process-set": "deejay-cog",
+}
+
 
 def _severity_for_state(state_type: str | None) -> str:
     state = (state_type or "").upper()
@@ -45,6 +54,7 @@ async def prefect_webhook(
     finding = f"Flow {flow_name} entered {state_name} state"
     severity = _severity_for_state(state_type)
     standards_version = getattr(settings, "STANDARDS_VERSION", "6.0")
+    repo = _FLOW_REPO_MAP.get(flow_name, "unknown")
 
     if (
         payload.flow_name is None
@@ -61,10 +71,16 @@ async def prefect_webhook(
             payload.state_type,
         )
 
+    if repo == "unknown":
+        log.warning(
+            "Prefect webhook: unmapped flow_name=%s — posting under repo='unknown'",
+            flow_name,
+        )
+
     row = DbEval(
         owner_id=settings.KAIANO_API_OWNER_ID,
         run_id=payload.flow_run_id,
-        repo="deejay-set-processor-dev",
+        repo=repo,
         dimension="pipeline_consistency",
         severity=severity,
         finding=finding,
