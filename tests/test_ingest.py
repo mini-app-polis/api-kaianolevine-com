@@ -38,6 +38,7 @@ async def test_ingest_reconciliation_confidence_escalation(client) -> None:
     j1 = r1.json()
     assert set(j1.keys()) == {"data", "meta"}
     assert j1["meta"]["count"] == 1
+    assert j1["meta"]["total"] == 1
     assert j1["meta"]["version"] == "1.0"
     assert j1["data"]["tracks_created"] == 1
     assert j1["data"]["catalog_new"] == 1
@@ -259,3 +260,34 @@ async def test_ingest_reingestion_with_new_track_adds_only_new(client) -> None:
     ]
     assert len(originals) == 1
     assert originals[0]["play_count"] == 1
+
+
+async def test_ingest_success_response_meta_total_is_one(client) -> None:
+    r = await client.post(
+        "/v1/ingest",
+        json=_payload(
+            "2026-08-01",
+            "Venue",
+            "2026-08-01 meta.csv",
+            [
+                {
+                    "play_order": 1,
+                    "title": "T",
+                    "artist": "A",
+                }
+            ],
+        ),
+    )
+    assert r.status_code == 200
+    assert r.json()["meta"]["total"] == 1
+
+
+async def test_ingest_empty_tracks_list_succeeds(client) -> None:
+    r = await client.post(
+        "/v1/ingest",
+        json=_payload("2026-08-02", "Venue", "2026-08-02 empty.csv", []),
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["meta"]["total"] == 1
+    assert j["data"]["tracks_created"] == 0

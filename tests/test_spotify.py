@@ -38,6 +38,7 @@ async def test_spotify_playlists_get_empty(client) -> None:
     body = resp.json()
     assert body["data"] == []
     assert body["meta"]["count"] == 0
+    assert body["meta"]["total"] == 0
 
 
 @pytest.mark.asyncio
@@ -55,10 +56,13 @@ async def test_spotify_playlists_get_after_ingest_ordered_by_name(client) -> Non
 
     resp = await client.get("/v1/spotify/playlists")
     assert resp.status_code == 200
-    names = [item["name"] for item in resp.json()["data"]]
+    j = resp.json()
+    assert j["meta"]["total"] == 2
+    assert j["meta"]["count"] == 2
+    names = [item["name"] for item in j["data"]]
     assert names == ["Alpha", "Beta"]
-    assert resp.json()["data"][0]["id"] == "p1"
-    assert resp.json()["data"][0]["uri"] == "spotify:playlist:p1"
+    assert j["data"][0]["id"] == "p1"
+    assert j["data"][0]["uri"] == "spotify:playlist:p1"
 
 
 @pytest.mark.asyncio
@@ -121,3 +125,34 @@ async def test_spotify_playlists_post_updates_when_snapshot_changes(client) -> N
     assert one["name"] == "New Name"
     assert one["snapshot_id"] == "v2"
     assert one["tracks_total"] == 10
+
+
+@pytest.mark.asyncio
+async def test_spotify_playlists_upsert_same_playlist_id_second_snapshot_upserts(
+    client,
+) -> None:
+    """Re-ingest same id with different snapshot_id counts as an upsert."""
+    r1 = await client.post(
+        "/v1/spotify/playlists",
+        json={"playlists": [_pl("dup-id", "Name V1", snapshot_id="snap-a")]},
+    )
+    assert r1.json()["data"] == {"upserted": 1, "unchanged": 0}
+
+    r2 = await client.post(
+        "/v1/spotify/playlists",
+        json={"playlists": [_pl("dup-id", "Name V1", snapshot_id="snap-b")]},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["data"] == {"upserted": 1, "unchanged": 0}
+
+
+@pytest.mark.asyncio
+async def test_spotify_playlists_upsert_same_playlist_id_same_snapshot_unchanged(
+    client,
+) -> None:
+    pl = _pl("same-snap", "X", snapshot_id="fixed")
+    r1 = await client.post("/v1/spotify/playlists", json={"playlists": [pl]})
+    assert r1.json()["data"] == {"upserted": 1, "unchanged": 0}
+
+    r2 = await client.post("/v1/spotify/playlists", json={"playlists": [pl]})
+    assert r2.json()["data"] == {"upserted": 0, "unchanged": 1}

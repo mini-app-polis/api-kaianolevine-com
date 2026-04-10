@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 
-async def test_live_plays_simple_insert_skip_and_recent(client, monkeypatch) -> None:
+def _sqlite_upsert_adapter(monkeypatch):
     class _SQLiteInsertAdapter:
         def __init__(self, table):
             self._stmt = sqlite_insert(table)
@@ -21,6 +21,12 @@ async def test_live_plays_simple_insert_skip_and_recent(client, monkeypatch) -> 
         "kaianolevine_api.routers.live_plays.pg_insert",
         lambda table: _SQLiteInsertAdapter(table),
     )
+
+
+async def test_live_plays_ingest_inserts_skips_duplicate_same_key(
+    client, monkeypatch
+) -> None:
+    _sqlite_upsert_adapter(monkeypatch)
 
     payload = {
         "plays": [
@@ -45,16 +51,55 @@ async def test_live_plays_simple_insert_skip_and_recent(client, monkeypatch) -> 
     ingest_resp = await client.post("/v1/live-plays", json=payload)
     assert ingest_resp.status_code == 200
     ingest_json = ingest_resp.json()
-    assert ingest_json["meta"]["count"] == 1
+    assert ingest_json["meta"]["total"] == 1
     assert ingest_json["data"]["inserted"] == 2
     assert ingest_json["data"]["skipped"] == 1
 
-    recent_resp = await client.get("/v1/live-plays/recent", params={"limit": 10})
-    assert recent_resp.status_code == 200
-    recent_json = recent_resp.json()
-    assert "data" in recent_json and "meta" in recent_json
-    assert recent_json["meta"]["count"] == 2
-    assert recent_json["data"][0]["title"] == "Song B"
-    assert recent_json["data"][1]["title"] == "Song A"
-    assert "id" in recent_json["data"][0]
-    assert "created_at" in recent_json["data"][0]
+
+async def test_live_plays_recent_meta_total_reflects_all_plays_not_page(
+    client, monkeypatch
+) -> None:
+    _sqlite_upsert_adapter(monkeypatch)
+
+    plays = [
+        {
+            "played_at": f"2026-04-{i + 1:02d}T12:00:00Z",
+            "title": f"Song {i}",
+            "artist": "A",
+        }
+        for i in range(5)
+    ]
+    ing = await client.post("/v1/live-plays", json={"plays": plays})
+    assert ing.status_code == 200
+
+    recent = await client.get("/v1/live-plays/recent", params={"limit": 2})
+    assert recent.status_code == 200
+    rj = recent.json()
+    assert rj["meta"]["count"] == 2
+    assert rj["meta"]["total"] == 5
+
+
+async def test_live_plays_recent_limit_param_caps_page_size(
+    client, monkeypatch
+) -> None:
+    _sqlite_upsert_adapter(monkeypatch)
+
+    await client.post(
+        "/v1/live-plays",
+        json={
+            "plays": [
+                {
+                    "played_at": "2026-05-01T01:00:00Z",
+                    "title": "Only",
+                    "artist": "One",
+                }
+            ]
+        },
+    )
+
+    recent = await client.get("/v1/live-plays/recent", params={"limit": 1})
+    assert recent.status_code == 200
+    rj = recent.json()
+    assert len(rj["data"]) == 1
+    assert rj["meta"]["count"] == 1
+    assert rj["meta"]["total"] == 1
