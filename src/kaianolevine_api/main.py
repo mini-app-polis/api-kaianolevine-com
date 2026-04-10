@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from importlib.metadata import version as pkg_version
 from typing import Any
 
 import sentry_sdk
@@ -45,9 +46,12 @@ async def lifespan(_app: FastAPI):
 def _build_app() -> FastAPI:
     settings = get_settings()
 
-    app = FastAPI(
-        title="kaianolevine-api", version=settings.API_VERSION, lifespan=lifespan
-    )
+    try:
+        api_version = pkg_version("kaianolevine-api")
+    except Exception:
+        api_version = settings.API_VERSION
+
+    app = FastAPI(title="kaianolevine-api", version=api_version, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -157,10 +161,4 @@ app = _build_app()
     response_model=dict,
 )
 async def version() -> dict:
-    from importlib.metadata import version as pkg_version
-
-    try:
-        v = pkg_version("kaianolevine-api")
-    except Exception:
-        v = get_settings().API_VERSION
-    return {"version": v}
+    return {"version": app.version}

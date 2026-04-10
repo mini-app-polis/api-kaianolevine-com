@@ -9,3 +9,11 @@ async def test_version_endpoint_returns_package_version(client) -> None:
     # pyproject uses full semver (e.g. 1.13.2)
     assert isinstance(data["version"], str)
     assert "." in data["version"]
+
+
+async def test_openapi_version_matches_version_endpoint(client) -> None:
+    version_resp = await client.get("/version")
+    openapi_resp = await client.get("/openapi.json")
+    assert version_resp.status_code == 200
+    assert openapi_resp.status_code == 200
+    assert version_resp.json()["version"] == openapi_resp.json()["info"]["version"]
