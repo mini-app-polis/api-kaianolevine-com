@@ -3,11 +3,8 @@
 
 type: api-service
 
+# No active deferrals.
+
 exemptions:
   - rule: PY-011
     reason: "Intentional project name: kaianolevine_api. The repository is named api-kaianolevine-com by infrastructure convention but the Python project name reflects the product identity. Aligning them would require a breaking rename of the installed package."
-
-deferrals:
-  - rule: PY-009
-    reason: "Predates hatchling standardisation — currently uses setuptools. Migration is a low-priority backlog item."
-    until: null
