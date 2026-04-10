@@ -1,33 +1,18 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 
-def _sqlite_upsert_adapter(monkeypatch):
-    class _SQLiteInsertAdapter:
-        def __init__(self, table):
-            self._stmt = sqlite_insert(table)
-
-        def values(self, **kwargs):
-            self._stmt = self._stmt.values(**kwargs)
-            return self
-
-        def on_conflict_do_nothing(self, constraint):  # noqa: ARG002
-            return self._stmt.on_conflict_do_nothing(
-                index_elements=["owner_id", "title", "artist", "played_at"]
-            )
-
+@pytest.fixture(autouse=True)
+def _live_plays_use_sqlite_upsert(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "kaianolevine_api.routers.live_plays.pg_insert",
-        lambda table: _SQLiteInsertAdapter(table),
+        sqlite_insert,
     )
 
 
-async def test_live_plays_ingest_inserts_skips_duplicate_same_key(
-    client, monkeypatch
-) -> None:
-    _sqlite_upsert_adapter(monkeypatch)
-
+async def test_live_plays_ingest_inserts_skips_duplicate_same_key(client) -> None:
     payload = {
         "plays": [
             {
@@ -56,11 +41,7 @@ async def test_live_plays_ingest_inserts_skips_duplicate_same_key(
     assert ingest_json["data"]["skipped"] == 1
 
 
-async def test_live_plays_recent_meta_total_reflects_all_plays_not_page(
-    client, monkeypatch
-) -> None:
-    _sqlite_upsert_adapter(monkeypatch)
-
+async def test_live_plays_recent_meta_total_reflects_all_plays_not_page(client) -> None:
     plays = [
         {
             "played_at": f"2026-04-{i + 1:02d}T12:00:00Z",
@@ -79,11 +60,7 @@ async def test_live_plays_recent_meta_total_reflects_all_plays_not_page(
     assert rj["meta"]["total"] == 5
 
 
-async def test_live_plays_recent_limit_param_caps_page_size(
-    client, monkeypatch
-) -> None:
-    _sqlite_upsert_adapter(monkeypatch)
-
+async def test_live_plays_recent_limit_param_caps_page_size(client) -> None:
     await client.post(
         "/v1/live-plays",
         json={

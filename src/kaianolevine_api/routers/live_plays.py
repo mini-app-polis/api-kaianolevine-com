@@ -55,7 +55,7 @@ async def ingest_live_plays(
                 artist=play.artist,
             )
             .on_conflict_do_nothing(
-                constraint="uq_live_plays_owner_title_artist_played_at"
+                index_elements=["owner_id", "title", "artist", "played_at"],
             )
         )
         result = await session.execute(stmt)
