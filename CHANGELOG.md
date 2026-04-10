@@ -1,3 +1,10 @@
+## [1.16.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.16.1...v1.16.2) (2026-04-10)
+
+
+### Bug Fixes
+
+* add unique constraint and IntegrityError guard on concurrent set ingest ([934fe8a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/934fe8a3d864f4843b487c24083a5b74bdd9d6a8))
+
 ## [1.16.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.16.0...v1.16.1) (2026-04-05)
 
 
