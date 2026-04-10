@@ -23,6 +23,19 @@ from .config import Settings, get_settings
 #      Clerk Backend SDK to issue short-lived tokens, cached until expiry)
 #
 # See: https://clerk.com/docs/backend-requests/making/jwt-templates
+#
+# PROJECT KEYSTONE — transition sequence:
+#
+#   Phase 1 (now):     legacy=TRUE,  clerk=FALSE  → X-Owner-Id only (current)
+#   Phase 2 (cutover): legacy=TRUE,  clerk=TRUE   → both accepted; migrate cogs
+#   Phase 3 (cleanup): legacy=FALSE, clerk=TRUE   → Clerk JWT only
+#
+# Flags:
+#   flags.keystone.legacy_auth_enabled  — checked before falling back to X-Owner-Id
+#   flags.keystone.clerk_auth_enabled   — checked before attempting JWT verification
+#
+# The auth.py implementation will read these flags from the DB via is_enabled()
+# once the Clerk upgrade begins. No code changes are needed until Phase 2.
 # ---------------------------------------------------------------------------
 
 
