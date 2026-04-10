@@ -1,3 +1,15 @@
+# [1.19.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.18.2...v1.19.0) (2026-04-10)
+
+
+### Bug Fixes
+
+* uv lock ([a9d65c3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a9d65c3000cbe82a957b417d16d26b6245ad3cc7))
+
+
+### Features
+
+* **evaluations:** add nullable violation_id field to pipeline_evaluations ([a95b02d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a95b02da53a21c1ee54e19e73fc7d65b50451dd9))
+
 ## [1.18.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.18.1...v1.18.2) (2026-04-10)
 
 
