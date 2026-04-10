@@ -55,9 +55,3 @@ common-python-utils = { git = "https://github.com/mini-app-polis/common-python-u
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[dependency-groups]
-dev = [
-    "respx>=0.21,<1.0",
-]
-
