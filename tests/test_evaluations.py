@@ -9,12 +9,14 @@ async def test_evaluations_endpoints(client) -> None:
     list_json = list_resp.json()
     assert list_json["data"] == []
     assert list_json["meta"]["count"] == 0
+    assert list_json["meta"]["total"] == 0
 
     summary_resp = await client.get("/v1/evaluations/summary")
     assert summary_resp.status_code == 200
     summary_json = summary_resp.json()
     assert summary_json["data"] == []
     assert summary_json["meta"]["count"] == 0
+    assert summary_json["meta"]["total"] == 0
 
     post_resp = await client.post(
         "/v1/evaluations",
@@ -288,3 +290,90 @@ async def test_evaluations_summary_uses_latest_run_id_not_partial_timestamp_rows
     assert row["error_count"] == 1
     assert row["warn_count"] == 0
     assert row["info_count"] == 0
+
+
+async def test_list_evaluations_meta_total_reflects_filtered_total_not_page_count(
+    client,
+) -> None:
+    """Filtered total counts all matching rows, not just the returned page."""
+    for sev in ("ERROR", "WARN", "INFO"):
+        r = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": "filter-total-repo",
+                "dimension": "pipeline_consistency",
+                "severity": sev,
+                "run_id": "run-ft-1",
+                "finding": f"Finding {sev}",
+                "source": "filter_src",
+            },
+        )
+        assert r.status_code == 200
+
+    r_all = await client.get(
+        "/v1/evaluations",
+        params={"repo": "filter-total-repo", "limit": 2, "offset": 0},
+    )
+    assert r_all.status_code == 200
+    ball = r_all.json()
+    assert ball["meta"]["count"] == 2
+    assert ball["meta"]["total"] == 3
+
+    r_err = await client.get(
+        "/v1/evaluations",
+        params={
+            "repo": "filter-total-repo",
+            "severity": "ERROR",
+            "limit": 50,
+            "offset": 0,
+        },
+    )
+    assert r_err.status_code == 200
+    be = r_err.json()
+    assert be["meta"]["total"] == 1
+    assert be["meta"]["count"] == 1
+    assert be["data"][0]["severity"] == "ERROR"
+
+
+async def test_evaluations_summary_severity_breakdown_per_dimension(client) -> None:
+    await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "breakdown-repo",
+            "dimension": "testing_coverage",
+            "severity": "ERROR",
+            "run_id": "run-br-1",
+            "finding": "E",
+            "source": "breakdown_src",
+        },
+    )
+    await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "breakdown-repo",
+            "dimension": "testing_coverage",
+            "severity": "WARN",
+            "run_id": "run-br-1",
+            "finding": "W",
+            "source": "breakdown_src",
+        },
+    )
+    await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "breakdown-repo",
+            "dimension": "testing_coverage",
+            "severity": "INFO",
+            "run_id": "run-br-1",
+            "finding": "I",
+            "source": "breakdown_src",
+        },
+    )
+
+    summary_resp = await client.get("/v1/evaluations/summary")
+    assert summary_resp.status_code == 200
+    s = summary_resp.json()
+    row = next(r for r in s["data"] if r["dimension"] == "testing_coverage")
+    assert row["error_count"] == 1
+    assert row["warn_count"] == 1
+    assert row["info_count"] == 1
