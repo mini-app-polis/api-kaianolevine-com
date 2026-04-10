@@ -12,6 +12,10 @@ catalog, notes, and stats. Runtime write surfaces for ingest and live plays are 
 feature flags so ingestion can be paused without redeploying. Sentry is enabled in API
 runtime (when configured) for centralized error tracking and observability.
 
+API documentation is served automatically by FastAPI at `/docs` (Swagger UI) and
+`/redoc` (ReDoc). The root URL (`/`) redirects to `/docs`. The OpenAPI schema is
+available at `/openapi.json`. All three reflect the currently deployed package version.
+
 ## Section 5: API Endpoints
 
 All endpoints return the standard success envelope:
