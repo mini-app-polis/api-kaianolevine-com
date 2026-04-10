@@ -1,3 +1,11 @@
+# [1.18.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.17.0...v1.18.0) (2026-04-10)
+
+
+### Features
+
+* add root URL redirect to /docs ([f2280e3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f2280e3281d2bfa2ecef2305ba750f8f7ac1595b))
+* resolve real package version into FastAPI constructor and /version endpoint ([e46ba36](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e46ba3668e6ef46ee50cdcc785978f930f71b5c7))
+
 # [1.17.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.16.2...v1.17.0) (2026-04-10)
 
 
