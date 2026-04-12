@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.19.0...v1.20.0) (2026-04-12)
+
+
+### Features
+
+* **evaluations:** expand severity to 5 values — add CRITICAL and SUCCESS with CHECK constraint ([3dd62e6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3dd62e6fb08a83626820aec19c7a0fb102d4a7a6))
+
 # [1.19.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.18.2...v1.19.0) (2026-04-10)
 
 
