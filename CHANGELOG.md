@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.20.0...v1.21.0) (2026-04-16)
+
+
+### Features
+
+* support for new auth for notes permissions ([1111254](https://github.com/mini-app-polis/api-kaianolevine-com/commit/11112547c17f7ff6e92c0f8ae07a844484ee5c3a))
+
 # [1.20.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.19.0...v1.20.0) (2026-04-12)
 
 
