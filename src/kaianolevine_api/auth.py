@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import time
+from typing import Any
+
+import httpx
+import jwt
 from fastapi import Depends, Header
+from jwt import PyJWK
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,56 +15,124 @@ from .config import Settings, get_settings
 from .database import get_db_session
 from .models import WcsUserProfile
 from .schemas import api_error
+from .services.flags import is_enabled
 
 # ---------------------------------------------------------------------------
-# Authentication
+# Authentication — Project Keystone dual-auth bridge
 #
-# CURRENT: Simple header-based auth using X-Owner-Id or KAIANO_API_OWNER_ID fallback.
-# No real security — intended for internal processor-to-API calls only.
+# Flags (DB):
+#   flags.keystone.legacy_auth_enabled  → accept X-Owner-Id (+ KAIANO_API_OWNER_ID)
+#   flags.keystone.clerk_auth_enabled   → verify Authorization: Bearer <JWT> (RS256)
 #
-# FUTURE (when deejaytools.com or another frontend has real user accounts):
-# Replace with Clerk JWT verification. The scaffolding for this is already
-# planned:
-#
-#   1. Set CLERK_AUTH_ENABLED=true in Railway
-#   2. Set CLERK_JWKS_URL to your Clerk app's JWKS endpoint
-#   3. Replace get_current_owner below with JWKS-based JWT verification
-#      using PyJWT[crypto] — verify RS256 tokens, extract `sub` as owner
-#   4. Update KaianoApiClient in kaiano-common-utils to use Clerk M2M tokens
-#      instead of X-Owner-Id (use a JWT Template in the Clerk dashboard +
-#      Clerk Backend SDK to issue short-lived tokens, cached until expiry)
-#
-# See: https://clerk.com/docs/backend-requests/making/jwt-templates
-#
-# PROJECT KEYSTONE — transition sequence:
-#
-#   Phase 1 (now):     legacy=TRUE,  clerk=FALSE  → X-Owner-Id only (current)
-#   Phase 2 (cutover): legacy=TRUE,  clerk=TRUE   → both accepted; migrate cogs
-#   Phase 3 (cleanup): legacy=FALSE, clerk=TRUE   → Clerk JWT only
-#
-# Flags:
-#   flags.keystone.legacy_auth_enabled  — checked before falling back to X-Owner-Id
-#   flags.keystone.clerk_auth_enabled   — checked before attempting JWT verification
-#
-# The auth.py implementation will read these flags from the DB via is_enabled()
-# once the Clerk upgrade begins. No code changes are needed until Phase 2.
+# Phase 1: legacy=TRUE,  clerk=FALSE  → X-Owner-Id only
+# Phase 2: legacy=TRUE,  clerk=TRUE   → JWT first, then legacy
+# Phase 3: legacy=FALSE, clerk=TRUE   → JWT only
 # ---------------------------------------------------------------------------
 
+# JWKS document cache: url -> (monotonic_expiry, jwks_json). TTL 5 minutes.
+_jwks_doc_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
-def get_current_owner(
-    x_owner_id: str | None = Header(default=None),
+
+async def _fetch_jwks_document(jwks_url: str) -> dict[str, Any]:
+    """Fetch JWKS JSON with httpx; reuse cached document for 5 minutes."""
+    now = time.monotonic()
+    hit = _jwks_doc_cache.get(jwks_url)
+    if hit is not None:
+        expires_at, doc = hit
+        if now < expires_at:
+            return doc
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(jwks_url)
+        resp.raise_for_status()
+        doc = resp.json()
+
+    _jwks_doc_cache[jwks_url] = (now + 300.0, doc)
+    return doc
+
+
+def _decode_clerk_jwt_sync(
+    token: str, settings: Settings, jwks_doc: dict[str, Any]
+) -> str | None:
+    """Verify RS256 JWT against a JWKS document; return ``sub`` or None."""
+    if not settings.CLERK_ISSUER:
+        return None
+    try:
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        if not kid:
+            return None
+
+        keys = jwks_doc.get("keys")
+        if not isinstance(keys, list):
+            return None
+
+        jwk_dict: dict[str, Any] | None = None
+        for key in keys:
+            if isinstance(key, dict) and key.get("kid") == kid:
+                jwk_dict = key
+                break
+        if jwk_dict is None:
+            return None
+
+        signing_key = PyJWK.from_dict(jwk_dict)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=settings.CLERK_ISSUER,
+            options={"verify_aud": False},
+        )
+        sub = payload.get("sub")
+        return str(sub) if sub is not None else None
+    except Exception:
+        return None
+
+
+async def verify_clerk_jwt(token: str, settings: Settings) -> str | None:
+    """
+    Verify a Clerk session JWT or M2M JWT (RS256 via JWKS).
+    Returns the ``sub`` claim on success, or None on failure / misconfiguration.
+    """
+    if not settings.CLERK_JWKS_URL or not settings.CLERK_ISSUER:
+        return None
+    try:
+        jwks_doc = await _fetch_jwks_document(settings.CLERK_JWKS_URL)
+    except Exception:
+        return None
+    return await asyncio.to_thread(_decode_clerk_jwt_sync, token, settings, jwks_doc)
+
+
+async def get_current_owner(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_owner_id: str | None = Header(default=None, alias="X-Owner-Id"),
     settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
 ) -> str:
     """
-    Returns the owner identity for the current request.
+    Project Keystone dual-auth bridge.
 
-    Reads from X-Owner-Id request header, falls back to KAIANO_API_OWNER_ID
-    from settings if header is not present.
-
-    TODO: Replace with Clerk JWT verification before exposing this API
-    to real user traffic. See module docstring above for the upgrade path.
+    Resolves owner identity from Clerk JWT (``sub``) and/or legacy ``X-Owner-Id``,
+    depending on ``flags.keystone.*`` feature flags in the database.
     """
-    return x_owner_id or settings.KAIANO_API_OWNER_ID
+    clerk_enabled = await is_enabled("flags.keystone.clerk_auth_enabled", session)
+    legacy_enabled = await is_enabled("flags.keystone.legacy_auth_enabled", session)
+
+    if clerk_enabled and authorization:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            sub = await verify_clerk_jwt(token, settings)
+            if sub:
+                return sub
+        if not legacy_enabled:
+            raise api_error(401, "unauthorized", "Invalid or expired token")
+
+    if legacy_enabled:
+        owner = x_owner_id or settings.KAIANO_API_OWNER_ID
+        if owner:
+            return owner
+
+    raise api_error(401, "unauthorized", "Authentication required")
 
 
 async def require_wcs_admin(
@@ -65,8 +140,7 @@ async def require_wcs_admin(
     session: AsyncSession = Depends(get_db_session),
 ) -> str:
     """
-    Ensures the caller (Clerk sub in X-Owner-Id) is a WCS admin.
-    The WCS site SSR passes the Clerk `sub` as X-Owner-Id on admin API calls.
+    Ensures the caller (Clerk ``sub`` from JWT or X-Owner-Id) is a WCS admin.
     """
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == owner_id)

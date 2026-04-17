@@ -15,6 +15,7 @@ dependencies = [
   "sentry-sdk[fastapi]>=2.0,<3.0",
   "python-multipart>=0.0.9,<1.0",
   "common-python-utils @ git+https://github.com/mini-app-polis/common-python-utils.git@main",
+  "pyjwt[crypto]>=2.8,<3.0",
 ]
 
 [project.optional-dependencies]

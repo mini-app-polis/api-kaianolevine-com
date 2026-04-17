@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     SENTRY_DSN_API: str | None = None
     CORS_ORIGINS: list[str] = ["*"]
 
+    # Clerk JWT (Project Keystone) — required when flags.keystone.clerk_auth_enabled is TRUE
+    CLERK_JWKS_URL: str | None = None
+    CLERK_ISSUER: str | None = None
+
     # Contact form
     BREVO_API_KEY: str | None = None
     CONTACT_TO_EMAIL: str | None = None

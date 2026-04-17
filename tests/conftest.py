@@ -25,6 +25,7 @@ from kaianolevine_api.config import get_settings  # noqa: E402
 from kaianolevine_api.database import get_db_session  # noqa: E402
 from kaianolevine_api.main import app  # noqa: E402
 from kaianolevine_api.models import Base  # noqa: E402
+from kaianolevine_api.models import FeatureFlag as DbFeatureFlag  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +63,32 @@ async def reset_db(async_engine) -> AsyncIterator[None]:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(table.delete())
     yield
+
+
+@pytest.fixture(autouse=True)
+async def seed_keystone_feature_flags(reset_db, async_engine) -> None:
+    """Match production migration 013 defaults so auth tests see clerk off, legacy on."""
+    sessionmaker = async_sessionmaker(
+        async_engine, expire_on_commit=False, autoflush=False
+    )
+    async with sessionmaker() as session:
+        session.add(
+            DbFeatureFlag(
+                owner_id="kaiano",
+                name="flags.keystone.legacy_auth_enabled",
+                enabled=True,
+                description="Keystone: legacy X-Owner-Id auth",
+            )
+        )
+        session.add(
+            DbFeatureFlag(
+                owner_id="kaiano",
+                name="flags.keystone.clerk_auth_enabled",
+                enabled=False,
+                description="Keystone: Clerk JWT auth",
+            )
+        )
+        await session.commit()
 
 
 @pytest.fixture
