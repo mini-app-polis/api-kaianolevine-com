@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.21.1...v1.22.0) (2026-04-17)
+
+
+### Features
+
+* supporting full auth m2m pattern ([125e353](https://github.com/mini-app-polis/api-kaianolevine-com/commit/125e353cf36f97734030590acb1e063348fb28cc))
+
 ## [1.21.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.21.0...v1.21.1) (2026-04-16)
 
 
