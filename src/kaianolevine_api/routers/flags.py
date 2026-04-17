@@ -28,10 +28,8 @@ router = APIRouter()
     description="List all feature flags. Protected.",
 )
 async def list_flags(
-    owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[FeatureFlagItem]]:
-    del owner_id  # owner check is the protection layer for now
     settings = get_settings()
     total = (
         await session.execute(select(func.count()).select_from(DbFeatureFlag))
