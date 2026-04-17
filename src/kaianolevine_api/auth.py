@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -16,6 +17,8 @@ from .database import get_db_session
 from .models import WcsUserProfile
 from .schemas import api_error
 from .services.flags import is_enabled
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Authentication — Project Keystone dual-auth bridge
@@ -85,7 +88,8 @@ def _decode_clerk_jwt_sync(
         )
         sub = payload.get("sub")
         return str(sub) if sub is not None else None
-    except Exception:
+    except Exception as exc:
+        logger.error("[keystone] JWT decode failed: %s", exc)
         return None
 
 
@@ -98,7 +102,8 @@ async def verify_clerk_jwt(token: str, settings: Settings) -> str | None:
         return None
     try:
         jwks_doc = await _fetch_jwks_document(settings.CLERK_JWKS_URL)
-    except Exception:
+    except Exception as exc:
+        logger.error("[keystone] JWKS fetch failed: %s", exc)
         return None
     return await asyncio.to_thread(_decode_clerk_jwt_sync, token, settings, jwks_doc)
 
