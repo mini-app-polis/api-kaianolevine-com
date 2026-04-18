@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.26.0...v1.27.0) (2026-04-18)
+
+
+### Features
+
+* reopening live music to public get ([ca2a4f0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ca2a4f09bcbef7b65280c236aa7a5a94ec02c671))
+
 # [1.26.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.25.1...v1.26.0) (2026-04-18)
 
 
