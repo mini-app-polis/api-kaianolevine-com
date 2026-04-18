@@ -1,12 +1,13 @@
-"""Authentication — Clerk JWT verification (Project Keystone Phase 3).
+"""Authentication — Clerk token verification (Project Keystone Phase 3).
 
-All requests must carry ``Authorization: Bearer <jwt>`` where the JWT is
-either a Clerk session token (human user) or a Clerk M2M JWT (cog/service).
-Both are RS256 tokens verified locally via JWKS — no network call to Clerk.
+Accepts two token types on ``Authorization: Bearer <token>``:
+  - Clerk session JWTs (human users) — RS256, verified locally via JWKS
+  - Clerk M2M opaque tokens (cogs)   — verified via Clerk BAPI
 
 Required env vars:
-  CLERK_JWKS_URL — e.g. https://clerk.kaianolevine.com/.well-known/jwks.json
-  CLERK_ISSUER   — e.g. https://clerk.kaianolevine.com
+  CLERK_JWKS_URL   — e.g. https://clerk.kaianolevine.com/.well-known/jwks.json
+  CLERK_ISSUER     — e.g. https://clerk.kaianolevine.com
+  CLERK_SECRET_KEY — Clerk secret key for opaque token verification
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import asyncio
 import time
 from typing import Any
 
+import httpx
 import jwt
 from fastapi import Depends, Header
 from jwt import PyJWK
@@ -32,8 +34,6 @@ _jwks_doc_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 async def _fetch_jwks_document(jwks_url: str) -> dict[str, Any]:
     """Fetch JWKS JSON with httpx; reuse cached document for 5 minutes."""
-    import httpx
-
     now = time.monotonic()
     hit = _jwks_doc_cache.get(jwks_url)
     if hit is not None:
@@ -88,13 +88,44 @@ def _decode_clerk_jwt_sync(
         return None
 
 
+async def _verify_opaque_token(token: str, settings: Settings) -> str | None:
+    """
+    Verify a Clerk M2M opaque token via the BAPI verify endpoint.
+    Returns the machine subject on success, or None on failure.
+    """
+    if not settings.CLERK_SECRET_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.clerk.com/v1/m2m_tokens/verify",
+                headers={
+                    "Authorization": f"Bearer {settings.CLERK_SECRET_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"token": token},
+            )
+        if not resp.is_success:
+            return None
+        data = resp.json()
+        sub = data.get("subject") or data.get("sub")
+        return str(sub) if sub else None
+    except Exception:
+        return None
+
+
 async def verify_clerk_jwt(token: str, settings: Settings) -> str | None:
     """
-    Verify a Clerk RS256 JWT (session token or M2M JWT).
-    Returns the ``sub`` claim on success, or None on failure.
+    Verify a Clerk token — either an RS256 JWT (session/M2M JWT) or an
+    M2M opaque token. Returns the ``sub`` claim on success, or None.
     """
     if not settings.CLERK_JWKS_URL or not settings.CLERK_ISSUER:
         return None
+
+    # Opaque tokens have no dots; JWTs have exactly two.
+    if token.count(".") != 2:
+        return await _verify_opaque_token(token, settings)
+
     try:
         jwks_doc = await _fetch_jwks_document(settings.CLERK_JWKS_URL)
     except Exception:
@@ -107,7 +138,7 @@ async def get_current_owner(
     settings: Settings = Depends(get_settings),
 ) -> str:
     """
-    Resolves owner identity from a Clerk JWT.
+    Resolves owner identity from a Clerk token (JWT or opaque M2M).
     Raises 401 if the token is missing or invalid.
     """
     if authorization:
