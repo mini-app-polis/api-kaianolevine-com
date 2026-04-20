@@ -86,6 +86,7 @@ async def reconcile_set_tracks(
     tracks: Iterable[IngestTrack],
     is_reingestion: bool = False,
 ) -> ReconciliationResult:
+    """TODO: describe this function."""
     ingest_tracks = list(tracks)
     log.info(
         "%s reconciling %s tracks for set_id=%s", LOG_START, len(ingest_tracks), set_id

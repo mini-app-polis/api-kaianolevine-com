@@ -184,6 +184,7 @@ async def list_wcs_grants(
     _admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsNoteGrantOut]]:
+    """TODO: describe this function."""
     settings = get_settings()
     stmt = select(WcsNoteGrant).order_by(WcsNoteGrant.granted_at.desc())
     if user_id:

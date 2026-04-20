@@ -35,6 +35,7 @@ async def list_tracks(
     offset: Annotated[int, Query(ge=0)] = 0,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[TrackListItem]]:
+    """TODO: describe this function."""
     settings = get_settings()
 
     stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id)

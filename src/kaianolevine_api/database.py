@@ -36,6 +36,7 @@ def _get_engine(database_url: str):
 
 
 def get_engine(settings: Settings | None = None):
+    """TODO: describe this function."""
     settings = settings or get_settings()
     return _get_engine(settings.DATABASE_URL)
 

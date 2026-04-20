@@ -108,6 +108,7 @@ def _safe_filename(name: str) -> str:
     response_model=None,
 )
 async def get_resume(settings: Settings = Depends(get_settings)) -> StreamingResponse:
+    """TODO: describe this function."""
     file_id = settings.RESUME_FILE_ID
     if not file_id:
         raise HTTPException(

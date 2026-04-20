@@ -214,6 +214,7 @@ async def create_evaluation(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[PipelineEvaluationItem]:
+    """TODO: describe this function."""
     settings = get_settings()
 
     # Legacy catch-all field intentionally left empty.

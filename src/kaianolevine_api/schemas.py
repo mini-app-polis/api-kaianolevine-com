@@ -19,6 +19,7 @@ T = TypeVar("T")
 
 
 class Envelope(BaseModel, Generic[T]):
+    """TODO: describe this class."""
     data: T = Field(..., description = "Semantic value for data.")
     meta: Meta = Field(..., description = "Semantic value for meta.")
 
@@ -46,6 +47,7 @@ class SetListItem(BaseModel):
 
 
 class TrackListItem(BaseModel):
+    """TODO: describe this class."""
     id: uuid.UUID = Field(..., description = "Unique identifier for this tracklist.")
     set_id: uuid.UUID = Field(..., description = "Semantic value for set id.")
     set_date: dt.date = Field(..., description = "Calendar date the set was played.")
@@ -215,6 +217,7 @@ class FeatureFlagPatch(BaseModel):
 
 
 class StatsOverview(BaseModel):
+    """TODO: describe this class."""
     total_sets: int = Field(..., description = "Semantic value for total sets.")
     total_plays: int = Field(..., description = "Semantic value for total plays.")
     unique_tracks: int = Field(..., description = "Semantic value for unique tracks.")
@@ -244,6 +247,7 @@ class StatsTopTrackItem(BaseModel):
 
 
 class IngestTrack(BaseModel):
+    """TODO: describe this class."""
     play_order: int | None = Field(default = None, description = "Semantic value for play order.")
     play_time: dt.time | None = Field(default = None, description = "Semantic value for play time.")
 

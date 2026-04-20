@@ -28,6 +28,7 @@ class Base(DeclarativeBase):
 
 
 class Set(Base):
+    """TODO: describe this class."""
     __tablename__ = "sets"
 
     __table_args__ = (

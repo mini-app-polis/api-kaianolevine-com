@@ -41,6 +41,7 @@ async def list_catalog(
     offset: Annotated[int, Query(ge=0)] = 0,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[CatalogListItem]]:
+    """TODO: describe this function."""
     settings = get_settings()
 
     stmt = select(DbCatalog).order_by(
