@@ -11,8 +11,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ENVIRONMENT: str = "development"
     API_VERSION: str = "1.0"
+    STANDARDS_VERSION: str = "3.4.2"
     SENTRY_DSN_API: str | None = None
     CORS_ORIGINS: list[str] = ["*"]
+
+    # Logging
+    LOGGING_LEVEL: str = "INFO"
+
+    # Owner identity for legacy X-Owner-Id auth path (Project Keystone Phase 1)
+    KAIANO_API_OWNER_ID: str | None = None
+
+    # HTTP client timeouts — override to 0 in tests for fast failure
+    HTTP_CLIENT_TIMEOUT_SECS: float = 10.0
 
     # Clerk JWT (Project Keystone) — required when flags.keystone.clerk_auth_enabled is TRUE
     CLERK_JWKS_URL: str | None = None
