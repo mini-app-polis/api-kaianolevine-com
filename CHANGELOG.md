@@ -1,3 +1,10 @@
+## [1.27.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.27.0...v1.27.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* major doc update for evaluation findings ([dbd111e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dbd111e9041b3be948ead55e0c1cddd69889b5ef))
+
 # [1.27.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.26.0...v1.27.0) (2026-04-18)
 
 
