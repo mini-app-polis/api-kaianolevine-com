@@ -160,6 +160,21 @@ app = _build_app()
 
 
 @app.get(
+    "/health",
+    tags=["meta"],
+    summary="Liveness probe",
+    description=(
+        "Returns {'status': 'ok'} with no auth and no database queries. "
+        "Intentionally public — used by load balancers and uptime monitors."
+    ),
+    response_model=dict,
+)
+async def health() -> dict:
+    """Liveness probe. Intentionally public — no auth, no DB access."""
+    return {"status": "ok"}
+
+
+@app.get(
     "/version",
     tags=["meta"],
     summary="API version",
