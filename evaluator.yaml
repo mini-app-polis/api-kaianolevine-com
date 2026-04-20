@@ -8,3 +8,15 @@ type: api-service
 exemptions:
   - rule: PY-011
     reason: "Intentional project name: kaianolevine_api. The repository is named api-kaianolevine-com by infrastructure convention but the Python project name reflects the product identity. Aligning them would require a breaking rename of the installed package."
+
+  - rule: API-002
+    reason: "aiosqlite is a test-only dependency declared under the [dev] extras group and referenced only in tests/conftest.py (TEST_DATABASE_URL = 'sqlite+aiosqlite:///:memory:'). Production runtime uses PostgreSQL via asyncpg exclusively. No alternate data-store driver is used in production code."
+
+  - rule: API-004
+    reason: "Effective route '/' is a RedirectResponse to /docs (Swagger UI). It is intentionally unversioned — the redirect target is itself publicly browsable documentation and the path must be reachable at the stable root. All substantive API routes are mounted under /v1/. See main.py::root for the intentional-public description."
+
+  - rule: API-011
+    reason: "Database migrations are managed as numbered raw SQL files under migrations/ (001_init.sql through 016_wcs_auth.sql), not Alembic. Migration application is handled out-of-band via Railway's deploy hook rather than ci.yml. The check's 'alembic upgrade head' requirement does not apply to this migration pattern."
+
+  - rule: PY-013
+    reason: "Deduplication is enforced at the database layer via UniqueConstraint (e.g. uq_sets_owner_source_file on Set, uq_wcs_note_grants_user_note on WcsNoteGrant). The check's 'possible_duplicate_' filename-prefix pattern applies to file-level dedup in cogs that archive Drive inputs, not to row-level dedup in an API service. Not applicable to this repo type."
