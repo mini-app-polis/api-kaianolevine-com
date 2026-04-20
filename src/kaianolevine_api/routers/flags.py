@@ -30,6 +30,7 @@ router = APIRouter()
 async def list_flags(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[FeatureFlagItem]]:
+    """Return all feature flags in a paginated envelope."""
     settings = get_settings()
     total = (
         await session.execute(select(func.count()).select_from(DbFeatureFlag))
@@ -73,6 +74,7 @@ async def patch_flag(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[FeatureFlagItem]:
+    """Update a feature flag enabled state by name."""
     settings = get_settings()
 
     row = (

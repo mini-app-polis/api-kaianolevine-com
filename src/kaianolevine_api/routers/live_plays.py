@@ -32,6 +32,7 @@ async def ingest_live_plays(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LivePlaysResponseData]:
+    """Ingest live-play history rows with idempotent conflict handling."""
     settings = get_settings()
     if not await is_enabled("flags.deejay_api.live_plays_enabled", session):
         raise HTTPException(
@@ -79,6 +80,7 @@ async def list_recent_live_plays(
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[LivePlayRecord]]:
+    """Return recent live-play rows ordered by played_at descending."""
     settings = get_settings()
     if not await is_enabled("flags.deejay_api.live_plays_enabled", session):
         raise HTTPException(

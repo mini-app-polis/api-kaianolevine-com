@@ -56,6 +56,7 @@ async def create_transcript(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsTranscriptItem]:
+    """Persist a raw WCS transcript for later note extraction."""
     log.info(
         "%s storing transcript source_filename=%s", LOG_START, payload.source_filename
     )
@@ -102,6 +103,7 @@ async def create_note(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsNoteItem]:
+    """Persist one structured WCS note linked to a transcript."""
     log.info(
         "%s storing note transcript_id=%s session_type=%s",
         LOG_START,
@@ -176,6 +178,7 @@ async def list_notes(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsNoteItem]]:
+    """List notes visible to the authenticated user."""
     settings = get_settings()
 
     # Standard user filtering — no admin bypass.
@@ -230,6 +233,7 @@ async def list_all_notes(
     _admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsNoteItem]]:
+    """List all WCS notes for admin workflows."""
     settings = get_settings()
 
     stmt = (
@@ -269,6 +273,7 @@ async def get_note(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsNoteItem]:
+    """Return one note when the caller has visibility access."""
     settings = get_settings()
 
     result = await session.execute(select(DbNote).where(DbNote.id == note_id))
@@ -300,6 +305,7 @@ async def patch_note(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsNoteItem]:
+    """Update user-facing visibility for one owned note."""
     settings = get_settings()
 
     result = await session.execute(

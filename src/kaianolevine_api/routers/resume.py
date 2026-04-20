@@ -159,6 +159,7 @@ async def get_resume(settings: Settings = Depends(get_settings)) -> StreamingRes
         )
 
     async def body() -> AsyncIterator[bytes]:
+        """Proxy the configured resume file bytes from Google Drive."""
         try:
             async for chunk in stream_http.aiter_bytes():
                 yield chunk

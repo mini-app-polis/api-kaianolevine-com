@@ -47,6 +47,7 @@ async def prefect_webhook(
     payload: PrefectWebhookPayload = Body(..., embed=False),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[PipelineEvaluationItem]:
+    """Create a pipeline evaluation record from Prefect webhook payloads."""
     settings = get_settings()
 
     flow_name = payload.flow_name or "unknown"

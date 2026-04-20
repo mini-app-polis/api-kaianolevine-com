@@ -106,6 +106,7 @@ async def get_catalog(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[CatalogDetail]:
+    """List catalog tracks with optional filtering and pagination."""
     settings = get_settings()
 
     catalog = await session.get(DbCatalog, id)
@@ -167,6 +168,7 @@ async def patch_catalog(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[CatalogDetail]:
+    """Patch mutable catalog metadata fields for one track."""
     catalog_stmt = select(DbCatalog).where(
         DbCatalog.id == id, DbCatalog.owner_id == owner_id
     )

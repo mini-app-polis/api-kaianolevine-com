@@ -21,6 +21,7 @@ log = logger_mod.get_logger()
 
 @dataclasses.dataclass(frozen=True)
 class ReconciliationResult:
+    """Result of reconciling track catalog updates from ingest output."""
     catalog_new: int
     catalog_updated: int
     catalog_unchanged: int

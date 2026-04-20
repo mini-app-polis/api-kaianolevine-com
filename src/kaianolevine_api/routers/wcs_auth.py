@@ -53,6 +53,7 @@ async def upsert_wcs_me(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsUserProfileOut]:
+    """Upsert the caller's WCS profile and refresh last_seen_at."""
     log.info("%s upsert WCS profile user_id=%s", LOG_START, owner_id)
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == owner_id)
@@ -92,6 +93,7 @@ async def get_wcs_me(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsUserProfileOut]:
+    """Return the authenticated caller's WCS profile."""
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == owner_id)
     )
@@ -121,6 +123,7 @@ async def list_wcs_users(
     _admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsUserProfileOut]]:
+    """List all WCS user profiles for admin review."""
     settings = get_settings()
     result = await session.execute(
         select(WcsUserProfile).order_by(WcsUserProfile.last_seen_at.desc())
@@ -144,6 +147,7 @@ async def patch_wcs_user(
     _admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsUserProfileOut]:
+    """Patch editable WCS user profile fields as an admin."""
     settings = get_settings()
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == user_id)
@@ -207,6 +211,7 @@ async def create_wcs_grant(
     admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsNoteGrantOut]:
+    """Create a note grant linking a user to a WCS note."""
     settings = get_settings()
     grant = WcsNoteGrant(
         user_id=body.user_id,
@@ -273,6 +278,7 @@ async def patch_wcs_note_default_visibility(
     _admin_id: str = Depends(require_wcs_admin),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsNoteItem]:
+    """Set catalog default visibility for a specific WCS note."""
     settings = get_settings()
     result = await session.execute(select(DbNote).where(DbNote.id == note_id))
     note = result.scalars().first()

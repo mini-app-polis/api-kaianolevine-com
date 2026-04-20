@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Runtime configuration loaded from environment variables."""
     DATABASE_URL: str
     ENVIRONMENT: str = "development"
     API_VERSION: str = "1.0"
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     @field_validator("GOOGLE_PRIVATE_KEY", mode="before")
     @classmethod
     def normalize_google_private_key_newlines(cls, v: str | None) -> str | None:
+        """Normalize escaped newlines in GOOGLE_PRIVATE_KEY values."""
         if v is None or v == "":
             return v
         return v.replace("\\n", "\n")
@@ -41,4 +43,5 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Return the cached Settings instance for this process."""
     return Settings()

@@ -38,6 +38,7 @@ async def list_sets(
     offset: Annotated[int, Query(ge=0)] = 0,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SetListItem]]:
+    """List sets owned by the authenticated owner with pagination."""
     settings = get_settings()
 
     if year is not None:
@@ -126,6 +127,7 @@ async def get_set(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[SetDetail]:
+    """Return one set by id for the authenticated owner."""
     settings = get_settings()
 
     set_row = await session.get(DbSet, id)
@@ -168,6 +170,7 @@ async def get_set_tracks(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SetTrackListItem]]:
+    """Return tracks for one set ordered by play sequence."""
     settings = get_settings()
     set_row = await session.get(DbSet, id)
     if set_row is None:

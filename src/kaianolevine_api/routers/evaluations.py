@@ -101,6 +101,7 @@ async def list_evaluations(
     offset: Annotated[int, Query(ge=0)] = 0,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[PipelineEvaluationItem]]:
+    """Return evaluation findings with optional filters and pagination."""
     settings = get_settings()
 
     eligible = _eligible_latest_evaluation_ids_subquery()
@@ -165,6 +166,7 @@ async def evaluations_summary(
     run_id: Annotated[str | None, Query()] = None,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[EvaluationSummaryItem]]:
+    """Return aggregate evaluation counts grouped by dimension."""
     settings = get_settings()
 
     eligible = _eligible_latest_evaluation_ids_subquery()

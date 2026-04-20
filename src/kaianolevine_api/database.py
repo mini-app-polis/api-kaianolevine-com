@@ -42,11 +42,13 @@ def get_engine(settings: Settings | None = None):
 
 @lru_cache(maxsize=1)
 def get_sessionmaker(database_url: str):
+    """Return the module-level async sessionmaker, creating it on first use."""
     engine = _get_engine(database_url)
     return async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """Yield an async database session for a request lifecycle."""
     settings = get_settings()
     sessionmaker = get_sessionmaker(settings.DATABASE_URL)
     async with sessionmaker() as session:

@@ -130,6 +130,7 @@ async def get_track(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[TrackDetail]:
+    """Return one track by id for the authenticated owner."""
     settings = get_settings()
 
     stmt = (

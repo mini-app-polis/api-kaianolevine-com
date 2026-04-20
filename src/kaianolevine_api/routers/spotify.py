@@ -29,6 +29,7 @@ router = APIRouter()
 async def list_spotify_playlists(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SpotifyPlaylistItem]]:
+    """Return the latest ingested Spotify playlist snapshots."""
     settings = get_settings()
     total = (
         await session.execute(select(func.count()).select_from(DbSpotifyPlaylist))
@@ -69,6 +70,7 @@ async def ingest_spotify_playlists(
     _owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[SpotifyPlaylistsIngestResponse]:
+    """Upsert Spotify playlist snapshots from ingest payloads."""
     settings = get_settings()
     tbl = DbSpotifyPlaylist.__table__
 

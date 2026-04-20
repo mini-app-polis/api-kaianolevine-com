@@ -23,6 +23,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
+    """Base SQLAlchemy declarative class for all ORM models."""
     pass
 
 
@@ -55,6 +56,7 @@ class Set(Base):
 
 
 class Track(Base):
+    """Track play entry belonging to a specific DJ set."""
     __tablename__ = "tracks"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -99,6 +101,7 @@ class Track(Base):
 
 
 class TrackCatalog(Base):
+    """Canonical track catalog entry aggregated across play history."""
     __tablename__ = "track_catalog"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -153,6 +156,7 @@ class TrackCatalog(Base):
 
 
 class PipelineEvaluation(Base):
+    """Evaluation finding emitted by pipeline and conformance checks."""
     __tablename__ = "pipeline_evaluations"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -186,6 +190,7 @@ class PipelineEvaluation(Base):
 
 
 class FeatureFlag(Base):
+    """Feature flag row controlling runtime behavior by name."""
     __tablename__ = "feature_flags"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -209,6 +214,7 @@ class FeatureFlag(Base):
 
 
 class SpotifyPlaylist(Base):
+    """Snapshot of a Spotify playlist ingested from the cog."""
     __tablename__ = "spotify_playlists"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -238,6 +244,7 @@ class SpotifyPlaylist(Base):
 
 
 class LivePlay(Base):
+    """Persisted live-play event ingested from listening history."""
     __tablename__ = "live_plays"
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -33,6 +33,7 @@ from .schemas import ErrorDetail, ErrorEnvelope
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    """Initialize and tear down process-level app resources."""
     settings = get_settings()
     if settings.SENTRY_DSN_API:
         sentry_sdk.init(
@@ -66,6 +67,7 @@ def _build_app() -> FastAPI:
     async def validation_exception_handler(
         _: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        """Render request validation failures as the standard error envelope."""
         errors = exc.errors()
         first = errors[0] if errors else {}
         loc = first.get("loc")
@@ -90,6 +92,7 @@ def _build_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+        """Render unhandled exceptions as a generic internal error envelope."""
         if isinstance(exc, HTTPException):
             detail: Any = exc.detail
             if isinstance(detail, dict) and "code" in detail and "message" in detail:
@@ -118,6 +121,7 @@ def _build_app() -> FastAPI:
     # HTTPException handler needs to be imported after ErrorEnvelope exists.
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
+        """Render HTTPException responses using the standard error envelope."""
         detail: Any = exc.detail
         if isinstance(detail, dict) and "code" in detail and "message" in detail:
             payload = ErrorEnvelope(

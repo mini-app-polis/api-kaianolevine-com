@@ -30,6 +30,7 @@ async def ingest_set(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[IngestResponseData]:
+    """Ingest one DJ set payload and update tracks plus catalog stats."""
     log.info("%s ingest received source_file=%s", LOG_START, payload.source_file)
 
     settings = get_settings()

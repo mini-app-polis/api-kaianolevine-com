@@ -30,6 +30,7 @@ router = APIRouter()
 async def stats_overview(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[StatsOverview]:
+    """Return high-level listening statistics for the authenticated owner."""
     settings = get_settings()
 
     total_sets = (
@@ -84,6 +85,7 @@ async def stats_overview(
 async def stats_by_year(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsByYearItem]]:
+    """Return yearly set and track counts for the authenticated owner."""
     settings = get_settings()
 
     year_expr = func.extract("year", DbSet.set_date).cast(Integer).label("year")
@@ -124,6 +126,7 @@ async def stats_by_year(
 async def stats_top_artists(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsTopArtistItem]]:
+    """Return most-played artists for the authenticated owner."""
     settings = get_settings()
 
     rows = (
@@ -155,6 +158,7 @@ async def stats_top_artists(
 async def stats_top_tracks(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsTopTrackItem]]:
+    """Return most-played tracks for the authenticated owner."""
     settings = get_settings()
 
     rows = (
