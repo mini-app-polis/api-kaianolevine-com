@@ -1,3 +1,11 @@
+## [1.28.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.2...v1.28.3) (2026-04-22)
+
+
+### Bug Fixes
+
+* re-lock uv.lock and close AUTH-002 ([f297126](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f2971267bcdbe0badc2682b6385175fd1274d150))
+* re-lock uv.lock in semantic-release prepare step ([6fadb2d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fadb2df9d6763a1e9a62b67379e52ed8c5e67fa))
+
 ## [1.28.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.1...v1.28.2) (2026-04-22)
 
 
