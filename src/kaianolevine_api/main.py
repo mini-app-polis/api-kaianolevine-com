@@ -9,6 +9,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from mini_app_polis.logger import (
+    LOG_FAILURE,
+    LOG_START,
+    LOG_WARNING,
+    get_logger,
+    with_log_prefix,
+)
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from .config import get_settings
@@ -30,6 +37,8 @@ from .routers import (
 )
 from .schemas import ErrorDetail, ErrorEnvelope
 
+logger = get_logger()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -42,7 +51,21 @@ async def lifespan(_app: FastAPI):
             environment=settings.ENVIRONMENT,
             traces_sample_rate=1.0,
         )
+        logger.info(
+            with_log_prefix(
+                LOG_START,
+                f"kaianolevine-api starting (env={settings.ENVIRONMENT}, sentry=on)",
+            )
+        )
+    else:
+        logger.info(
+            with_log_prefix(
+                LOG_START,
+                f"kaianolevine-api starting (env={settings.ENVIRONMENT}, sentry=off)",
+            )
+        )
     yield
+    logger.info(with_log_prefix(LOG_WARNING, "kaianolevine-api shutting down"))
 
 
 def _build_app() -> FastAPI:
@@ -109,6 +132,9 @@ def _build_app() -> FastAPI:
                 ).model_dump()
             return JSONResponse(status_code=exc.status_code, content=payload)
 
+        logger.exception(
+            with_log_prefix(LOG_FAILURE, f"unhandled exception: {type(exc).__name__}")
+        )
         return JSONResponse(
             status_code=500,
             content=ErrorEnvelope(

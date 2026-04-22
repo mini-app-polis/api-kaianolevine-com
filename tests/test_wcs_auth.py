@@ -148,3 +148,42 @@ async def test_patch_default_visibility_admin(client) -> None:
     )
     assert r.status_code == 200
     assert r.json()["data"]["is_default_visible"] is True
+
+
+# ── PATCH /v1/wcs/admin/users/{user_id} ───────────────────────────────────────
+
+
+async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> None:
+    """Contract test for PATCH /v1/wcs/admin/users/{user_id}."""
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
+                "VALUES ('promote-me', 'p@example.com', 'P', 0)"
+            )
+        )
+
+    r = await client.patch(
+        "/v1/wcs/admin/users/promote-me",
+        json={"is_admin": True},
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["user_id"] == "promote-me"
+    assert data["is_admin"] is True
+
+    r2 = await client.patch(
+        "/v1/wcs/admin/users/promote-me",
+        json={"is_admin": False},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["data"]["is_admin"] is False
+
+
+async def test_patch_wcs_admin_user_not_found_returns_404(client) -> None:
+    r = await client.patch(
+        "/v1/wcs/admin/users/does-not-exist",
+        json={"is_admin": True},
+    )
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "user_not_found"

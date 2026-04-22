@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 
+async def test_health_endpoint_returns_ok(client) -> None:
+    """Contract test for GET /health — liveness probe, no auth, no DB."""
+    resp = await client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"status": "ok"}
+
+
 async def test_version_endpoint_returns_package_version(client) -> None:
     resp = await client.get("/version")
     assert resp.status_code == 200

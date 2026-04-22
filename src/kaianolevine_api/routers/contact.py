@@ -7,12 +7,15 @@ from urllib.parse import parse_qs
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from mini_app_polis.logger import LOG_FAILURE, get_logger, with_log_prefix
 from starlette.responses import Response
 
 from ..config import get_settings
 from ..schemas import ErrorDetail, ErrorEnvelope
 
 router = APIRouter()
+
+logger = get_logger()
 
 # Fields that are infrastructure/routing concerns and should not appear
 # in the email body as generic "extra fields".
@@ -162,6 +165,7 @@ async def _send_brevo_email(
     reply_to_email: str,
     reply_to_name: str | None,
 ) -> tuple[bool, str | None]:
+    settings = get_settings()
     payload: dict[str, Any] = {
         "to": [{"email": to_email}],
         "sender": {"email": from_email, "name": "Kaiano API"},
@@ -177,7 +181,7 @@ async def _send_brevo_email(
             "https://api.brevo.com/v3/smtp/email",
             json=payload,
             headers={"api-key": api_key, "content-type": "application/json"},
-            timeout=15.0,
+            timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
         )
 
     if resp.is_success:
@@ -309,6 +313,12 @@ async def submit_contact(request: Request) -> Response:
     )
 
     if not sent:
+        logger.error(
+            with_log_prefix(
+                LOG_FAILURE,
+                f"Brevo email send failed (origin={origin_site}, type={submission_type}): {error_detail}",
+            )
+        )
         return _error_response(
             502, "email_failed", "Failed to send email", details=error_detail
         )

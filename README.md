@@ -5,6 +5,33 @@ reconciliation, pipeline evaluations, feature flags, stats, live plays,
 contact form handling (Brevo + Turnstile), and resume PDF proxy
 (Google Drive).
 
+## API Reference
+
+All versioned routes are mounted under `/v1`. Interactive OpenAPI
+documentation is the source of truth for request and response shapes:
+
+- Live (production): https://api.kaianolevine.com/docs
+- OpenAPI JSON:      https://api.kaianolevine.com/openapi.json
+- Local (dev):       http://localhost:8000/docs
+
+Route groups:
+
+- `/v1/sets`, `/v1/sets/{id}`, `/v1/sets/{id}/tracks` — DJ sets and per-set tracks
+- `/v1/tracks`, `/v1/tracks/{id}` — track catalog
+- `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries
+- `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
+- `/v1/flags`, `/v1/flags/{name}` — feature flags
+- `/v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks` — aggregate stats
+- `/v1/spotify/playlists` — Spotify playlist catalog
+- `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
+- `/v1/ingest` — set ingestion endpoint
+- `/v1/prefect-webhook` — Prefect flow-run webhook
+- `/v1/contact` — public contact form (CORS + Turnstile gated)
+- `/v1/resume` — resume PDF proxy (Google Drive)
+- `/v1/wcs/transcripts`, `/v1/wcs/notes`, `/v1/wcs/notes/all`, `/v1/wcs/notes/{id}` — WCS notes pipeline
+- `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
+- Unversioned meta routes: `/health` (liveness), `/version` (deployed version), `/` (redirects to `/docs`)
+
 ## Developer Setup
 
 ### Prerequisites
@@ -96,5 +123,34 @@ Designed for Railway.
 
 ## Authentication
 
-Owner-based auth is implemented for now via a placeholder `get_current_owner` dependency.
-Clerk JWT verification is planned for production.
+Owner identity is resolved from a Clerk bearer token via
+`src/kaianolevine_api/auth.py`. The `get_current_owner` dependency
+accepts either:
+
+- **Clerk session JWTs** (human users) — RS256, verified locally against
+  the JWKS document fetched from `CLERK_JWKS_URL` (cached for 5 minutes).
+- **Clerk M2M opaque tokens** (cogs) — verified via the Clerk BAPI
+  `m2m_tokens/verify` endpoint using `CLERK_SECRET_KEY`.
+
+Required environment variables:
+
+- `CLERK_JWKS_URL` — e.g. `https://clerk.kaianolevine.com/.well-known/jwks.json`
+- `CLERK_ISSUER` — e.g. `https://clerk.kaianolevine.com`
+- `CLERK_SECRET_KEY` — Clerk secret key for opaque-token verification
+
+Header parity is maintained with
+`mini_app_polis.api.KaianoApiClient`: the client attaches
+`Authorization: Bearer <token>` acquired from Clerk and this module
+verifies tokens arriving in that same header.
+
+## Observability
+
+Three-layer observability, aligned with the ecosystem standard:
+
+- **Sentry** — unhandled exceptions and FastAPI integration, initialized
+  in `main.py` `lifespan` when `SENTRY_DSN_API` is set.
+- **Structured logs** — emitted via the shared logger from
+  `mini_app_polis.logger` (install name `common-python-utils`); consistent
+  JSON format and emoji-prefixed lifecycle lines across the ecosystem.
+- **Healthchecks.io** — external uptime probes hit `/health` (public
+  liveness endpoint, no auth, no DB access).

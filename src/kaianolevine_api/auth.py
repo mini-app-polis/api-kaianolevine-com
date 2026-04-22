@@ -9,7 +9,7 @@ Required env vars:
   CLERK_ISSUER     — e.g. https://clerk.kaianolevine.com
   CLERK_SECRET_KEY — Clerk secret key for opaque token verification
 
-Header parity with ``common_python_utils.api_client.CommonPythonApiClient``:
+Header parity with ``mini_app_polis.api.KaianoApiClient``:
 the client attaches ``Authorization: Bearer <token>`` acquired from Clerk
 and this module verifies tokens arriving in that same header. Any change
 to the accepted header name or token format must be made in both places.
@@ -25,6 +25,7 @@ import httpx
 import jwt
 from fastapi import Depends, Header
 from jwt import PyJWK
+from mini_app_polis.logger import LOG_WARNING, get_logger, with_log_prefix
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,8 @@ from .config import Settings, get_settings
 from .database import get_db_session
 from .models import WcsUserProfile
 from .schemas import api_error
+
+logger = get_logger()
 
 # JWKS document cache: url -> (monotonic_expiry, jwks_json). TTL 5 minutes.
 _jwks_doc_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -90,7 +93,10 @@ def _decode_clerk_jwt_sync(
         )
         sub = payload.get("sub")
         return str(sub) if sub is not None else None
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            with_log_prefix(LOG_WARNING, f"Clerk JWT verification failed: {exc!r}")
+        )
         return None
 
 
@@ -102,7 +108,9 @@ async def _verify_opaque_token(token: str, settings: Settings) -> str | None:
     if not settings.CLERK_SECRET_KEY:
         return None
     try:
-        async with httpx.AsyncClient(timeout=settings.HTTP_CLIENT_TIMEOUT_SECS) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.HTTP_CLIENT_TIMEOUT_SECS
+        ) as client:
             resp = await client.post(
                 "https://api.clerk.com/v1/m2m_tokens/verify",
                 headers={
@@ -116,7 +124,12 @@ async def _verify_opaque_token(token: str, settings: Settings) -> str | None:
         data = resp.json()
         sub = data.get("subject") or data.get("sub")
         return str(sub) if sub else None
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            with_log_prefix(
+                LOG_WARNING, f"Clerk opaque-token verification failed: {exc!r}"
+            )
+        )
         return None
 
 
@@ -134,7 +147,10 @@ async def verify_clerk_jwt(token: str, settings: Settings) -> str | None:
 
     try:
         jwks_doc = await _fetch_jwks_document(settings.CLERK_JWKS_URL)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            with_log_prefix(LOG_WARNING, f"JWKS document fetch failed: {exc!r}")
+        )
         return None
     return await asyncio.to_thread(_decode_clerk_jwt_sync, token, settings, jwks_doc)
 
