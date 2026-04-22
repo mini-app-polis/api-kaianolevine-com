@@ -1,3 +1,10 @@
+## [1.28.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.1...v1.28.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* migrate Railway builder from Nixpacks to Railpack ([b4f985f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b4f985fe10b2d94529fafa0623f7f81bc95d97a3))
+
 ## [1.28.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.0...v1.28.1) (2026-04-22)
 
 
