@@ -33,6 +33,7 @@ from .routers import (
     tracks,
     wcs_auth,
     wcs_notes,
+    wcs_qa,
     webhook,
 )
 from .schemas import ErrorDetail, ErrorEnvelope
@@ -178,6 +179,7 @@ def _build_app() -> FastAPI:
     app.include_router(resume.router, prefix="/v1", tags=["resume"])
     app.include_router(wcs_notes.router, prefix="/v1", tags=["wcs"])
     app.include_router(wcs_auth.router, prefix="/v1", tags=["wcs"])
+    app.include_router(wcs_qa.router, prefix="/v1", tags=["wcs"])
 
     return app
 
