@@ -1,3 +1,10 @@
+## [1.30.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.1...v1.30.2) (2026-05-10)
+
+
+### Bug Fixes
+
+* eval findings warning ([93e2650](https://github.com/mini-app-polis/api-kaianolevine-com/commit/93e265074047b2659fc3e739d62c0e1b192ab05c))
+
 ## [1.30.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.0...v1.30.1) (2026-05-10)
 
 
