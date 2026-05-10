@@ -485,7 +485,8 @@ async def test_get_transcript_window_returns_chunk_with_url(
     assert window.transcript_title == "Anchor step deep dive"
     assert len(window.chunks) == 1
     assert window.chunks[0].chunk_index == 0
-    assert window.source_url == f"{SITE_URL}/notes/transcripts/{ids['t_anchor']}#chunk-0"
+    # Option (b): chunks link to the underlying note's page, not a transcript reader.
+    assert window.source_url == f"{SITE_URL}/notes/{ids['n_anchor']}"
 
 
 async def test_get_transcript_window_unknown_chunk_raises(db_session) -> None:

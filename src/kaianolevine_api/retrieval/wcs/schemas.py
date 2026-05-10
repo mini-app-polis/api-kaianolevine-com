@@ -80,13 +80,19 @@ class TranscriptWindowChunk(BaseModel):
 
 
 class TranscriptWindow(BaseModel):
-    """Window of contiguous chunks around a target chunk_id."""
+    """Window of contiguous chunks around a target chunk_id.
+
+    source_url points at the linked note's page (option b: chunks fall back
+    to their underlying note rather than a dedicated transcript reader).
+    None when the transcript has zero or multiple linked notes — those
+    chunks have no v1 public page.
+    """
 
     transcript_id: str
     transcript_title: str
     session_date: dt.date | None
     chunks: list[TranscriptWindowChunk] = Field(default_factory=list)
-    source_url: str
+    source_url: str | None = None
 
 
 class ToolError(Exception):
