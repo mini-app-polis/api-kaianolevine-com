@@ -5,7 +5,6 @@ import uuid
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    ARRAY,
     JSON,
     UUID,
     Boolean,
