@@ -1,3 +1,12 @@
+## [1.30.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.0...v1.30.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* models ([48f31b8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/48f31b8da74f2de1e9c04c031dffb85d58cea3b6))
+* models ([4471ebc](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4471ebc37f32ab5d8b9ab575e9f691b71bf5831f))
+* tests ([f1607f9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f1607f98308bcc759f7631f0a052b96a08a82c3f))
+
 # [1.30.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.29.0...v1.30.0) (2026-05-10)
 
 
