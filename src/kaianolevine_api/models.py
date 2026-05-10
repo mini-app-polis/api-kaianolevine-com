@@ -20,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY as PgARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -332,13 +333,16 @@ class WcsNote(Base):
     provider: Mapped[str] = mapped_column(String, nullable=False)
     notes_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     # PostgreSQL: TEXT[] (see migrations/011). SQLite tests: JSON via variant.
+    # Use postgresql.ARRAY (not the generic sqlalchemy.ARRAY) so that
+    # PG-specific operators like `.overlap()` / `&&` are available on the
+    # column in queries (see retrieval/wcs/queries.py).
     instructors: Mapped[list[str]] = mapped_column(
-        ARRAY(String).with_variant(JSON(), "sqlite"),
+        PgARRAY(String).with_variant(JSON(), "sqlite"),
         nullable=False,
         default=list,
     )
     students: Mapped[list[str]] = mapped_column(
-        ARRAY(String).with_variant(JSON(), "sqlite"),
+        PgARRAY(String).with_variant(JSON(), "sqlite"),
         nullable=False,
         default=list,
     )
