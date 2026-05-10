@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.3...v1.29.0) (2026-05-10)
+
+
+### Features
+
+* WCS Q&A agent with vector retrieval and eval harness ([451d94b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/451d94b775c640523a504dd7a2108a32301b8c64))
+
 ## [1.28.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.2...v1.28.3) (2026-04-22)
 
 
