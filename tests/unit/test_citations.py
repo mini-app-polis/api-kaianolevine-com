@@ -234,7 +234,8 @@ async def test_enrich_chunk_citation(db_session) -> None:
     assert c.type == "chunk"
     assert c.transcript_id == str(chunk.transcript_id)
     assert c.title == "Anchor step"
-    assert c.source_url == f"{SITE_URL}/notes/transcripts/{chunk.transcript_id}#chunk-0"
+    # Option (b): chunk citations link to the linked note's page.
+    assert c.source_url == f"{SITE_URL}/notes/{note.id}"
 
 
 async def test_enrich_drops_unknown_note_id(db_session) -> None:
@@ -297,6 +298,53 @@ async def test_enrich_drops_malformed_chunk_id(db_session) -> None:
     )
     assert enriched == []
     assert dropped == ["not-a-chunk-id"]
+
+
+async def test_enrich_chunk_without_linked_note_has_null_source_url(
+    db_session,
+) -> None:
+    """Transcripts with no linked note can't resolve to a public page in v1."""
+    from kaianolevine_api.models import WcsTranscript, WcsTranscriptChunk
+
+    transcript = WcsTranscript(
+        owner_id="dev-owner",
+        raw_text="orphan transcript",
+        source_type="plaud",
+        source_filename="orphan.txt",
+        drive_file_id="d-orphan",
+    )
+    db_session.add(transcript)
+    await db_session.commit()
+    await db_session.refresh(transcript)
+
+    chunk = WcsTranscriptChunk(
+        chunk_id=f"{transcript.id}:0",
+        embedding_model="text-embedding-3-small",
+        chunking_version=1,
+        transcript_id=transcript.id,
+        owner_id="dev-owner",
+        chunk_index=0,
+        start_offset=0,
+        end_offset=10,
+        text="orphan",
+        embedding=[0.0] * 1536,
+        content_sha="x",
+    )
+    db_session.add(chunk)
+    await db_session.commit()
+
+    enriched, dropped = await enrich_citations(
+        session=db_session,
+        entries=[{"marker": 1, "type": "chunk", "id": chunk.chunk_id}],
+        viewer_id="dev-owner",
+        owner_id="dev-owner",
+        site_url=SITE_URL,
+    )
+    assert dropped == []
+    assert len(enriched) == 1
+    assert enriched[0].source_url is None
+    # Title falls back to source_filename when no linked note exists.
+    assert enriched[0].title == "orphan.txt"
 
 
 async def test_enrich_mixed_entries_some_drop_some_keep(db_session) -> None:

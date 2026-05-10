@@ -46,9 +46,10 @@ class CitationParseError:
 class EnrichedCitation(BaseModel):
     """Final citation shape rendered into the API response.
 
-    `transcript_id` is populated only for type=chunk citations. JSON
-    serialization should use `exclude_none=True` so notes don't carry a null
-    transcript_id field.
+    `transcript_id` is populated only for type=chunk citations. `source_url`
+    is None for chunk citations whose transcript has zero or multiple linked
+    notes (no clean URL to point at in v1). JSON serialization uses
+    `exclude_none=True` so absent optional fields don't appear in the response.
     """
 
     marker: int
@@ -57,7 +58,7 @@ class EnrichedCitation(BaseModel):
     transcript_id: str | None = None
     title: str | None = None
     session_date: dt.date | None = None
-    source_url: str
+    source_url: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -163,7 +164,12 @@ async def enrich_citations(
             if resolved is None:
                 dropped.append(ent_id)
                 continue
-            transcript_id, chunk_index, title, session_date = resolved
+            transcript_id, _chunk_index, title, session_date, linked_note_id = resolved
+            source_url = (
+                _note_url(site_url, linked_note_id)
+                if linked_note_id is not None
+                else None
+            )
             enriched.append(
                 EnrichedCitation(
                     marker=marker,
@@ -172,7 +178,7 @@ async def enrich_citations(
                     transcript_id=str(transcript_id),
                     title=title,
                     session_date=session_date,
-                    source_url=_chunk_url(site_url, transcript_id, chunk_index),
+                    source_url=source_url,
                 )
             )
 
@@ -196,7 +202,14 @@ async def _resolve_note(
 
 async def _resolve_chunk(
     session: AsyncSession, chunk_id: str, owner_id: str
-) -> tuple[uuid.UUID, int, str, dt.date | None] | None:
+) -> tuple[uuid.UUID, int, str, dt.date | None, uuid.UUID | None] | None:
+    """Resolve a chunk citation against the DB.
+
+    Returns (transcript_id, chunk_index, display_title, session_date,
+    linked_note_id_or_None). linked_note_id is non-None only when the
+    transcript has exactly one linked note — this is the chunk's source_url
+    target under option (b).
+    """
     transcript_id_str, _, idx_str = chunk_id.partition(":")
     if not transcript_id_str or not idx_str:
         return None
@@ -218,18 +231,19 @@ async def _resolve_chunk(
         select(WcsNote).where(WcsNote.transcript_id == transcript_uuid)
     )
     notes = list(note_q.scalars().all())
-    if len(notes) == 1 and notes[0].title:
-        title = notes[0].title
-        session_date = notes[0].session_date
+    if len(notes) == 1:
+        single_note = notes[0]
+        title = single_note.title or (
+            transcript.source_filename if transcript is not None else chunk_id
+        )
+        session_date = single_note.session_date
+        linked_note_id: uuid.UUID | None = single_note.id
     else:
         title = transcript.source_filename if transcript is not None else chunk_id
         session_date = None
-    return transcript_uuid, chunk_index, title, session_date
+        linked_note_id = None
+    return transcript_uuid, chunk_index, title, session_date, linked_note_id
 
 
 def _note_url(site_url: str, note_id: uuid.UUID) -> str:
     return f"{site_url.rstrip('/')}/notes/{note_id}"
-
-
-def _chunk_url(site_url: str, transcript_id: uuid.UUID, chunk_index: int) -> str:
-    return f"{site_url.rstrip('/')}/notes/transcripts/{transcript_id}#chunk-{chunk_index}"

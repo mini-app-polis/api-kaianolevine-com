@@ -65,10 +65,6 @@ def _note_url(site_url: str, note_id: uuid.UUID) -> str:
     return f"{site_url.rstrip('/')}/notes/{note_id}"
 
 
-def _chunk_url(site_url: str, transcript_id: uuid.UUID, chunk_index: int) -> str:
-    return f"{site_url.rstrip('/')}/notes/transcripts/{transcript_id}#chunk-{chunk_index}"
-
-
 async def search_notes(
     *,
     session: AsyncSession,
@@ -254,11 +250,14 @@ async def get_transcript_window(
     selected = [c for c in chunks if lo <= c.chunk_index <= hi]
 
     note = await fetch_linked_note_for_transcript(session, transcript_id)
-    if note is not None and note.title:
-        transcript_title = note.title
+    if note is not None:
+        transcript_title = note.title or transcript.source_filename
+        session_date = note.session_date
+        source_url: str | None = _note_url(site_url, note.id)
     else:
         transcript_title = transcript.source_filename
-    session_date = note.session_date if note is not None else None
+        session_date = None
+        source_url = None
 
     return TranscriptWindow(
         transcript_id=str(transcript_id),
@@ -272,5 +271,5 @@ async def get_transcript_window(
             )
             for c in selected
         ],
-        source_url=_chunk_url(site_url, transcript_id, target_idx),
+        source_url=source_url,
     )
