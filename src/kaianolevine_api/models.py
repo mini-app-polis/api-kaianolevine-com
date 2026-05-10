@@ -336,13 +336,17 @@ class WcsNote(Base):
     # Use postgresql.ARRAY (not the generic sqlalchemy.ARRAY) so that
     # PG-specific operators like `.overlap()` / `&&` are available on the
     # column in queries (see retrieval/wcs/queries.py).
+    # Element type must be Text — the DB column is text[], and Postgres
+    # rejects `text[] && varchar[]` ("operator does not exist") even though
+    # scalar text/varchar are interchangeable. PgARRAY(String) would bind
+    # parameters as VARCHAR[] and break overlap/contains operators.
     instructors: Mapped[list[str]] = mapped_column(
-        PgARRAY(String).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text).with_variant(JSON(), "sqlite"),
         nullable=False,
         default=list,
     )
     students: Mapped[list[str]] = mapped_column(
-        PgARRAY(String).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text).with_variant(JSON(), "sqlite"),
         nullable=False,
         default=list,
     )
