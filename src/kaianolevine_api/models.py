@@ -25,11 +25,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     """Base SQLAlchemy declarative class for all ORM models."""
+
     pass
 
 
 class Set(Base):
     """TODO: describe this class."""
+
     __tablename__ = "sets"
 
     __table_args__ = (
@@ -59,6 +61,7 @@ class Set(Base):
 
 class Track(Base):
     """Track play entry belonging to a specific DJ set."""
+
     __tablename__ = "tracks"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -104,6 +107,7 @@ class Track(Base):
 
 class TrackCatalog(Base):
     """Canonical track catalog entry aggregated across play history."""
+
     __tablename__ = "track_catalog"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -159,6 +163,7 @@ class TrackCatalog(Base):
 
 class PipelineEvaluation(Base):
     """Evaluation finding emitted by pipeline and conformance checks."""
+
     __tablename__ = "pipeline_evaluations"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -193,6 +198,7 @@ class PipelineEvaluation(Base):
 
 class FeatureFlag(Base):
     """Feature flag row controlling runtime behavior by name."""
+
     __tablename__ = "feature_flags"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -217,6 +223,7 @@ class FeatureFlag(Base):
 
 class SpotifyPlaylist(Base):
     """Snapshot of a Spotify playlist ingested from the cog."""
+
     __tablename__ = "spotify_playlists"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -247,6 +254,7 @@ class SpotifyPlaylist(Base):
 
 class LivePlay(Base):
     """Persisted live-play event ingested from listening history."""
+
     __tablename__ = "live_plays"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -527,9 +535,7 @@ class WcsQaEvalRun(Base):
 
     __tablename__ = "wcs_qa_eval_runs"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True
-    )
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     question_id: Mapped[str] = mapped_column(String, primary_key=True)
     git_sha: Mapped[str] = mapped_column(String, nullable=False)
     agent_answer: Mapped[str] = mapped_column(Text, nullable=False)

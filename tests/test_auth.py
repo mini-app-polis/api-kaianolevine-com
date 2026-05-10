@@ -13,6 +13,7 @@ from kaianolevine_api.auth import get_current_owner, verify_clerk_jwt
 
 class _SettingsShim:
     """Minimal settings object for unit-testing auth helpers."""
+
     CLERK_JWKS_URL = "https://example.clerk.accounts.dev/.well-known/jwks.json"
     CLERK_ISSUER = "https://example.clerk.accounts.dev"
 
@@ -79,6 +80,8 @@ async def test_verify_clerk_jwt_returns_none_without_config(
 @pytest.mark.asyncio
 async def test_flags_list_accessible(client, monkeypatch: pytest.MonkeyPatch) -> None:
     """Integration: flags endpoint still accessible after auth cleanup."""
-    monkeypatch.setattr(auth_mod, "verify_clerk_jwt", AsyncMock(return_value="dev-owner"))
+    monkeypatch.setattr(
+        auth_mod, "verify_clerk_jwt", AsyncMock(return_value="dev-owner")
+    )
     r = await client.get("/v1/flags", headers={"Authorization": "Bearer test-token"})
     assert r.status_code == 200

@@ -95,5 +95,3 @@ async def test_flags_patch_unknown_name_returns_404(client, async_engine) -> Non
     )
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "not_found"
-
-

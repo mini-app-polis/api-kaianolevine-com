@@ -98,10 +98,18 @@ def test_full_render_snapshot() -> None:
                 {"note": "prelim went well", "context": "Open J&J"},
             ],
             "quotes": [
-                {"quote": "wait for it", "speaker": "Kyle", "context": "during anchor drill"},
+                {
+                    "quote": "wait for it",
+                    "speaker": "Kyle",
+                    "context": "during anchor drill",
+                },
             ],
             "references": [
-                {"name": "Robert Royston anchor video", "type": "video", "context": "see 4:30 mark"},
+                {
+                    "name": "Robert Royston anchor video",
+                    "type": "video",
+                    "context": "see 4:30 mark",
+                },
             ],
             "off_topic_notes": ["this should not appear"],
             "suggested_new_sections": ["this also should not"],
@@ -131,7 +139,7 @@ def test_full_render_snapshot() -> None:
         "- drill anchor at home: build muscle memory\n\n"
         "Competition notes:\n"
         "- prelim went well (Open J&J)\n\n"
-        'Quotes:\n'
+        "Quotes:\n"
         '- "wait for it" — Kyle (during anchor drill)\n\n'
         "References:\n"
         "- Robert Royston anchor video (video): see 4:30 mark"

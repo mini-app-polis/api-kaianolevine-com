@@ -55,6 +55,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentResult:
+    """Result of one ``run_agent`` invocation.
+
+    ``answer`` has the citation sentinel block stripped; ``citations`` is
+    the enriched (DB-validated, visibility-filtered) list ready for the
+    API response. ``dropped_citation_ids`` records IDs the model emitted
+    that were rejected during enrichment (not in DB, not visible to
+    viewer, malformed UUID). ``budget_exhausted`` and
+    ``citation_parse_failed`` flag degraded paths so the response and
+    eval logging can distinguish them from clean runs.
+    ``tool_trace_id``, ``tool_calls_made``, and ``cumulative_tokens``
+    are observability fields exposed for logging and eval pipelines.
+    """
+
     answer: str
     citations: list[EnrichedCitation]
     dropped_citation_ids: list[str]
@@ -285,9 +298,7 @@ def _usage_total(response: Any) -> int:
 
 
 def _join_text(response: Any) -> str:
-    return "".join(
-        _block_text(b) for b in response.content if _block_type(b) == "text"
-    )
+    return "".join(_block_text(b) for b in response.content if _block_type(b) == "text")
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

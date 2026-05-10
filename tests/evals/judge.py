@@ -48,7 +48,9 @@ async def judge_answer(
         messages=[{"role": "user", "content": user_message}],
     )
     text = "".join(
-        getattr(b, "text", "") for b in response.content if getattr(b, "type", None) == "text"
+        getattr(b, "text", "")
+        for b in response.content
+        if getattr(b, "type", None) == "text"
     )
 
     score: int | None = None

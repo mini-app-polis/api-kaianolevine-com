@@ -34,7 +34,16 @@ FLATTENER_VERSION = 1
 CHUNKING_VERSION = 1
 SITE_URL = "https://wcs.example.com"
 
-KEYWORDS = ["anchor", "frame", "axis", "drill", "competition", "sarah", "kyle", "kaiano"]
+KEYWORDS = [
+    "anchor",
+    "frame",
+    "axis",
+    "drill",
+    "competition",
+    "sarah",
+    "kyle",
+    "kaiano",
+]
 
 
 class KeywordEmbedder:

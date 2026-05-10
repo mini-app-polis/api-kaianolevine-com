@@ -22,6 +22,13 @@ class OpenAIEmbedder:
         self.model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Return one embedding vector per input text, in input order.
+
+        Texts are sent to the OpenAI Embeddings API in batches of
+        ``BATCH_SIZE`` to stay under per-request input limits and
+        amortize round-trip cost. Returns an empty list when called with
+        no inputs (no API call is made).
+        """
         if not texts:
             return []
         out: list[list[float]] = []

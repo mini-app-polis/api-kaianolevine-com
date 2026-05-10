@@ -25,6 +25,15 @@ ENCODING_NAME = "cl100k_base"
 
 @dataclass(frozen=True)
 class Chunk:
+    """One token-window slice of a transcript.
+
+    ``chunk_index`` is the zero-based position in the chunk sequence;
+    ``start_offset`` / ``end_offset`` are character offsets back into the
+    original transcript text (used by ``get_transcript_window`` to
+    reassemble adjacent chunks without re-tokenizing). ``text`` is the
+    decoded chunk content, without any title prefix.
+    """
+
     chunk_index: int
     start_offset: int
     end_offset: int

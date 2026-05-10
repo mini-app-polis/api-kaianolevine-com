@@ -52,7 +52,11 @@ def flatten_note(
         f"{session_date.isoformat() if session_date else ''}"
     )
 
-    summary = (notes.get("summary") or "").strip() if isinstance(notes.get("summary"), str) else ""
+    summary = (
+        (notes.get("summary") or "").strip()
+        if isinstance(notes.get("summary"), str)
+        else ""
+    )
     if summary:
         parts.append(summary)
 
@@ -61,10 +65,22 @@ def flatten_note(
         ("Vocabulary:", notes.get("vocabulary_terms"), _format_vocabulary),
         ("Drills:", notes.get("drills"), _format_drill),
         ("Common mistakes:", notes.get("common_mistakes"), _format_common_mistake),
-        ("Patterns and sequences:", notes.get("patterns_and_sequences"), _format_pattern),
-        ("Student observations:", notes.get("student_observations"), _format_student_observation),
+        (
+            "Patterns and sequences:",
+            notes.get("patterns_and_sequences"),
+            _format_pattern,
+        ),
+        (
+            "Student observations:",
+            notes.get("student_observations"),
+            _format_student_observation,
+        ),
         ("Action items:", notes.get("action_items"), _format_action_item),
-        ("Competition notes:", notes.get("competition_notes"), _format_competition_note),
+        (
+            "Competition notes:",
+            notes.get("competition_notes"),
+            _format_competition_note,
+        ),
         ("Quotes:", notes.get("quotes"), _format_quote),
         ("References:", notes.get("references"), _format_reference),
     ]

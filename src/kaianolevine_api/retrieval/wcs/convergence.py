@@ -19,7 +19,7 @@ import hashlib
 import uuid
 from typing import Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,18 +34,80 @@ from .flatten import flatten_note
 
 
 class Embedder(Protocol):
-    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+    """Async vector-embedder protocol used by the convergence flow.
+
+    Implementations take a list of texts and return one embedding vector
+    per text in the same order. ``OpenAIEmbedder`` in ``embed.py`` is the
+    production implementation; tests pass in a stub that returns
+    deterministic vectors.
+    """
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Return one embedding vector per input text, in input order."""
+        ...
 
 
 class RefreshSummary(BaseModel):
-    notes_total: int
-    notes_embedded: int
-    notes_skipped: int
-    transcripts_total: int
-    transcripts_embedded: int
-    transcripts_skipped: int
-    chunks_embedded: int
-    duration_ms: int
+    """Counts and timing returned by ``refresh_embeddings``.
+
+    All counters are scoped to the current ``(embedding_model,
+    flattener_version, chunking_version)`` configuration. ``embedded``
+    counts how many source rows had their embeddings recomputed;
+    ``skipped`` counts rows whose stored content_sha already matched.
+    """
+
+    notes_total: int = Field(
+        ...,
+        description=(
+            "Total number of WCS notes considered for refresh under the "
+            "current ``(embedding_model, flattener_version)`` config."
+        ),
+    )
+    notes_embedded: int = Field(
+        ...,
+        description="Notes whose embeddings were recomputed during this run.",
+    )
+    notes_skipped: int = Field(
+        ...,
+        description=(
+            "Notes left untouched because their stored content_sha already "
+            "matched the freshly computed flattened text."
+        ),
+    )
+    transcripts_total: int = Field(
+        ...,
+        description=(
+            "Total number of WCS transcripts considered for refresh under "
+            "the current ``(embedding_model, chunking_version)`` config."
+        ),
+    )
+    transcripts_embedded: int = Field(
+        ...,
+        description=(
+            "Transcripts that were re-chunked and re-embedded during this run."
+        ),
+    )
+    transcripts_skipped: int = Field(
+        ...,
+        description=(
+            "Transcripts left untouched because at least one chunk already "
+            "carried the matching content_sha."
+        ),
+    )
+    chunks_embedded: int = Field(
+        ...,
+        description=(
+            "Total number of transcript chunks newly embedded across all "
+            "refreshed transcripts."
+        ),
+    )
+    duration_ms: int = Field(
+        ...,
+        description=(
+            "Wall-clock time, in milliseconds, that the refresh took end to "
+            "end (notes + transcripts)."
+        ),
+    )
 
 
 async def refresh_embeddings(
@@ -56,6 +118,15 @@ async def refresh_embeddings(
     flattener_version: int,
     chunking_version: int,
 ) -> RefreshSummary:
+    """Embed every note and transcript chunk pending under the given config.
+
+    Treats the embedding tables as a content-addressed cache keyed on
+    ``(embedding_model, flattener_version, chunking_version)`` plus the
+    source row's flattened content. Rows whose stored ``content_sha``
+    already matches are skipped; rows whose hash differs (or are missing)
+    are re-embedded. Idempotent — re-running on unchanged content is a
+    no-op. Returns a ``RefreshSummary`` with counts and timing.
+    """
     started = dt.datetime.now(dt.UTC)
     notes_stats = await _converge_notes(
         session=session,
@@ -176,9 +247,7 @@ async def _converge_transcripts(
         shas[t.id] = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
 
     existing_q = await session.execute(
-        select(
-            WcsTranscriptChunk.transcript_id, WcsTranscriptChunk.content_sha
-        )
+        select(WcsTranscriptChunk.transcript_id, WcsTranscriptChunk.content_sha)
         .where(
             WcsTranscriptChunk.embedding_model == embedding_model,
             WcsTranscriptChunk.chunking_version == chunking_version,
@@ -189,7 +258,9 @@ async def _converge_transcripts(
     for row in existing_q.all():
         existing_per_transcript[row[0]] = row[1]
 
-    pending = [t for t in transcripts if existing_per_transcript.get(t.id) != shas[t.id]]
+    pending = [
+        t for t in transcripts if existing_per_transcript.get(t.id) != shas[t.id]
+    ]
     if not pending:
         return {
             "total": len(transcripts),

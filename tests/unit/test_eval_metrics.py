@@ -51,6 +51,7 @@ def test_precision_zero_when_cited_overlaps_nothing() -> None:
 
 def pytest_approx(value: float, tol: float = 1e-9):
     """Local approx helper to avoid pytest.approx import noise in this file."""
+
     class _Approx:
         def __eq__(self, other: float) -> bool:
             return abs(other - value) <= tol

@@ -13,6 +13,13 @@ from ...config import Settings
 
 @dataclass(frozen=True)
 class AgentConfig:
+    """Frozen agent-loop configuration.
+
+    Captures the subset of ``Settings`` the WCS Q&A loop reads. Frozen so
+    it can be safely shared across the request lifecycle and asserted on
+    in tests without worrying about mutation.
+    """
+
     model: str
     max_tool_calls: int
     max_input_tokens: int
@@ -24,6 +31,12 @@ class AgentConfig:
 
 
 def from_settings(settings: Settings) -> AgentConfig:
+    """Build an ``AgentConfig`` from the global ``Settings`` object.
+
+    Centralizes the mapping from environment-driven settings to the
+    typed agent config so the loop's signature stays small and tests can
+    construct deterministic configs without the full Settings stack.
+    """
     return AgentConfig(
         model=settings.WCS_QA_AGENT_MODEL,
         max_tool_calls=settings.WCS_QA_MAX_TOOL_CALLS,

@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,12 +33,28 @@ VALID_TYPES = {"note", "chunk"}
 
 @dataclass
 class ParsedCitations:
+    """Successfully parsed citation block.
+
+    ``raw_entries`` is the raw list of ``{marker, type, id}`` dicts as
+    decoded from the sentinel-delimited JSON block; enrichment happens
+    in a later pass. ``text_without_block`` is the model's answer with
+    the entire sentinel block removed (the inline ``[N]`` markers stay
+    in place).
+    """
+
     raw_entries: list[dict]
     text_without_block: str
 
 
 @dataclass
 class CitationParseError:
+    """Failure reason when the citation sentinel block cannot be parsed.
+
+    ``code`` is a small enum used by the agent loop to decide whether to
+    retry once with a corrective message; ``message`` is a human-readable
+    explanation logged for debugging.
+    """
+
     code: Literal["missing_block", "invalid_json", "invalid_entries"]
     message: str
 
@@ -52,13 +68,56 @@ class EnrichedCitation(BaseModel):
     `exclude_none=True` so absent optional fields don't appear in the response.
     """
 
-    marker: int
-    type: Literal["note", "chunk"]
-    id: str
-    transcript_id: str | None = None
-    title: str | None = None
-    session_date: dt.date | None = None
-    source_url: str | None = None
+    marker: int = Field(
+        ...,
+        description=(
+            "Inline citation marker (1-based) that ties this entry back to a "
+            "``[N]`` reference in the answer text."
+        ),
+    )
+    type: Literal["note", "chunk"] = Field(
+        ...,
+        description=(
+            "Citation kind. ``note`` points at a structured WCS lesson note; "
+            "``chunk`` points at a transcript chunk."
+        ),
+    )
+    id: str = Field(
+        ...,
+        description=(
+            "Stable identifier of the cited resource. UUID for notes; "
+            "``<transcript_uuid>:<chunk_index>`` for chunks."
+        ),
+    )
+    transcript_id: str | None = Field(
+        None,
+        description=(
+            "UUID of the transcript a chunk citation belongs to. Always None "
+            "for ``type=note`` citations."
+        ),
+    )
+    title: str | None = Field(
+        None,
+        description=(
+            "Display title for the cited resource — the linked note's title "
+            "when one exists, otherwise the transcript's source filename."
+        ),
+    )
+    session_date: dt.date | None = Field(
+        None,
+        description=(
+            "Session date of the underlying lesson, if known. Useful for the "
+            "client to render a date alongside the citation."
+        ),
+    )
+    source_url: str | None = Field(
+        None,
+        description=(
+            "Public URL where the cited resource can be read. None for chunk "
+            "citations whose transcript has zero or multiple linked notes "
+            "(no clean v1 target)."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 

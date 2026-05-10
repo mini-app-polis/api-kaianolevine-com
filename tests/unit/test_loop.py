@@ -156,7 +156,10 @@ async def _seed_one_note(db_session: AsyncSession) -> WcsNote:
         visibility="private",
         model="claude-sonnet-4-6",
         provider="anthropic",
-        notes_json={"summary": "Worked on anchor step timing.", "key_concepts": ["anchor"]},
+        notes_json={
+            "summary": "Worked on anchor step timing.",
+            "key_concepts": ["anchor"],
+        },
         instructors=["Kyle"],
         students=["Sarah"],
         organization="",
@@ -256,7 +259,10 @@ async def test_tool_call_then_end_turn(db_session, embedder) -> None:
     second_call = client.calls[1]
     user_msgs = [m for m in second_call["messages"] if m["role"] == "user"]
     assert any(
-        any(b.get("type") == "tool_result" for b in (m["content"] if isinstance(m["content"], list) else []))
+        any(
+            b.get("type") == "tool_result"
+            for b in (m["content"] if isinstance(m["content"], list) else [])
+        )
         for m in user_msgs
     )
 
@@ -307,9 +313,7 @@ async def test_tool_error_serialized_and_loop_continues(db_session, embedder) ->
         for m in user_msgs
         if isinstance(m["content"], list)
         for b in m["content"]
-        if isinstance(b, dict)
-        and b.get("type") == "tool_result"
-        and b.get("is_error")
+        if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("is_error")
     ]
     assert len(error_results) == 1
 
@@ -378,7 +382,8 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
     # Exhaustion message present in final call's messages.
     user_msgs = [m for m in final_call["messages"] if m["role"] == "user"]
     assert any(
-        m["content"] == "Budget exhausted. Return your best answer with the citations block now. No further tools are available."
+        m["content"]
+        == "Budget exhausted. Return your best answer with the citations block now. No further tools are available."
         for m in user_msgs
         if isinstance(m["content"], str)
     )
@@ -473,7 +478,9 @@ async def test_corrective_retry_on_missing_block(db_session, embedder) -> None:
     )
 
 
-async def test_corrective_retry_fails_returns_empty_citations(db_session, embedder) -> None:
+async def test_corrective_retry_fails_returns_empty_citations(
+    db_session, embedder
+) -> None:
     """Both first response and corrective retry missing the block."""
     client = StubAnthropic(
         [
@@ -509,10 +516,10 @@ async def test_invalid_citation_id_dropped(db_session, embedder) -> None:
     bogus = str(_uuid.uuid4())
     answer = (
         f"Real answer [1] and ghost reference [2].\n\n"
-        f'[[CITATIONS_BEGIN]]\n['
+        f"[[CITATIONS_BEGIN]]\n["
         f'{{"marker": 1, "type": "note", "id": "{note.id}"}},\n'
         f'{{"marker": 2, "type": "note", "id": "{bogus}"}}'
-        f']\n[[CITATIONS_END]]'
+        f"]\n[[CITATIONS_END]]"
     )
     client = StubAnthropic(
         [

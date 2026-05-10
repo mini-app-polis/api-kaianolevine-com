@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
+
     DATABASE_URL: str
     ENVIRONMENT: str = "development"
     API_VERSION: str = "1.0"

@@ -102,9 +102,7 @@ async def eval_client() -> AsyncIterator[httpx.AsyncClient]:
 
 _SKIP_REASONS: list[str] = []
 if not (os.environ.get("OPENAI_API_KEY") and os.environ.get("ANTHROPIC_API_KEY")):
-    _SKIP_REASONS.append(
-        "eval harness requires OPENAI_API_KEY and ANTHROPIC_API_KEY"
-    )
+    _SKIP_REASONS.append("eval harness requires OPENAI_API_KEY and ANTHROPIC_API_KEY")
 if not _QUESTIONS:
     _SKIP_REASONS.append("no questions in tests/evals/questions.yaml")
 

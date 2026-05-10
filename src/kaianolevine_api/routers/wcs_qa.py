@@ -48,21 +48,69 @@ def get_anthropic_client(
 ) -> AsyncAnthropic:
     """Build the Anthropic client for the request lifecycle."""
     if not settings.ANTHROPIC_API_KEY:
-        raise api_error(
-            503, "agent_unavailable", "ANTHROPIC_API_KEY is not configured"
-        )
+        raise api_error(503, "agent_unavailable", "ANTHROPIC_API_KEY is not configured")
     return AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 
 class AskRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=5000)
+    """Request body for ``POST /v1/wcs/ask``.
+
+    Single-turn Q&A — every request is a fresh agent run; there is no
+    conversation history field in v1.
+    """
+
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=5000,
+        description=(
+            "The user's natural-language question for the WCS Q&A agent. "
+            "Required, 1–5000 characters."
+        ),
+    )
 
 
 class AskResponse(BaseModel):
-    answer: str
-    citations: list[EnrichedCitation]
-    budget_exhausted: bool
-    tool_trace_id: str
+    """Response body for ``POST /v1/wcs/ask``.
+
+    ``answer`` is the model's text reply with the internal citation
+    sentinel block stripped — inline ``[N]`` markers remain so the
+    client can pair them with entries in ``citations``.
+    """
+
+    answer: str = Field(
+        ...,
+        description=(
+            "The agent's natural-language answer, with the internal citation "
+            "sentinel block removed. Inline ``[N]`` markers remain so they "
+            "can be paired with entries in ``citations``."
+        ),
+    )
+    citations: list[EnrichedCitation] = Field(
+        ...,
+        description=(
+            "Enriched citation list, one entry per ``[N]`` marker the model "
+            "emitted that survived DB validation and visibility filtering. "
+            "May be empty if the model returned no citations or both parse "
+            "attempts failed."
+        ),
+    )
+    budget_exhausted: bool = Field(
+        ...,
+        description=(
+            "True if the agent loop was cut short by hitting the token cap "
+            "or tool-call cap. The answer was produced by a final no-tools "
+            "turn driven by an exhaustion message."
+        ),
+    )
+    tool_trace_id: str = Field(
+        ...,
+        description=(
+            "Hex-encoded UUID identifying this agent run in logs and the "
+            "WCS Q&A eval pipeline. Surfacing it in the response lets users "
+            "reference specific runs when reporting issues."
+        ),
+    )
 
 
 @router.post(
@@ -104,9 +152,7 @@ async def refresh_wcs_embeddings(
         summary.chunks_embedded,
         summary.duration_ms,
     )
-    return success_envelope(
-        summary, count=1, total=1, version=settings.API_VERSION
-    )
+    return success_envelope(summary, count=1, total=1, version=settings.API_VERSION)
 
 
 @router.post(

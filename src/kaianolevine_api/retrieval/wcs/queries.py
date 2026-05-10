@@ -48,9 +48,7 @@ async def _build_visibility_clause(session: AsyncSession, viewer_id: str):
     if profile is not None and profile.is_admin:
         return true()
 
-    grant_subq = select(WcsNoteGrant.note_id).where(
-        WcsNoteGrant.user_id == viewer_id
-    )
+    grant_subq = select(WcsNoteGrant.note_id).where(WcsNoteGrant.user_id == viewer_id)
     return or_(
         WcsNote.is_default_visible.is_(True),
         WcsNote.id.in_(grant_subq),
@@ -226,9 +224,13 @@ async def search_transcripts_db(
     return scored[:k]
 
 
-async def fetch_note(
-    session: AsyncSession, note_id: uuid.UUID
-) -> WcsNote | None:
+async def fetch_note(session: AsyncSession, note_id: uuid.UUID) -> WcsNote | None:
+    """Return a single ``WcsNote`` by primary key, or None if not found.
+
+    No visibility check is applied here — callers (the agent's ``get_note``
+    tool, citation enrichment) are responsible for enforcing the
+    default-visible / admin / explicit-grant rules.
+    """
     result = await session.execute(select(WcsNote).where(WcsNote.id == note_id))
     return result.scalars().first()
 
@@ -240,6 +242,12 @@ async def fetch_transcript_chunks(
     embedding_model: str,
     chunking_version: int,
 ) -> list[WcsTranscriptChunk]:
+    """Return all chunks of a transcript at the given embedding/chunking config.
+
+    Filtered to the requested ``(embedding_model, chunking_version)`` pair
+    and ordered by ``chunk_index`` ascending so callers can assemble
+    contiguous reading windows without re-sorting.
+    """
     result = await session.execute(
         select(WcsTranscriptChunk)
         .where(
@@ -255,6 +263,12 @@ async def fetch_transcript_chunks(
 async def fetch_transcript(
     session: AsyncSession, transcript_id: uuid.UUID
 ) -> WcsTranscript | None:
+    """Return a single ``WcsTranscript`` by primary key, or None if not found.
+
+    Owner-scoping is the caller's responsibility — transcripts have no
+    grant model in v1, so the agent's transcript tools restrict by
+    ``owner_id`` at the query layer above this helper.
+    """
     result = await session.execute(
         select(WcsTranscript).where(WcsTranscript.id == transcript_id)
     )

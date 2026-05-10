@@ -80,9 +80,9 @@ def test_missing_keys_returns_error() -> None:
 
 def test_unknown_type_returns_error() -> None:
     text_in = (
-        '[[CITATIONS_BEGIN]]\n'
+        "[[CITATIONS_BEGIN]]\n"
         '[{"marker": 1, "type": "video", "id": "abc"}]\n'
-        '[[CITATIONS_END]]'
+        "[[CITATIONS_END]]"
     )
     err = parse_citations_block(text_in)
     assert isinstance(err, CitationParseError)
@@ -91,9 +91,9 @@ def test_unknown_type_returns_error() -> None:
 
 def test_marker_must_be_int() -> None:
     text_in = (
-        '[[CITATIONS_BEGIN]]\n'
+        "[[CITATIONS_BEGIN]]\n"
         '[{"marker": "1", "type": "note", "id": "abc"}]\n'
-        '[[CITATIONS_END]]'
+        "[[CITATIONS_END]]"
     )
     err = parse_citations_block(text_in)
     assert isinstance(err, CitationParseError)
@@ -101,9 +101,9 @@ def test_marker_must_be_int() -> None:
 
 def test_id_must_be_nonempty() -> None:
     text_in = (
-        '[[CITATIONS_BEGIN]]\n'
+        "[[CITATIONS_BEGIN]]\n"
         '[{"marker": 1, "type": "note", "id": ""}]\n'
-        '[[CITATIONS_END]]'
+        "[[CITATIONS_END]]"
     )
     err = parse_citations_block(text_in)
     assert isinstance(err, CitationParseError)

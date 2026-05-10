@@ -40,7 +40,9 @@ class StubEmbedder:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(list(texts))
         # Deterministic, distinct, 1536-dim vectors keyed off the input length.
-        return [[float((len(t) + i) % 1000) / 1000.0] * 1536 for i, t in enumerate(texts)]
+        return [
+            [float((len(t) + i) % 1000) / 1000.0] * 1536 for i, t in enumerate(texts)
+        ]
 
 
 @pytest.fixture
@@ -96,7 +98,9 @@ async def test_refresh_requires_admin(client, async_engine) -> None:
     """Non-admin caller gets 403."""
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE wcs_user_profiles SET is_admin = 0 WHERE user_id = 'dev-owner'")
+            text(
+                "UPDATE wcs_user_profiles SET is_admin = 0 WHERE user_id = 'dev-owner'"
+            )
         )
     resp = await client.post("/v1/wcs/embeddings/refresh")
     assert resp.status_code == 403
@@ -144,8 +148,12 @@ async def test_refresh_embeds_notes_and_transcripts(
     assert s["chunks_embedded"] >= 1
 
     async with async_engine.begin() as conn:
-        ne = (await conn.execute(text("SELECT count(*) FROM wcs_note_embeddings"))).scalar()
-        tc = (await conn.execute(text("SELECT count(*) FROM wcs_transcript_chunks"))).scalar()
+        ne = (
+            await conn.execute(text("SELECT count(*) FROM wcs_note_embeddings"))
+        ).scalar()
+        tc = (
+            await conn.execute(text("SELECT count(*) FROM wcs_transcript_chunks"))
+        ).scalar()
     assert ne == 1
     assert tc == s["chunks_embedded"]
 
@@ -196,7 +204,9 @@ async def test_refresh_re_embeds_after_transcript_edit(
 
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE wcs_transcripts SET raw_text = 'totally different text now' WHERE id = :id"),
+            text(
+                "UPDATE wcs_transcripts SET raw_text = 'totally different text now' WHERE id = :id"
+            ),
             {"id": _sqlite_uuid(t["id"])},
         )
 
@@ -207,9 +217,7 @@ async def test_refresh_re_embeds_after_transcript_edit(
     assert s["notes_embedded"] == 0
 
 
-async def test_refresh_uses_source_filename_when_no_note(
-    client, stub_embedder
-) -> None:
+async def test_refresh_uses_source_filename_when_no_note(client, stub_embedder) -> None:
     """Transcript without a linked note falls back to source_filename for title."""
     await _create_transcript(client, source_filename="naked-transcript.txt")
     await client.post("/v1/wcs/embeddings/refresh")
@@ -230,8 +238,7 @@ async def test_refresh_handles_two_notes_falls_back_to_filename(
     await _create_note(client, t["id"], title="Title B")
     await client.post("/v1/wcs/embeddings/refresh")
     assert any(
-        any("ambiguous.txt" in inp for inp in batch)
-        for batch in stub_embedder.calls
+        any("ambiguous.txt" in inp for inp in batch) for batch in stub_embedder.calls
     )
 
 
@@ -344,7 +351,10 @@ async def test_ask_503_when_openai_key_missing(client) -> None:
         [
             _StubResponse(
                 content=[
-                    {"type": "text", "text": "[[CITATIONS_BEGIN]]\n[]\n[[CITATIONS_END]]"}
+                    {
+                        "type": "text",
+                        "text": "[[CITATIONS_BEGIN]]\n[]\n[[CITATIONS_END]]",
+                    }
                 ],
                 stop_reason="end_turn",
                 usage=_StubUsage(10, 10),
