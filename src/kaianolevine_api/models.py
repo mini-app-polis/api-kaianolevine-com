@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     JSON,
@@ -427,3 +428,114 @@ class WcsNoteGrant(Base):
         back_populates="grants", lazy="selectin"
     )
     note: Mapped[WcsNote] = relationship(back_populates="grants", lazy="selectin")
+
+
+# ── WCS Q&A retrieval ─────────────────────────────────────────────────────────
+
+
+class WcsNoteEmbedding(Base):
+    """Vector embedding of a note's flattened text representation.
+
+    Composite PK (note_id, embedding_model, flattener_version) lets multiple
+    embedding-model or flattener-version rows coexist for the same note during
+    migrations. The convergence flow upserts on this key; content_sha drives
+    invalidation when the source note's flattened text changes.
+    """
+
+    __tablename__ = "wcs_note_embeddings"
+
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    embedding_model: Mapped[str] = mapped_column(String, primary_key=True)
+    flattener_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(1536).with_variant(JSON(), "sqlite"),
+        nullable=False,
+    )
+    content_sha: Mapped[str] = mapped_column(String, nullable=False)
+    embedded_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsTranscriptChunk(Base):
+    """One chunk of a transcript with its embedding.
+
+    chunk_id is the public composite identifier "<transcript_uuid>:<chunk_index>"
+    used in citations and frontend deep links. Composite PK with embedding_model
+    and chunking_version supports multi-config coexistence; the UNIQUE on
+    (transcript_id, chunk_index, chunking_version, embedding_model) is a
+    belt-and-suspenders integrity check since chunk_id encodes the first two.
+    """
+
+    __tablename__ = "wcs_transcript_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String, primary_key=True)
+    embedding_model: Mapped[str] = mapped_column(String, primary_key=True)
+    chunking_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    transcript_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_transcripts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(1536).with_variant(JSON(), "sqlite"),
+        nullable=False,
+    )
+    content_sha: Mapped[str] = mapped_column(String, nullable=False)
+    embedded_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "transcript_id",
+            "chunk_index",
+            "chunking_version",
+            "embedding_model",
+            name="uq_wcs_transcript_chunks_pos_config",
+        ),
+    )
+
+
+class WcsQaEvalRun(Base):
+    """Append-only row from the eval harness for one (run, question) pair.
+
+    cited_source_ids and tool_trace are JSONB on Postgres. manual_grade and
+    manual_grade_notes are reserved for the future admin UI; the harness
+    leaves them NULL.
+    """
+
+    __tablename__ = "wcs_qa_eval_runs"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )
+    question_id: Mapped[str] = mapped_column(String, primary_key=True)
+    git_sha: Mapped[str] = mapped_column(String, nullable=False)
+    agent_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    cited_source_ids: Mapped[dict] = mapped_column(JSON, nullable=False)
+    tool_trace: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_recall: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_precision: Mapped[float | None] = mapped_column(Float, nullable=True)
+    judge_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    judge_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    judge_model: Mapped[str] = mapped_column(String, nullable=False)
+    judge_prompt_sha: Mapped[str] = mapped_column(String, nullable=False)
+    manual_grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manual_grade_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ran_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

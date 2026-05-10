@@ -1,0 +1,47 @@
+# Eval question set for the WCS Q&A agent at wcs.kaianolevine.com/notes/ask.
+# Loaded by tests/evals/harness.py; results written to wcs_qa_eval_runs.
+#
+# Field reference:
+#   id                Stable identifier. FK into wcs_qa_eval_runs.question_id.
+#                     Format: q### (zero-padded). Never reuse a deleted id.
+#   question          Natural-language question as a user would type it.
+#   ideal_answer      Substantive minimum a correct response should contain.
+#                     The Opus judge compares the agent's answer against this.
+#   ideal_source_ids  - notes:  list of note UUIDs from wcs_notes
+#                     - chunks: list of "<transcript_uuid>:<chunk_index>" composite IDs
+#                     Used for source_recall / source_precision.
+#   difficulty        easy   = single source, direct lookup
+#                     medium = 2-3 sources, light synthesis
+#                     hard   = many sources, comparison, temporal reasoning
+#   category          factual | synthesis | comparative | temporal
+#   notes             Free-form. Why this question is in the set.
+#
+# Authoring notes:
+# - Roughly 1/3 easy, 1/3 medium, 1/3 hard. Mix categories within each band.
+# - Include "no answer in corpus" questions: empty ideal_source_ids,
+#   ideal_answer like "There is no information about X in the available
+#   notes or transcripts." Tests hallucination resistance.
+# - Vary date specificity (explicit, rough range, none) to exercise filters.
+# - Use real UUIDs once Step 3 has populated the corpus. Don't fabricate.
+
+- id: q001
+  question: What did Kaiano teach Sarah about anchor step timing on March 8?
+  ideal_answer: |
+    The anchor step lands on counts 5-and-6, with weight settling fully on
+    count 6 before any redirect. The "and" is a passing weight transfer, not
+    a step. Prematurely committing weight on the "and" is a common mistake
+    and breaks the connection.
+  ideal_source_ids:
+    notes:
+      - "REPLACE_WITH_REAL_NOTE_UUID"
+    chunks:
+      - "REPLACE_WITH_REAL_TRANSCRIPT_UUID:4"
+      - "REPLACE_WITH_REAL_TRANSCRIPT_UUID:5"
+  difficulty: easy
+  category: factual
+  notes: |
+    Single-instructor, single-lesson, single-topic with explicit date.
+    Tests basic retrieval path: search_notes with date filter, get_note for
+    the match, search_transcripts for the same date, get_transcript_window.
+    If this fails, retrieval is broken — not the reasoning. Once corpus is
+    embedded, replace placeholder UUIDs with real values from the DB.

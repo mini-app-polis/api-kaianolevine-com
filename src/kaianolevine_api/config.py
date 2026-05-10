@@ -40,6 +40,19 @@ class Settings(BaseSettings):
     GOOGLE_PRIVATE_KEY: str | None = None  # PEM with literal \n — see validator
     RESUME_FILE_ID: str | None = None
 
+    # WCS Q&A retrieval / agent
+    OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
+    WCS_QA_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    WCS_QA_FLATTENER_VERSION: int = 1
+    WCS_QA_CHUNKING_VERSION: int = 1
+    WCS_QA_AGENT_MODEL: str = "claude-sonnet-4-6"
+    WCS_QA_JUDGE_MODEL: str = "claude-opus-4-7"
+    WCS_QA_MAX_TOOL_CALLS: int = 10
+    WCS_QA_MAX_INPUT_TOKENS: int = 60000
+    WCS_QA_MAX_OUTPUT_TOKENS: int = 4096
+    WCS_SITE_URL: str = "https://wcs.kaianolevine.com"
+
     @field_validator("GOOGLE_PRIVATE_KEY", mode="before")
     @classmethod
     def normalize_google_private_key_newlines(cls, v: str | None) -> str | None:
