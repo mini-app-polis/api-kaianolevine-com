@@ -1,3 +1,10 @@
+# [1.30.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.29.0...v1.30.0) (2026-05-10)
+
+
+### Features
+
+* chunk citations link to underlying note instead of transcript reader ([42e8514](https://github.com/mini-app-polis/api-kaianolevine-com/commit/42e8514c07f88755520e4fcffe5461430f91b1af)), closes [#chunk-N](https://github.com/mini-app-polis/api-kaianolevine-com/issues/chunk-N)
+
 # [1.29.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.28.3...v1.29.0) (2026-05-10)
 
 
