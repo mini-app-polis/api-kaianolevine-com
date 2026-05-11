@@ -992,7 +992,7 @@ wheels = [
 
 [[package]]
 name = "kaianolevine-api"
-version = "1.33.1"
+version = "1.33.2"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

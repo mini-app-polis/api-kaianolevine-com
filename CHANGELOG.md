@@ -1,3 +1,10 @@
+## [1.33.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.1...v1.33.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* remove caching ([fe96a87](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fe96a8706396f83e5a1d36d79fa7e0599db731e8))
+
 ## [1.33.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.0...v1.33.1) (2026-05-11)
 
 
