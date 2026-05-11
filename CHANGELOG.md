@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.32.0...v1.33.0) (2026-05-11)
+
+
+### Features
+
+* adding antropic cahcing ([e96def9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e96def9b6d9309b0031bf7136862f1c0d11e7318))
+
 # [1.32.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.31.0...v1.32.0) (2026-05-11)
 
 
