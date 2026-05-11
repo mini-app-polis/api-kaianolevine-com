@@ -41,7 +41,6 @@ def _config(
         flattener_version=1,
         chunking_version=1,
         site_url="https://wcs.example.com",
-        depth="normal",
     )
 
 

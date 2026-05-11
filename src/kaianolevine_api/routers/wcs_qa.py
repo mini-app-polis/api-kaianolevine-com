@@ -10,8 +10,6 @@ against the corpus and returns the citation-enriched answer.
 
 from __future__ import annotations
 
-from typing import Literal
-
 from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends
 from mini_app_polis import logger as logger_mod
@@ -22,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents.wcs_qa.citations import EnrichedCitation
 from ..agents.wcs_qa.config import from_settings as agent_config_from_settings
 from ..agents.wcs_qa.loop import run_agent
+from ..agents.wcs_qa.pricing import compute_cost_usd
 from ..auth import get_current_owner, require_wcs_admin
 from ..config import Settings, get_settings
 from ..database import get_db_session
@@ -70,15 +69,43 @@ class AskRequest(BaseModel):
             "Required, 1–5000 characters."
         ),
     )
-    depth: Literal["normal", "deep"] = Field(
-        default="normal",
+
+
+class AskUsage(BaseModel):
+    """Token + estimated cost summary for one ``/wcs/ask`` run.
+
+    ``cost_usd`` is computed server-side from per-model pricing (see
+    ``agents/wcs_qa/pricing.py``). It is ``None`` when the model isn't in
+    the pricing table — the client should render "cost unknown" in that
+    case rather than $0. The number is an *estimate* and excludes the
+    OpenAI embedding cost on the question (negligible).
+    """
+
+    model: str = Field(
+        ...,
+        description="Anthropic model id the agent used (e.g. ``claude-sonnet-4-6``).",
+    )
+    input_tokens: int = Field(
+        ...,
+        ge=0,
         description=(
-            "Per-request budget preset. ``normal`` (default) uses the "
-            "configured ``WCS_QA_MAX_*_DEFAULT`` budgets and is appropriate "
-            "for typical single-topic questions. ``deep`` raises the budgets "
-            "for synthesis-heavy questions ('top N across all lessons', "
-            "'summarize everything about X'); still clamped server-side to "
-            "the ``WCS_QA_MAX_*_LIMIT`` ceilings."
+            "Cumulative input tokens across every LLM call made by the "
+            "agent loop for this run."
+        ),
+    )
+    output_tokens: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Cumulative output tokens across every LLM call made by the "
+            "agent loop for this run."
+        ),
+    )
+    cost_usd: float | None = Field(
+        None,
+        description=(
+            "Estimated dollar cost of the LLM calls for this run, or "
+            "``None`` if the model isn't in the server's pricing table."
         ),
     )
 
@@ -122,6 +149,13 @@ class AskResponse(BaseModel):
             "Hex-encoded UUID identifying this agent run in logs and the "
             "WCS Q&A eval pipeline. Surfacing it in the response lets users "
             "reference specific runs when reporting issues."
+        ),
+    )
+    usage: AskUsage = Field(
+        ...,
+        description=(
+            "Token usage and estimated cost for this run. Useful for "
+            "displaying cost per ask in the UI and for ad-hoc audits."
         ),
     )
 
@@ -189,13 +223,12 @@ async def ask(
     anthropic_client: AsyncAnthropic = Depends(get_anthropic_client),
 ) -> Envelope[AskResponse]:
     """Run the WCS Q&A agent loop and return its citation-enriched answer."""
-    config = agent_config_from_settings(settings, depth=body.depth)
+    config = agent_config_from_settings(settings)
     log.info(
-        "%s WCS Q&A ask owner=%s model=%s depth=%s q_len=%d budgets=tools:%d/input:%d/output:%d",
+        "%s WCS Q&A ask owner=%s model=%s q_len=%d budgets=tools:%d/input:%d/output:%d",
         LOG_START,
         owner_id,
         config.model,
-        config.depth,
         len(body.question),
         config.max_tool_calls,
         config.max_input_tokens,
@@ -218,12 +251,20 @@ async def ask(
             owner_id,
         )
         raise
+    cost_usd = compute_cost_usd(
+        config.model,
+        result.cumulative_input_tokens,
+        result.cumulative_output_tokens,
+    )
     log.info(
-        "%s WCS Q&A ask trace=%s tokens=%d tool_calls=%d budget_exhausted=%s parse_failed=%s dropped=%d",
+        "%s WCS Q&A ask trace=%s tokens=%d (in=%d/out=%d) tool_calls=%d cost_usd=%s budget_exhausted=%s parse_failed=%s dropped=%d",
         LOG_SUCCESS,
         result.tool_trace_id,
         result.cumulative_tokens,
+        result.cumulative_input_tokens,
+        result.cumulative_output_tokens,
         result.tool_calls_made,
+        f"{cost_usd:.4f}" if cost_usd is not None else "unknown",
         result.budget_exhausted,
         result.citation_parse_failed,
         len(result.dropped_citation_ids),
@@ -234,6 +275,12 @@ async def ask(
             citations=result.citations,
             budget_exhausted=result.budget_exhausted,
             tool_trace_id=result.tool_trace_id,
+            usage=AskUsage(
+                model=config.model,
+                input_tokens=result.cumulative_input_tokens,
+                output_tokens=result.cumulative_output_tokens,
+                cost_usd=cost_usd,
+            ),
         ),
         count=1,
         total=1,

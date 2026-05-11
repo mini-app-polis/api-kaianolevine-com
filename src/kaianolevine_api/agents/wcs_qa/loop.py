@@ -76,6 +76,12 @@ class AgentResult:
     tool_trace_id: str
     tool_calls_made: int
     cumulative_tokens: int
+    # Per-direction breakdown of ``cumulative_tokens``. Tracked separately
+    # so the API can return a cost estimate (input and output are priced
+    # very differently). ``cumulative_tokens`` remains the sum for the
+    # budget check and existing log lines.
+    cumulative_input_tokens: int
+    cumulative_output_tokens: int
 
 
 # ── Tool definitions ──────────────────────────────────────────────────────────
@@ -286,15 +292,32 @@ def _block_to_dict(b: Any) -> dict:
     return {"type": t}
 
 
-def _usage_total(response: Any) -> int:
+def _usage_split(response: Any) -> tuple[int, int]:
+    """Return (input_tokens, output_tokens) from an LLM response's usage block.
+
+    Tolerates both dict-shaped and attribute-shaped usage objects (the
+    Anthropic SDK returns the latter; some test stubs use the former).
+    Missing fields default to 0 — the caller treats absence as "no usage
+    reported" rather than failing the run.
+    """
     usage = getattr(response, "usage", None)
     if usage is None:
-        return 0
+        return 0, 0
     if isinstance(usage, dict):
-        return (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0)
-    return (getattr(usage, "input_tokens", 0) or 0) + (
-        getattr(usage, "output_tokens", 0) or 0
+        return (
+            int(usage.get("input_tokens") or 0),
+            int(usage.get("output_tokens") or 0),
+        )
+    return (
+        int(getattr(usage, "input_tokens", 0) or 0),
+        int(getattr(usage, "output_tokens", 0) or 0),
     )
+
+
+def _usage_total(response: Any) -> int:
+    """Legacy combined-total helper. Kept for callers that don't need the split."""
+    inp, out = _usage_split(response)
+    return inp + out
 
 
 def _join_text(response: Any) -> str:
@@ -336,6 +359,8 @@ async def run_agent(
 
     messages: list[dict] = [{"role": "user", "content": question}]
     cumulative_tokens = 0
+    cumulative_input_tokens = 0
+    cumulative_output_tokens = 0
     tool_calls_made = 0
     budget_exhausted = False
     final_text = ""
@@ -366,7 +391,10 @@ async def run_agent(
             messages=messages,
             tools=tool_definitions,
         )
-        cumulative_tokens += _usage_total(response)
+        in_tok, out_tok = _usage_split(response)
+        cumulative_input_tokens += in_tok
+        cumulative_output_tokens += out_tok
+        cumulative_tokens += in_tok + out_tok
         messages.append(
             {
                 "role": "assistant",
@@ -456,7 +484,10 @@ async def run_agent(
             messages=messages,
             tools=[],
         )
-        cumulative_tokens += _usage_total(response)
+        in_tok, out_tok = _usage_split(response)
+        cumulative_input_tokens += in_tok
+        cumulative_output_tokens += out_tok
+        cumulative_tokens += in_tok + out_tok
         messages.append(
             {
                 "role": "assistant",
@@ -479,7 +510,10 @@ async def run_agent(
             messages=messages,
             tools=[],
         )
-        cumulative_tokens += _usage_total(retry_response)
+        in_tok, out_tok = _usage_split(retry_response)
+        cumulative_input_tokens += in_tok
+        cumulative_output_tokens += out_tok
+        cumulative_tokens += in_tok + out_tok
         messages.append(
             {
                 "role": "assistant",
@@ -503,6 +537,8 @@ async def run_agent(
                 tool_trace_id=tool_trace_id,
                 tool_calls_made=tool_calls_made,
                 cumulative_tokens=cumulative_tokens,
+                cumulative_input_tokens=cumulative_input_tokens,
+                cumulative_output_tokens=cumulative_output_tokens,
             )
         parsed = retry_parsed
 
@@ -523,4 +559,6 @@ async def run_agent(
         tool_trace_id=tool_trace_id,
         tool_calls_made=tool_calls_made,
         cumulative_tokens=cumulative_tokens,
+        cumulative_input_tokens=cumulative_input_tokens,
+        cumulative_output_tokens=cumulative_output_tokens,
     )

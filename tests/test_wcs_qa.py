@@ -382,11 +382,23 @@ async def test_ask_happy_path_returns_envelope(
         "citations",
         "budget_exhausted",
         "tool_trace_id",
+        "usage",
     }
     assert data["citations"] == []
     assert data["budget_exhausted"] is False
     assert "[[CITATIONS_BEGIN]]" not in data["answer"]
     assert "tool_trace_id" in data and len(data["tool_trace_id"]) > 0
+    # Usage block: model + token split must be present. cost_usd is included
+    # whenever the model is in pricing.py (the default stub model is).
+    usage = data["usage"]
+    assert usage["model"]
+    assert isinstance(usage["input_tokens"], int) and usage["input_tokens"] >= 0
+    assert isinstance(usage["output_tokens"], int) and usage["output_tokens"] >= 0
+    # cost_usd may be omitted by exclude_none if unknown, but for the stub
+    # model it will be a small non-negative float.
+    if "cost_usd" in usage:
+        assert isinstance(usage["cost_usd"], float)
+        assert usage["cost_usd"] >= 0.0
 
 
 async def test_ask_returns_enriched_citations(client, stub_embedder) -> None:
@@ -431,11 +443,10 @@ async def test_ask_returns_enriched_citations(client, stub_embedder) -> None:
 async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> None:
     """Tool-call default of 1 + two consecutive tool_use responses → budget_exhausted=true.
 
-    Note: the budget is split into ``WCS_QA_MAX_TOOL_CALLS_DEFAULT`` (per-request
-    starting budget) and ``WCS_QA_MAX_TOOL_CALLS_LIMIT`` (hard ceiling). We set
-    the *default* to 1 here because the request omits ``depth`` (so it falls
-    through to the default preset). The default value of the LIMIT (30) is
-    already higher, so the clamp is a no-op.
+    Note: the budget is split into ``WCS_QA_MAX_TOOL_CALLS_DEFAULT`` (the
+    starting per-request budget) and ``WCS_QA_MAX_TOOL_CALLS_LIMIT`` (hard
+    ceiling). Setting the *default* to 1 here forces immediate exhaustion;
+    the LIMIT (30) is already higher so the clamp is a no-op.
     """
     import os
 

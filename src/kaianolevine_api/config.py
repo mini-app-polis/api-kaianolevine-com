@@ -50,16 +50,19 @@ class Settings(BaseSettings):
     WCS_QA_AGENT_MODEL: str = "claude-sonnet-4-6"
     WCS_QA_JUDGE_MODEL: str = "claude-opus-4-7"
     # Per-request agent budgets. Two layers:
-    #   _DEFAULT — what every request gets when no `depth` override is sent.
-    #   _LIMIT   — hard ceiling clamped against any per-request override; a
-    #              request can never exceed this regardless of payload.
-    # Tune defaults for the cost-per-call you're comfortable paying on every
-    # ask; raise limits for the worst-case "deep synthesis" requests.
-    WCS_QA_MAX_TOOL_CALLS_DEFAULT: int = 12
+    #   _DEFAULT — what every request gets.
+    #   _LIMIT   — hard ceiling clamped against the default (and against any
+    #              future per-request override); a request can never exceed
+    #              this regardless of input.
+    # Defaults are sized for synthesis-heavy questions ("top N across all
+    # lessons") since the agent is admin-only today. If you ever open this
+    # to general users, drop the defaults and re-introduce a tiered override
+    # path (see git history before this change for the depth/preset scaffold).
+    WCS_QA_MAX_TOOL_CALLS_DEFAULT: int = 25
     WCS_QA_MAX_TOOL_CALLS_LIMIT: int = 30
-    WCS_QA_MAX_INPUT_TOKENS_DEFAULT: int = 80_000
+    WCS_QA_MAX_INPUT_TOKENS_DEFAULT: int = 160_000
     WCS_QA_MAX_INPUT_TOKENS_LIMIT: int = 200_000
-    WCS_QA_MAX_OUTPUT_TOKENS_DEFAULT: int = 6000
+    WCS_QA_MAX_OUTPUT_TOKENS_DEFAULT: int = 8000
     WCS_QA_MAX_OUTPUT_TOKENS_LIMIT: int = 8192
     WCS_SITE_URL: str = "https://wcs.kaianolevine.com"
 
