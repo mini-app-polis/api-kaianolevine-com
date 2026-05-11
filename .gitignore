@@ -25,3 +25,9 @@ scripts/output/
 
 # Committed data files that do not belong in the repo
 deejay_set_collection.json
+
+# Stray Astro/Node artifacts. This is a Python repo; these directories
+# should never exist here, but a misplaced `astro`/`npm` invocation will
+# create them silently — keep them out of git just in case.
+.astro/
+node_modules/
