@@ -1,3 +1,10 @@
+# [1.32.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.31.0...v1.32.0) (2026-05-11)
+
+
+### Features
+
+* providing estimated price information on prompts ([4f0670a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4f0670a42dc69a8a18b0c79f1e7e90c104adabbb))
+
 # [1.31.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.2...v1.31.0) (2026-05-11)
 
 
