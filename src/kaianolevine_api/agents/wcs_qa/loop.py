@@ -78,10 +78,17 @@ class AgentResult:
     cumulative_tokens: int
     # Per-direction breakdown of ``cumulative_tokens``. Tracked separately
     # so the API can return a cost estimate (input and output are priced
-    # very differently). ``cumulative_tokens`` remains the sum for the
-    # budget check and existing log lines.
+    # very differently). ``cumulative_tokens`` remains the sum across all
+    # four buckets for the budget check and existing log lines.
     cumulative_input_tokens: int
     cumulative_output_tokens: int
+    # Prompt-cache buckets. ``cache_creation`` is billed at ~1.25x normal
+    # input price; ``cache_read`` at ~0.10x. We track them separately so
+    # cost can be computed accurately and caching effectiveness audited
+    # (a high cache_read / low cache_creation ratio means the cache is
+    # warm and saving money).
+    cumulative_cache_creation_tokens: int
+    cumulative_cache_read_tokens: int
 
 
 # ── Tool definitions ──────────────────────────────────────────────────────────
@@ -292,32 +299,59 @@ def _block_to_dict(b: Any) -> dict:
     return {"type": t}
 
 
-def _usage_split(response: Any) -> tuple[int, int]:
-    """Return (input_tokens, output_tokens) from an LLM response's usage block.
+@dataclass(frozen=True)
+class _UsageBreakdown:
+    """Per-call token accounting from an Anthropic LLM response.
 
-    Tolerates both dict-shaped and attribute-shaped usage objects (the
-    Anthropic SDK returns the latter; some test stubs use the former).
-    Missing fields default to 0 — the caller treats absence as "no usage
-    reported" rather than failing the run.
+    ``cache_creation_input_tokens`` are tokens written into the prompt
+    cache on this call (billed at ~1.25x normal input). ``cache_read_input_tokens``
+    are tokens served from a prior cache write within the cache TTL
+    (billed at ~0.10x normal input). The four buckets together cover the
+    whole bill for one call.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+
+
+def _read_usage_int(usage: Any, key: str) -> int:
+    """Read a single int field from either dict-shaped or attribute-shaped usage."""
+    if isinstance(usage, dict):
+        return int(usage.get(key) or 0)
+    return int(getattr(usage, key, 0) or 0)
+
+
+def _usage_breakdown(response: Any) -> _UsageBreakdown:
+    """Return a ``_UsageBreakdown`` from an LLM response's ``usage`` block.
+
+    Tolerates dict-shaped and attribute-shaped usage objects (the Anthropic
+    SDK returns the latter; some test stubs use the former). Missing fields
+    default to 0 — the caller treats absence as "no usage reported" rather
+    than failing the run. Cache fields are 0 when the response did not use
+    prompt caching.
     """
     usage = getattr(response, "usage", None)
     if usage is None:
-        return 0, 0
-    if isinstance(usage, dict):
-        return (
-            int(usage.get("input_tokens") or 0),
-            int(usage.get("output_tokens") or 0),
-        )
-    return (
-        int(getattr(usage, "input_tokens", 0) or 0),
-        int(getattr(usage, "output_tokens", 0) or 0),
+        return _UsageBreakdown(0, 0, 0, 0)
+    return _UsageBreakdown(
+        input_tokens=_read_usage_int(usage, "input_tokens"),
+        output_tokens=_read_usage_int(usage, "output_tokens"),
+        cache_creation_input_tokens=_read_usage_int(usage, "cache_creation_input_tokens"),
+        cache_read_input_tokens=_read_usage_int(usage, "cache_read_input_tokens"),
     )
 
 
 def _usage_total(response: Any) -> int:
-    """Legacy combined-total helper. Kept for callers that don't need the split."""
-    inp, out = _usage_split(response)
-    return inp + out
+    """Legacy combined-total helper. Sum of every input bucket plus output."""
+    u = _usage_breakdown(response)
+    return (
+        u.input_tokens
+        + u.output_tokens
+        + u.cache_creation_input_tokens
+        + u.cache_read_input_tokens
+    )
 
 
 def _join_text(response: Any) -> str:
@@ -334,11 +368,30 @@ async def _call(
     messages: list[dict],
     tools: list[dict],
 ) -> Any:
+    """Invoke the model with Anthropic prompt caching on system + tools.
+
+    The cache breakpoint sits on the last tool, which tells Anthropic to
+    cache everything before it (system prompt + every tool schema) as a
+    single ephemeral prefix with a 5-minute TTL. Inside one agent run we
+    make many LLM calls with identical system+tools, so each call after
+    the first reads the cached prefix at ~10% of normal input price. Across
+    asks, the cache also persists for 5 minutes, so back-to-back questions
+    benefit too.
+
+    Cache creation is a one-time premium (~1.25x input price) we pay on
+    the first call; ``pricing.compute_cost_usd`` accounts for it.
+    """
+    cached_tools = list(tools)
+    if cached_tools:
+        cached_tools[-1] = {
+            **cached_tools[-1],
+            "cache_control": {"type": "ephemeral"},
+        }
     return await client.messages.create(
         model=config.model,
         max_tokens=config.max_output_tokens,
         system=SYSTEM_PROMPT,
-        tools=tools,
+        tools=cached_tools,
         messages=messages,
     )
 
@@ -361,6 +414,8 @@ async def run_agent(
     cumulative_tokens = 0
     cumulative_input_tokens = 0
     cumulative_output_tokens = 0
+    cumulative_cache_creation_tokens = 0
+    cumulative_cache_read_tokens = 0
     tool_calls_made = 0
     budget_exhausted = False
     final_text = ""
@@ -391,10 +446,17 @@ async def run_agent(
             messages=messages,
             tools=tool_definitions,
         )
-        in_tok, out_tok = _usage_split(response)
-        cumulative_input_tokens += in_tok
-        cumulative_output_tokens += out_tok
-        cumulative_tokens += in_tok + out_tok
+        u = _usage_breakdown(response)
+        cumulative_input_tokens += u.input_tokens
+        cumulative_output_tokens += u.output_tokens
+        cumulative_cache_creation_tokens += u.cache_creation_input_tokens
+        cumulative_cache_read_tokens += u.cache_read_input_tokens
+        cumulative_tokens += (
+            u.input_tokens
+            + u.output_tokens
+            + u.cache_creation_input_tokens
+            + u.cache_read_input_tokens
+        )
         messages.append(
             {
                 "role": "assistant",
@@ -484,10 +546,17 @@ async def run_agent(
             messages=messages,
             tools=[],
         )
-        in_tok, out_tok = _usage_split(response)
-        cumulative_input_tokens += in_tok
-        cumulative_output_tokens += out_tok
-        cumulative_tokens += in_tok + out_tok
+        u = _usage_breakdown(response)
+        cumulative_input_tokens += u.input_tokens
+        cumulative_output_tokens += u.output_tokens
+        cumulative_cache_creation_tokens += u.cache_creation_input_tokens
+        cumulative_cache_read_tokens += u.cache_read_input_tokens
+        cumulative_tokens += (
+            u.input_tokens
+            + u.output_tokens
+            + u.cache_creation_input_tokens
+            + u.cache_read_input_tokens
+        )
         messages.append(
             {
                 "role": "assistant",
@@ -510,10 +579,17 @@ async def run_agent(
             messages=messages,
             tools=[],
         )
-        in_tok, out_tok = _usage_split(retry_response)
-        cumulative_input_tokens += in_tok
-        cumulative_output_tokens += out_tok
-        cumulative_tokens += in_tok + out_tok
+        u = _usage_breakdown(retry_response)
+        cumulative_input_tokens += u.input_tokens
+        cumulative_output_tokens += u.output_tokens
+        cumulative_cache_creation_tokens += u.cache_creation_input_tokens
+        cumulative_cache_read_tokens += u.cache_read_input_tokens
+        cumulative_tokens += (
+            u.input_tokens
+            + u.output_tokens
+            + u.cache_creation_input_tokens
+            + u.cache_read_input_tokens
+        )
         messages.append(
             {
                 "role": "assistant",
@@ -539,6 +615,8 @@ async def run_agent(
                 cumulative_tokens=cumulative_tokens,
                 cumulative_input_tokens=cumulative_input_tokens,
                 cumulative_output_tokens=cumulative_output_tokens,
+                cumulative_cache_creation_tokens=cumulative_cache_creation_tokens,
+                cumulative_cache_read_tokens=cumulative_cache_read_tokens,
             )
         parsed = retry_parsed
 
@@ -561,4 +639,6 @@ async def run_agent(
         cumulative_tokens=cumulative_tokens,
         cumulative_input_tokens=cumulative_input_tokens,
         cumulative_output_tokens=cumulative_output_tokens,
+        cumulative_cache_creation_tokens=cumulative_cache_creation_tokens,
+        cumulative_cache_read_tokens=cumulative_cache_read_tokens,
     )
