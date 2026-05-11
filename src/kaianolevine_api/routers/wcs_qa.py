@@ -89,9 +89,8 @@ class AskUsage(BaseModel):
         ...,
         ge=0,
         description=(
-            "Cumulative *fresh* input tokens across every LLM call made by "
-            "the agent loop for this run. Does not include tokens served "
-            "from prompt cache (see ``cache_read_tokens``)."
+            "Cumulative input tokens across every LLM call made by the "
+            "agent loop for this run."
         ),
     )
     output_tokens: int = Field(
@@ -102,32 +101,11 @@ class AskUsage(BaseModel):
             "agent loop for this run."
         ),
     )
-    cache_creation_tokens: int = Field(
-        0,
-        ge=0,
-        description=(
-            "Tokens written into the Anthropic prompt cache on this run "
-            "(billed at ~1.25x normal input price). Typically only the "
-            "first LLM call within a 5-minute cache window incurs creation."
-        ),
-    )
-    cache_read_tokens: int = Field(
-        0,
-        ge=0,
-        description=(
-            "Tokens served from the Anthropic prompt cache on this run "
-            "(billed at ~0.10x normal input price). High values relative "
-            "to ``input_tokens`` indicate a warm cache — the system prompt "
-            "and tool schemas are being reused across LLM calls."
-        ),
-    )
     cost_usd: float | None = Field(
         None,
         description=(
             "Estimated dollar cost of the LLM calls for this run, or "
-            "``None`` if the model isn't in the server's pricing table. "
-            "Reflects all four token buckets (input, output, cache write, "
-            "cache read) at their respective prices."
+            "``None`` if the model isn't in the server's pricing table."
         ),
     )
 
@@ -277,18 +255,14 @@ async def ask(
         config.model,
         result.cumulative_input_tokens,
         result.cumulative_output_tokens,
-        cache_creation_tokens=result.cumulative_cache_creation_tokens,
-        cache_read_tokens=result.cumulative_cache_read_tokens,
     )
     log.info(
-        "%s WCS Q&A ask trace=%s tokens=%d (in=%d/out=%d cache_w=%d cache_r=%d) tool_calls=%d cost_usd=%s budget_exhausted=%s parse_failed=%s dropped=%d",
+        "%s WCS Q&A ask trace=%s tokens=%d (in=%d/out=%d) tool_calls=%d cost_usd=%s budget_exhausted=%s parse_failed=%s dropped=%d",
         LOG_SUCCESS,
         result.tool_trace_id,
         result.cumulative_tokens,
         result.cumulative_input_tokens,
         result.cumulative_output_tokens,
-        result.cumulative_cache_creation_tokens,
-        result.cumulative_cache_read_tokens,
         result.tool_calls_made,
         f"{cost_usd:.4f}" if cost_usd is not None else "unknown",
         result.budget_exhausted,
@@ -305,8 +279,6 @@ async def ask(
                 model=config.model,
                 input_tokens=result.cumulative_input_tokens,
                 output_tokens=result.cumulative_output_tokens,
-                cache_creation_tokens=result.cumulative_cache_creation_tokens,
-                cache_read_tokens=result.cumulative_cache_read_tokens,
                 cost_usd=cost_usd,
             ),
         ),
