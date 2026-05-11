@@ -110,6 +110,36 @@ class EnrichedCitation(BaseModel):
             "client to render a date alongside the citation."
         ),
     )
+    # Lesson metadata mirrored from the underlying note (or, for chunks, the
+    # single linked note when there is exactly one). These let the client
+    # render citations using the same label process as the /notes page:
+    # date + session-type badge, primary label = students (for private
+    # lessons) or organization, with "[with instructors]" appended.
+    session_type: Literal["private_lesson", "group_class", "other"] | None = Field(
+        None,
+        description=(
+            "Session type from the underlying note. None for chunk citations "
+            "with no linked note."
+        ),
+    )
+    instructors: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Instructors on the underlying note. Empty list when no linked note."
+        ),
+    )
+    students: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Students on the underlying note. Empty list when no linked note."
+        ),
+    )
+    organization: str | None = Field(
+        None,
+        description=(
+            "Organization on the underlying note. None when no linked note."
+        ),
+    )
     source_url: str | None = Field(
         None,
         description=(
@@ -215,6 +245,10 @@ async def enrich_citations(
                     id=ent_id,
                     title=note.title,
                     session_date=note.session_date,
+                    session_type=note.session_type,
+                    instructors=list(note.instructors or []),
+                    students=list(note.students or []),
+                    organization=note.organization or None,
                     source_url=_note_url(site_url, note.id),
                 )
             )
@@ -223,10 +257,9 @@ async def enrich_citations(
             if resolved is None:
                 dropped.append(ent_id)
                 continue
-            transcript_id, _chunk_index, title, session_date, linked_note_id = resolved
             source_url = (
-                _note_url(site_url, linked_note_id)
-                if linked_note_id is not None
+                _note_url(site_url, resolved.linked_note_id)
+                if resolved.linked_note_id is not None
                 else None
             )
             enriched.append(
@@ -234,9 +267,13 @@ async def enrich_citations(
                     marker=marker,
                     type="chunk",
                     id=ent_id,
-                    transcript_id=str(transcript_id),
-                    title=title,
-                    session_date=session_date,
+                    transcript_id=str(resolved.transcript_id),
+                    title=resolved.title,
+                    session_date=resolved.session_date,
+                    session_type=resolved.session_type,
+                    instructors=resolved.instructors,
+                    students=resolved.students,
+                    organization=resolved.organization,
                     source_url=source_url,
                 )
             )
@@ -259,15 +296,36 @@ async def _resolve_note(
     return note
 
 
+@dataclass
+class _ChunkResolution:
+    """Result of resolving a chunk citation against the DB.
+
+    Lesson-metadata fields (``session_type``, ``instructors``, ``students``,
+    ``organization``) are populated only when the chunk's transcript has
+    exactly one linked note (and ``linked_note_id`` is set); they are empty
+    / None otherwise. Callers should treat those as "no linked lesson
+    context" and fall back to the transcript filename.
+    """
+
+    transcript_id: uuid.UUID
+    chunk_index: int
+    title: str
+    session_date: dt.date | None
+    linked_note_id: uuid.UUID | None
+    session_type: Literal["private_lesson", "group_class", "other"] | None
+    instructors: list[str]
+    students: list[str]
+    organization: str | None
+
+
 async def _resolve_chunk(
     session: AsyncSession, chunk_id: str, owner_id: str
-) -> tuple[uuid.UUID, int, str, dt.date | None, uuid.UUID | None] | None:
+) -> _ChunkResolution | None:
     """Resolve a chunk citation against the DB.
 
-    Returns (transcript_id, chunk_index, display_title, session_date,
-    linked_note_id_or_None). linked_note_id is non-None only when the
-    transcript has exactly one linked note — this is the chunk's source_url
-    target under option (b).
+    ``linked_note_id`` and the lesson-metadata fields are populated only when
+    the transcript has exactly one linked note — that's the chunk's
+    ``source_url`` target and the source for lesson display labels.
     """
     transcript_id_str, _, idx_str = chunk_id.partition(":")
     if not transcript_id_str or not idx_str:
@@ -295,13 +353,30 @@ async def _resolve_chunk(
         title = single_note.title or (
             transcript.source_filename if transcript is not None else chunk_id
         )
-        session_date = single_note.session_date
-        linked_note_id: uuid.UUID | None = single_note.id
-    else:
-        title = transcript.source_filename if transcript is not None else chunk_id
-        session_date = None
-        linked_note_id = None
-    return transcript_uuid, chunk_index, title, session_date, linked_note_id
+        return _ChunkResolution(
+            transcript_id=transcript_uuid,
+            chunk_index=chunk_index,
+            title=title,
+            session_date=single_note.session_date,
+            linked_note_id=single_note.id,
+            session_type=single_note.session_type,
+            instructors=list(single_note.instructors or []),
+            students=list(single_note.students or []),
+            organization=single_note.organization or None,
+        )
+
+    title = transcript.source_filename if transcript is not None else chunk_id
+    return _ChunkResolution(
+        transcript_id=transcript_uuid,
+        chunk_index=chunk_index,
+        title=title,
+        session_date=None,
+        linked_note_id=None,
+        session_type=None,
+        instructors=[],
+        students=[],
+        organization=None,
+    )
 
 
 def _note_url(site_url: str, note_id: uuid.UUID) -> str:

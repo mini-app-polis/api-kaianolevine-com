@@ -429,7 +429,14 @@ async def test_ask_returns_enriched_citations(client, stub_embedder) -> None:
 
 
 async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> None:
-    """Tool-call cap of 1 + two consecutive tool_use responses → budget_exhausted=true."""
+    """Tool-call default of 1 + two consecutive tool_use responses → budget_exhausted=true.
+
+    Note: the budget is split into ``WCS_QA_MAX_TOOL_CALLS_DEFAULT`` (per-request
+    starting budget) and ``WCS_QA_MAX_TOOL_CALLS_LIMIT`` (hard ceiling). We set
+    the *default* to 1 here because the request omits ``depth`` (so it falls
+    through to the default preset). The default value of the LIMIT (30) is
+    already higher, so the clamp is a no-op.
+    """
     import os
 
     from kaianolevine_api.config import get_settings
@@ -468,8 +475,8 @@ async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> No
             ),
         ]
     )
-    old = os.environ.get("WCS_QA_MAX_TOOL_CALLS")
-    os.environ["WCS_QA_MAX_TOOL_CALLS"] = "1"
+    old = os.environ.get("WCS_QA_MAX_TOOL_CALLS_DEFAULT")
+    os.environ["WCS_QA_MAX_TOOL_CALLS_DEFAULT"] = "1"
     get_settings.cache_clear()
     try:
         resp = await client.post("/v1/wcs/ask", json={"question": "Q?"})
@@ -478,8 +485,8 @@ async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> No
         assert data["budget_exhausted"] is True
     finally:
         if old is None:
-            os.environ.pop("WCS_QA_MAX_TOOL_CALLS", None)
+            os.environ.pop("WCS_QA_MAX_TOOL_CALLS_DEFAULT", None)
         else:
-            os.environ["WCS_QA_MAX_TOOL_CALLS"] = old
+            os.environ["WCS_QA_MAX_TOOL_CALLS_DEFAULT"] = old
         get_settings.cache_clear()
         app.dependency_overrides.pop(get_anthropic_client, None)

@@ -49,9 +49,18 @@ class Settings(BaseSettings):
     WCS_QA_CHUNKING_VERSION: int = 1
     WCS_QA_AGENT_MODEL: str = "claude-sonnet-4-6"
     WCS_QA_JUDGE_MODEL: str = "claude-opus-4-7"
-    WCS_QA_MAX_TOOL_CALLS: int = 10
-    WCS_QA_MAX_INPUT_TOKENS: int = 60000
-    WCS_QA_MAX_OUTPUT_TOKENS: int = 4096
+    # Per-request agent budgets. Two layers:
+    #   _DEFAULT — what every request gets when no `depth` override is sent.
+    #   _LIMIT   — hard ceiling clamped against any per-request override; a
+    #              request can never exceed this regardless of payload.
+    # Tune defaults for the cost-per-call you're comfortable paying on every
+    # ask; raise limits for the worst-case "deep synthesis" requests.
+    WCS_QA_MAX_TOOL_CALLS_DEFAULT: int = 12
+    WCS_QA_MAX_TOOL_CALLS_LIMIT: int = 30
+    WCS_QA_MAX_INPUT_TOKENS_DEFAULT: int = 80_000
+    WCS_QA_MAX_INPUT_TOKENS_LIMIT: int = 200_000
+    WCS_QA_MAX_OUTPUT_TOKENS_DEFAULT: int = 6000
+    WCS_QA_MAX_OUTPUT_TOKENS_LIMIT: int = 8192
     WCS_SITE_URL: str = "https://wcs.kaianolevine.com"
 
     @field_validator("GOOGLE_PRIVATE_KEY", mode="before")

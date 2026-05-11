@@ -10,6 +10,8 @@ against the corpus and returns the citation-enriched answer.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends
 from mini_app_polis import logger as logger_mod
@@ -66,6 +68,17 @@ class AskRequest(BaseModel):
         description=(
             "The user's natural-language question for the WCS Q&A agent. "
             "Required, 1–5000 characters."
+        ),
+    )
+    depth: Literal["normal", "deep"] = Field(
+        default="normal",
+        description=(
+            "Per-request budget preset. ``normal`` (default) uses the "
+            "configured ``WCS_QA_MAX_*_DEFAULT`` budgets and is appropriate "
+            "for typical single-topic questions. ``deep`` raises the budgets "
+            "for synthesis-heavy questions ('top N across all lessons', "
+            "'summarize everything about X'); still clamped server-side to "
+            "the ``WCS_QA_MAX_*_LIMIT`` ceilings."
         ),
     )
 
@@ -176,13 +189,17 @@ async def ask(
     anthropic_client: AsyncAnthropic = Depends(get_anthropic_client),
 ) -> Envelope[AskResponse]:
     """Run the WCS Q&A agent loop and return its citation-enriched answer."""
-    config = agent_config_from_settings(settings)
+    config = agent_config_from_settings(settings, depth=body.depth)
     log.info(
-        "%s WCS Q&A ask owner=%s model=%s q_len=%d",
+        "%s WCS Q&A ask owner=%s model=%s depth=%s q_len=%d budgets=tools:%d/input:%d/output:%d",
         LOG_START,
         owner_id,
         config.model,
+        config.depth,
         len(body.question),
+        config.max_tool_calls,
+        config.max_input_tokens,
+        config.max_output_tokens,
     )
     try:
         result = await run_agent(
