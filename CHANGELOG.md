@@ -1,3 +1,10 @@
+## [1.33.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.0...v1.33.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* adding price visibility ([8d46886](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8d46886861d25c0da0d22d4bd37985ff938c2cdb))
+
 # [1.33.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.32.0...v1.33.0) (2026-05-11)
 
 
