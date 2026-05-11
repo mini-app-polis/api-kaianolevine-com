@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.2...v1.31.0) (2026-05-11)
+
+
+### Features
+
+* adding depth to the searches ([fe8b93f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fe8b93ffbfe94528d9e2f526f2ec4db2e187cdb8))
+
 ## [1.30.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.30.1...v1.30.2) (2026-05-10)
 
 
