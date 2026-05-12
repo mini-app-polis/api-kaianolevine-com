@@ -21,6 +21,20 @@ from ..schemas import (
 router = APIRouter()
 
 
+# Authoritative per-row timestamp expression.
+#
+# Background: migration 002_expand_evaluations.sql added `evaluated_at` as a
+# nullable column (TIMESTAMPTZ DEFAULT now()), even though the SQLAlchemy model
+# declares it as nullable=False. Pre-002 rows therefore exist in production
+# with evaluated_at = NULL, while still having a populated `created_at` (which
+# migration 001 created as NOT NULL DEFAULT now()).
+#
+# Rather than ship another migration, fall back to created_at whenever
+# evaluated_at is NULL so the API never surfaces a null timestamp and ordering
+# stays deterministic for legacy rows.
+_EVALUATED_AT = func.coalesce(DbEval.evaluated_at, DbEval.created_at)
+
+
 def _eligible_latest_evaluation_ids_subquery():
     """
     Rows that belong to the latest "run" per (repo, source).
@@ -33,7 +47,7 @@ def _eligible_latest_evaluation_ids_subquery():
         select(
             DbEval.repo,
             DbEval.source,
-            func.max(DbEval.evaluated_at).label("latest_at"),
+            func.max(_EVALUATED_AT).label("latest_at"),
         )
         .group_by(DbEval.repo, DbEval.source)
         .subquery()
@@ -49,7 +63,7 @@ def _eligible_latest_evaluation_ids_subquery():
             latest_ts,
             (DbEval.repo == latest_ts.c.repo)
             & (DbEval.source == latest_ts.c.source)
-            & (DbEval.evaluated_at == latest_ts.c.latest_at),
+            & (_EVALUATED_AT == latest_ts.c.latest_at),
         )
         .where(DbEval.run_id.isnot(None))
         .distinct()
@@ -73,7 +87,7 @@ def _eligible_latest_evaluation_ids_subquery():
             latest_ts,
             (DbEval.repo == latest_ts.c.repo)
             & (DbEval.source == latest_ts.c.source)
-            & (DbEval.evaluated_at == latest_ts.c.latest_at),
+            & (_EVALUATED_AT == latest_ts.c.latest_at),
         )
         .outerjoin(
             has_run_id_at_latest,
@@ -96,6 +110,7 @@ async def list_evaluations(
     repo: Annotated[str | None, Query()] = None,
     dimension: Annotated[str | None, Query()] = None,
     severity: Annotated[str | None, Query()] = None,
+    source: Annotated[str | None, Query()] = None,
     run_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -105,10 +120,15 @@ async def list_evaluations(
     settings = get_settings()
 
     eligible = _eligible_latest_evaluation_ids_subquery()
+    # Order by COALESCE(evaluated_at, created_at) DESC with id DESC as a
+    # deterministic tie-breaker. Without the id tie-breaker, rows sharing a
+    # timestamp came back in an unspecified order, which is what caused the
+    # homepage badge to surface a stale flow_inline finding instead of the
+    # most recent one.
     stmt = (
         select(DbEval)
         .where(DbEval.id.in_(eligible))
-        .order_by(DbEval.evaluated_at.desc())
+        .order_by(_EVALUATED_AT.desc(), DbEval.id.desc())
     )
     if repo:
         stmt = stmt.where(DbEval.repo == repo)
@@ -116,6 +136,8 @@ async def list_evaluations(
         stmt = stmt.where(DbEval.dimension == dimension)
     if severity:
         stmt = stmt.where(DbEval.severity == severity)
+    if source:
+        stmt = stmt.where(DbEval.source == source)
     if run_id is not None:
         stmt = stmt.where(DbEval.run_id == run_id)
 
@@ -126,6 +148,8 @@ async def list_evaluations(
         total_stmt = total_stmt.where(DbEval.dimension == dimension)
     if severity:
         total_stmt = total_stmt.where(DbEval.severity == severity)
+    if source:
+        total_stmt = total_stmt.where(DbEval.source == source)
     if run_id is not None:
         total_stmt = total_stmt.where(DbEval.run_id == run_id)
     total = (await session.execute(total_stmt)).scalar_one()
@@ -146,7 +170,7 @@ async def list_evaluations(
             standards_version=row.standards_version,
             source=row.source,
             flow_name=row.flow_name,
-            evaluated_at=row.evaluated_at,
+            evaluated_at=row.evaluated_at or row.created_at,
         )
         for row in rows
     ]
@@ -178,11 +202,11 @@ async def evaluations_summary(
             ),
             func.sum(case((DbEval.severity == "WARN", 1), else_=0)).label("warn_count"),
             func.sum(case((DbEval.severity == "INFO", 1), else_=0)).label("info_count"),
-            func.max(DbEval.evaluated_at).label("most_recent"),
+            func.max(_EVALUATED_AT).label("most_recent"),
         )
         .where(DbEval.id.in_(eligible))
         .group_by(DbEval.dimension)
-        .order_by(func.max(DbEval.evaluated_at).desc())
+        .order_by(func.max(_EVALUATED_AT).desc())
     )
     if run_id is not None:
         stmt = stmt.where(DbEval.run_id == run_id)

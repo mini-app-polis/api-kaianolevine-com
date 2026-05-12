@@ -335,6 +335,111 @@ async def test_list_evaluations_meta_total_reflects_filtered_total_not_page_coun
     assert be["data"][0]["severity"] == "ERROR"
 
 
+async def test_list_evaluations_orders_most_recent_first_with_non_null_timestamps(
+    client, async_engine
+) -> None:
+    """Regression: GET /v1/evaluations must order most-recent-first and surface a
+    non-null timestamp on every row.
+
+    Previously, the route ordered by evaluated_at DESC with no secondary tie-
+    breaker, so rows that shared a timestamp could come back in an unspecified
+    order; the homepage badge consumer saw a stale flow_inline row at index 0.
+    """
+    # Use distinct sources so the latest-run-per-(repo, source) filter doesn't
+    # collapse both rows down to one — we want both rows visible in the response
+    # so we can verify the ordering.
+    older = await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "ts-repo",
+            "dimension": "pipeline_consistency",
+            "severity": "WARN",
+            "run_id": "run-ts-older",
+            "finding": "Older finding.",
+            "source": "flow_inline",
+        },
+    )
+    assert older.status_code == 200
+    older_id = older.json()["data"]["id"]
+
+    newer = await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "ts-repo",
+            "dimension": "pipeline_consistency",
+            "severity": "ERROR",
+            "run_id": "run-ts-newer",
+            "finding": "Newer finding.",
+            "source": "conformance_deterministic",
+        },
+    )
+    assert newer.status_code == 200
+    newer_id = newer.json()["data"]["id"]
+
+    # Pin distinct timestamps so the ordering assertion is deterministic
+    # regardless of how fast the two inserts ran. Match on run_id, not id —
+    # SQLAlchemy's UUID column stores the id as a 32-char hex without dashes
+    # on SQLite, so a text("WHERE id = :id") with the dashed JSON UUID would
+    # silently match nothing.
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "UPDATE pipeline_evaluations SET evaluated_at = :t WHERE run_id = :rid"
+            ),
+            {"t": "2024-03-01 10:00:00", "rid": "run-ts-older"},
+        )
+        await conn.execute(
+            text(
+                "UPDATE pipeline_evaluations SET evaluated_at = :t WHERE run_id = :rid"
+            ),
+            {"t": "2024-03-02 10:00:00", "rid": "run-ts-newer"},
+        )
+
+    list_resp = await client.get(
+        "/v1/evaluations",
+        params={"repo": "ts-repo", "limit": 10, "offset": 0},
+    )
+    assert list_resp.status_code == 200
+    body = list_resp.json()
+
+    # Both rows are returned and ordered most-recent-first.
+    assert body["meta"]["count"] == 2
+    assert body["data"][0]["id"] == newer_id
+    assert body["data"][1]["id"] == older_id
+
+    # Every returned row carries a non-null timestamp.
+    for row in body["data"]:
+        assert (
+            row["evaluated_at"] is not None
+        ), f"evaluated_at must be non-null on every row, got {row!r}"
+
+
+async def test_list_evaluations_supports_source_filter(client) -> None:
+    """source query param filters rows to just that source."""
+    for src in ("flow_inline", "conformance_deterministic"):
+        r = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": "src-filter-repo",
+                "dimension": "pipeline_consistency",
+                "severity": "INFO",
+                "run_id": f"run-{src}",
+                "finding": f"Finding from {src}.",
+                "source": src,
+            },
+        )
+        assert r.status_code == 200
+
+    resp = await client.get(
+        "/v1/evaluations",
+        params={"repo": "src-filter-repo", "source": "flow_inline", "limit": 50},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meta"]["count"] == 1
+    assert body["data"][0]["source"] == "flow_inline"
+
+
 async def test_evaluations_summary_severity_breakdown_per_dimension(client) -> None:
     await client.post(
         "/v1/evaluations",
