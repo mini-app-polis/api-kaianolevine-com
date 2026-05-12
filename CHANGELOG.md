@@ -1,3 +1,10 @@
+## [1.33.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.2...v1.33.3) (2026-05-12)
+
+
+### Bug Fixes
+
+* **evaluations:** coalesce evaluated_at with created_at and order most-recent-first ([237d877](https://github.com/mini-app-polis/api-kaianolevine-com/commit/237d877ca61936b072b5bcaab0ff184e6b9cfa40))
+
 ## [1.33.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.1...v1.33.2) (2026-05-11)
 
 
