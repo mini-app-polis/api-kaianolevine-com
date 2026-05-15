@@ -1,3 +1,10 @@
+# [1.34.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.3...v1.34.0) (2026-05-15)
+
+
+### Features
+
+* adding not data editing ([4b4918e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4b4918e42bed02ba0b13c2de8eabdd5ba552e66f))
+
 ## [1.33.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.2...v1.33.3) (2026-05-12)
 
 
