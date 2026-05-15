@@ -136,9 +136,7 @@ class EnrichedCitation(BaseModel):
     )
     organization: str | None = Field(
         None,
-        description=(
-            "Organization on the underlying note. None when no linked note."
-        ),
+        description=("Organization on the underlying note. None when no linked note."),
     )
     source_url: str | None = Field(
         None,

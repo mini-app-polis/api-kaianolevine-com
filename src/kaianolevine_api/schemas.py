@@ -731,6 +731,37 @@ class WcsNoteDefaultVisiblePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class WcsNoteAdminPatch(BaseModel):
+    """PATCH /v1/wcs/admin/notes/{note_id} — admin partial-update of editable fields.
+
+    Every field is optional; only provided fields are applied. Unset fields are
+    left untouched so callers can patch a single value (e.g. just the title).
+    """
+
+    session_date: dt.date | None = Field(
+        default=None, description="Date of the lesson/class session."
+    )
+    session_type: WcsSessionType | None = Field(
+        default=None, description="Session type for this WCS note."
+    )
+    title: str | None = Field(default=None, description="Title of the note.")
+    organization: str | None = Field(
+        default=None, description="Organization associated with the session."
+    )
+    students: list[str] | None = Field(
+        default=None, description="Students who attended the session."
+    )
+    instructors: list[str] | None = Field(
+        default=None, description="Instructors who taught the session."
+    )
+    is_default_visible: bool | None = Field(
+        default=None,
+        description="Whether this note is visible to all signed-in users by default.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class WcsNotePatch(BaseModel):
     """PATCH /v1/wcs/notes/{id} — user-facing visibility toggle."""
 

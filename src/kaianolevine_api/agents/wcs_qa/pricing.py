@@ -37,9 +37,7 @@ MODEL_PRICES: dict[str, tuple[float, float]] = {
 }
 
 
-def compute_cost_usd(
-    model: str, input_tokens: int, output_tokens: int
-) -> float | None:
+def compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
     """Estimated dollar cost for a single agent run.
 
     Returns ``None`` for unrecognized models — the caller should surface

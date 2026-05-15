@@ -21,6 +21,7 @@ from ..models import WcsNoteGrant, WcsUserProfile
 from ..schemas import (
     Envelope,
     WcsMeUpsert,
+    WcsNoteAdminPatch,
     WcsNoteDefaultVisiblePatch,
     WcsNoteGrantCreate,
     WcsNoteGrantOut,
@@ -287,6 +288,51 @@ async def patch_wcs_note_default_visibility(
         raise api_error(404, "note_not_found", "Note not found")
 
     note.is_default_visible = body.is_default_visible
+    await session.commit()
+    await session.refresh(note)
+
+    return success_envelope(
+        _to_item(note),
+        count=1,
+        total=1,
+        version=settings.API_VERSION,
+    )
+
+
+# ── /wcs/admin/notes/{note_id} ────────────────────────────────────────────────
+
+
+@router.patch(
+    "/wcs/admin/notes/{note_id}",
+    response_model=Envelope[WcsNoteItem],
+    summary="Update WCS note metadata (admin)",
+    description=(
+        "Admin-only partial update of editable note fields: session_date, "
+        "session_type, title, organization, students, instructors, and "
+        "is_default_visible. Fields omitted from the request body are left "
+        "untouched. Returns the refreshed note."
+    ),
+)
+async def patch_wcs_note_admin(
+    note_id: uuid.UUID,
+    body: WcsNoteAdminPatch,
+    _admin_id: str = Depends(require_wcs_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsNoteItem]:
+    """Apply a partial admin update to a WCS note's editable fields."""
+    settings = get_settings()
+    result = await session.execute(select(DbNote).where(DbNote.id == note_id))
+    note = result.scalars().first()
+    if note is None:
+        raise api_error(404, "note_not_found", "Note not found")
+
+    # Apply only fields the caller actually supplied. `exclude_unset=True`
+    # distinguishes "omitted" from "explicitly null" so a partial patch
+    # leaves untouched fields alone.
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(note, field, value)
+
     await session.commit()
     await session.refresh(note)
 

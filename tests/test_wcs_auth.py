@@ -150,6 +150,80 @@ async def test_patch_default_visibility_admin(client) -> None:
     assert r.json()["data"]["is_default_visible"] is True
 
 
+# ── PATCH /v1/wcs/admin/notes/{note_id} ───────────────────────────────────────
+
+
+async def test_patch_admin_note_metadata(client) -> None:
+    """Admin can partial-update metadata, people, and visibility in one call."""
+    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+
+    tr = await _create_transcript(client)
+    note = await _create_note(client, tr["id"])
+
+    r = await client.patch(
+        f"/v1/wcs/admin/notes/{note['id']}",
+        json={
+            "title": "Updated title",
+            "organization": "SWINGesota",
+            "session_type": "group_class",
+            "session_date": "2024-04-12",
+            "students": ["Alice", "Bob"],
+            "instructors": ["Kaiano"],
+            "is_default_visible": True,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["title"] == "Updated title"
+    assert data["organization"] == "SWINGesota"
+    assert data["session_type"] == "group_class"
+    assert data["session_date"] == "2024-04-12"
+    assert data["students"] == ["Alice", "Bob"]
+    assert data["instructors"] == ["Kaiano"]
+    assert data["is_default_visible"] is True
+
+
+async def test_patch_admin_note_partial_leaves_other_fields_untouched(client) -> None:
+    """Omitted fields are not modified."""
+    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+
+    tr = await _create_transcript(client)
+    note = await _create_note(client, tr["id"])
+
+    # First, set a known state.
+    await client.patch(
+        f"/v1/wcs/admin/notes/{note['id']}",
+        json={"title": "Original", "organization": "Org A"},
+    )
+
+    # Now patch only the title; organization should remain "Org A".
+    r = await client.patch(
+        f"/v1/wcs/admin/notes/{note['id']}",
+        json={"title": "Only this changed"},
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["title"] == "Only this changed"
+    assert data["organization"] == "Org A"
+
+
+async def test_patch_admin_note_not_found_returns_404(client) -> None:
+    r = await client.patch(
+        "/v1/wcs/admin/notes/00000000-0000-0000-0000-000000000000",
+        json={"title": "ignored"},
+    )
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "note_not_found"
+
+
+async def test_patch_admin_note_rejects_non_admin(stranger_client) -> None:
+    r = await stranger_client.patch(
+        "/v1/wcs/admin/notes/00000000-0000-0000-0000-000000000000",
+        json={"title": "nope"},
+    )
+    assert r.status_code in (401, 403)
+
+
 # ── PATCH /v1/wcs/admin/users/{user_id} ───────────────────────────────────────
 
 
