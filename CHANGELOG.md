@@ -1,3 +1,11 @@
+## [1.34.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.2...v1.34.3) (2026-05-17)
+
+
+### Bug Fixes
+
+* addressing eval findings ([b8bc09f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b8bc09f1a66c5f44213282770cd855e0f40e5a0c))
+* addressing eval findings ([46d18a5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/46d18a52f90faaeb59f1e1e88184079d0d83de8a))
+
 ## [1.34.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.1...v1.34.2) (2026-05-17)
 
 
