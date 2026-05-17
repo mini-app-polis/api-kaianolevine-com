@@ -1,3 +1,10 @@
+## [1.34.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.0...v1.34.1) (2026-05-17)
+
+
+### Bug Fixes
+
+* removing admin block for notes/all endpoint ([8c87e2f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8c87e2f6a831530c27610b640ded906ed2f351d3))
+
 # [1.34.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.33.3...v1.34.0) (2026-05-15)
 
 
