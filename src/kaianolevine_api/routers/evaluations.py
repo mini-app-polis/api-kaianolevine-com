@@ -100,12 +100,6 @@ def _eligible_latest_evaluation_ids_subquery():
     return union(eligible_by_run, eligible_by_ts)
 
 
-@router.get(
-    "/evaluations",
-    response_model=Envelope[list[PipelineEvaluationItem]],
-    summary="List evaluation findings",
-    description="List pipeline evaluation findings with optional filtering.",
-)
 def _csv_filter(raw: str | None) -> list[str] | None:
     """Parse a comma-separated query value into a non-empty list of trims.
 
@@ -123,6 +117,12 @@ def _csv_filter(raw: str | None) -> list[str] | None:
     return parts or None
 
 
+@router.get(
+    "/evaluations",
+    response_model=Envelope[list[PipelineEvaluationItem]],
+    summary="List evaluation findings",
+    description="List pipeline evaluation findings with optional filtering.",
+)
 async def list_evaluations(
     repo: Annotated[str | None, Query()] = None,
     dimension: Annotated[str | None, Query()] = None,
