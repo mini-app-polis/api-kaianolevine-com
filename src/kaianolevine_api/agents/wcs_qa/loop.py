@@ -18,11 +18,11 @@ Layered on top of that:
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from mini_app_polis import logger as logger_mod
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...retrieval.wcs.convergence import Embedder
@@ -50,7 +50,11 @@ from .prompts import (
     SYSTEM_PROMPT,
 )
 
-logger = logging.getLogger(__name__)
+# CD-009: use the shared structured logger from common-python-utils
+# (mini_app_polis.logger) instead of stdlib logging.getLogger, so
+# emoji-prefix conventions, log level, and format stay consistent with
+# the rest of the ecosystem.
+logger = logger_mod.get_logger()
 
 
 @dataclass

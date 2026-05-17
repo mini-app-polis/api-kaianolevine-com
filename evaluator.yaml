@@ -20,3 +20,7 @@ exemptions:
 
   - rule: PY-013
     reason: "Deduplication is enforced at the database layer via UniqueConstraint (e.g. uq_sets_owner_source_file on Set, uq_wcs_note_grants_user_note on WcsNoteGrant). The check's 'possible_duplicate_' filename-prefix pattern applies to file-level dedup in cogs that archive Drive inputs, not to row-level dedup in an API service. Not applicable to this repo type."
+
+  - rule: API-006
+    target: "src/kaianolevine_api/models.py::WcsQaEvalRun"
+    reason: "WcsQaEvalRun is an append-only operator-internal table: it captures one row per (run_id, question_id) from the WCS Q&A agent's eval harness — agent answer, cited sources, judge score, judge reasoning, tool trace. Rows are produced by the operator-run eval suite (not by end users), and an eval run is evidence about agent behaviour rather than per-tenant content. The owner_id of the data the agent retrieved during the eval is preserved inside the tool_trace JSON, not on the row identity; adding an owner_id column would imply per-user partitioning that the harness does not model. Documented exemption per the API-006 remediation's operator-internal-table path. Revisit when/if the eval harness gains a per-tenant mode and rows become scoped to a single owner's content set."
