@@ -17,7 +17,7 @@ from mini_app_polis.logger import LOG_START, LOG_SUCCESS
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_current_owner, require_wcs_admin
+from ..auth import get_current_owner
 from ..config import get_settings
 from ..database import get_db_session
 from ..models import WcsNote as DbNote
@@ -222,18 +222,40 @@ async def list_notes(
 @router.get(
     "/wcs/notes/all",
     response_model=Envelope[list[WcsNoteItem]],
-    summary="List all WCS notes (admin only)",
-    description="Returns all notes regardless of visibility. Requires WCS admin.",
+    summary="List all WCS notes",
+    description=(
+        "Returns all notes regardless of visibility. Requires a valid "
+        "authenticated identity (any Clerk user or M2M token). "
+        "TODO: tighten this back up once service-account auth lands "
+        "(see issue: M2M credentials for pipeline cogs). The intent is "
+        "for this endpoint to be reachable by both human admins AND "
+        "trusted pipeline cogs (e.g. wiki-curator-cog), but NOT by "
+        "ordinary authenticated users. Today we accept any authenticated "
+        "caller as an interim measure so wiki-curator-cog's backfill "
+        "can run; restore stricter auth (admin OR service-account "
+        "allowlist OR Clerk custom claim) before this API is exposed "
+        "to less-trusted callers."
+    ),
 )
 async def list_all_notes(
     session_type: Annotated[str | None, Query()] = None,
     visibility: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-    _admin_id: str = Depends(require_wcs_admin),
+    _owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsNoteItem]]:
-    """List all WCS notes for admin workflows."""
+    """List all WCS notes for admin- and pipeline-driven workflows.
+
+    TODO(service-auth): currently requires only a valid authenticated
+    identity, not WCS admin. Before opening this API to less-trusted
+    callers, swap ``get_current_owner`` back to a stricter dependency
+    that recognizes admins AND a service-account allowlist. The
+    blocking issue is that pipeline cogs (wiki-curator-cog, etc.) use
+    Clerk M2M tokens and aren't naturally "admins" in the user-profile
+    sense; promoting machines to ``is_admin=true`` would also grant
+    them user-management permissions they shouldn't have.
+    """
     settings = get_settings()
 
     stmt = (

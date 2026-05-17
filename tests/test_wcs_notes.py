@@ -211,7 +211,11 @@ async def test_list_notes_empty(client) -> None:
     assert body["meta"]["total"] == 0
 
 
-async def test_list_all_notes_returns_created_notes_for_admin(client) -> None:
+async def test_list_all_notes_returns_created_notes(client) -> None:
+    # NOTE: endpoint name predates the auth relaxation. /v1/wcs/notes/all
+    # is currently authenticated-but-not-admin while service-account auth
+    # is being designed; see TODO(service-auth) in routers/wcs_notes.py.
+
     transcript = await _create_transcript(client)
     await _create_note(client, transcript["id"])
     await _create_note(

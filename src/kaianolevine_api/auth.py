@@ -178,7 +178,32 @@ async def require_wcs_admin(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> str:
-    """Ensures the caller is a WCS admin."""
+    """Ensures the caller is a WCS admin.
+
+    TODO(service-auth): introduce a separate ``require_wcs_service``
+    dependency (and a ``require_wcs_admin_or_service`` union) so
+    pipeline cogs using Clerk M2M tokens can access service
+    endpoints (like ``GET /v1/wcs/notes/all``) without being granted
+    user-level ``is_admin=true`` semantics. Promoting a machine to
+    ``is_admin=true`` would also grant it user-management permissions
+    (e.g., ``PATCH /wcs/admin/users``) that it has no business holding.
+
+    Today's stop-gap: ``/v1/wcs/notes/all`` accepts any authenticated
+    caller — see the TODO in ``routers/wcs_notes.py::list_all_notes``.
+    Tighten that back up when this lands.
+
+    Likely shape:
+      - new ``Settings`` field ``WCS_SERVICE_MACHINE_IDS: list[str]``
+        (allowlist of Clerk machine IDs like ``mch_xxx``)
+      - ``require_wcs_service`` accepts callers whose ``sub`` is in
+        that list
+      - ``require_wcs_admin_or_service`` is the union (admin user OR
+        recognized service machine)
+      - ``/v1/wcs/notes/all`` and other service-callable endpoints
+        switch to the union dependency
+      - admin-only endpoints (``PATCH /wcs/admin/users/{user_id}``,
+        etc.) stay on plain ``require_wcs_admin``
+    """
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == owner_id)
     )
