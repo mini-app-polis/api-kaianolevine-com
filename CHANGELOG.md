@@ -1,3 +1,10 @@
+## [1.34.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.1...v1.34.2) (2026-05-17)
+
+
+### Bug Fixes
+
+* pipeline findings ([336f614](https://github.com/mini-app-polis/api-kaianolevine-com/commit/336f6143981f1c1fa24872a65d868edae61b49b8))
+
 ## [1.34.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.0...v1.34.1) (2026-05-17)
 
 
