@@ -440,6 +440,111 @@ async def test_list_evaluations_supports_source_filter(client) -> None:
     assert body["data"][0]["source"] == "flow_inline"
 
 
+async def test_list_evaluations_supports_csv_source_filter(client) -> None:
+    """Comma-separated source values translate to SQL ``IN(...)``.
+
+    EVAL-003 in evaluator-cog fetches with
+    ``?source=conformance_llm,conformance_deterministic,...`` and expects
+    rows whose source is *any* of those values. The earlier single-value
+    equality match treated the whole comma-string as a literal source
+    value and returned zero rows, which silently broke the check.
+    """
+    for src in (
+        "conformance_llm",
+        "conformance_deterministic",
+        "flow_inline",
+        "flow_hook",
+    ):
+        r = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": "csv-source-filter-repo",
+                "dimension": "pipeline_consistency",
+                "severity": "WARN",
+                "run_id": f"run-{src}",
+                "finding": f"Finding from {src}.",
+                "source": src,
+            },
+        )
+        assert r.status_code == 200
+
+    resp = await client.get(
+        "/v1/evaluations",
+        params={
+            "repo": "csv-source-filter-repo",
+            "source": "conformance_llm,conformance_deterministic",
+            "limit": 50,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    sources_returned = {row["source"] for row in body["data"]}
+    assert sources_returned == {"conformance_llm", "conformance_deterministic"}
+    # flow_inline and flow_hook rows must NOT be in the result.
+    assert "flow_inline" not in sources_returned
+    assert "flow_hook" not in sources_returned
+
+
+async def test_list_evaluations_csv_filter_trims_whitespace_and_drops_blanks(
+    client,
+) -> None:
+    """Stray whitespace and trailing commas don't add phantom IN clauses."""
+    for src in ("conformance_llm", "flow_inline"):
+        r = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": "csv-trim-repo",
+                "dimension": "pipeline_consistency",
+                "severity": "WARN",
+                "run_id": f"run-{src}",
+                "finding": f"Finding from {src}.",
+                "source": src,
+            },
+        )
+        assert r.status_code == 200
+
+    # Leading/trailing whitespace around each value, trailing comma, and
+    # an empty middle slot — all should reduce to ``IN ('conformance_llm')``.
+    resp = await client.get(
+        "/v1/evaluations",
+        params={
+            "repo": "csv-trim-repo",
+            "source": " conformance_llm , , ",
+            "limit": 50,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    sources_returned = {row["source"] for row in body["data"]}
+    assert sources_returned == {"conformance_llm"}
+
+
+async def test_list_evaluations_csv_filter_works_on_severity(client) -> None:
+    """CSV semantics apply to severity as well as source."""
+    for sev in ("WARN", "ERROR", "INFO", "SUCCESS"):
+        r = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": "csv-sev-repo",
+                "dimension": "pipeline_consistency",
+                "severity": sev,
+                "run_id": f"run-{sev}",
+                "finding": f"Finding {sev}.",
+                "source": "flow_inline",
+            },
+        )
+        assert r.status_code == 200
+
+    resp = await client.get(
+        "/v1/evaluations",
+        params={"repo": "csv-sev-repo", "severity": "WARN,ERROR", "limit": 50},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    sevs_returned = {row["severity"] for row in body["data"]}
+    assert sevs_returned == {"WARN", "ERROR"}
+
+
 async def test_evaluations_summary_severity_breakdown_per_dimension(client) -> None:
     await client.post(
         "/v1/evaluations",

@@ -51,7 +51,7 @@ from .prompts import (
 )
 
 # CD-009: use the shared structured logger from common-python-utils
-# (mini_app_polis.logger) instead of stdlib logging.getLogger, so
+# (mini_app_polis.logger) instead of the stdlib alternative, so
 # emoji-prefix conventions, log level, and format stay consistent with
 # the rest of the ecosystem.
 logger = logger_mod.get_logger()

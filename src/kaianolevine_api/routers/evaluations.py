@@ -106,6 +106,23 @@ def _eligible_latest_evaluation_ids_subquery():
     summary="List evaluation findings",
     description="List pipeline evaluation findings with optional filtering.",
 )
+def _csv_filter(raw: str | None) -> list[str] | None:
+    """Parse a comma-separated query value into a non-empty list of trims.
+
+    Returns ``None`` when the input is ``None`` or contains only blank
+    entries, so callers can skip the filter entirely. A single value
+    like ``"foo"`` returns ``["foo"]`` so the same call site can use
+    ``IN(...)`` for both single- and multi-value forms.
+
+    Trims whitespace around each value and drops blanks so a stray comma
+    like ``"WARN,"`` doesn't produce a phantom empty-string clause.
+    """
+    if raw is None:
+        return None
+    parts = [s.strip() for s in raw.split(",") if s.strip()]
+    return parts or None
+
+
 async def list_evaluations(
     repo: Annotated[str | None, Query()] = None,
     dimension: Annotated[str | None, Query()] = None,
@@ -116,8 +133,26 @@ async def list_evaluations(
     offset: Annotated[int, Query(ge=0)] = 0,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[PipelineEvaluationItem]]:
-    """Return evaluation findings with optional filters and pagination."""
+    """Return evaluation findings with optional filters and pagination.
+
+    The ``repo``, ``dimension``, ``severity``, and ``source`` query params
+    accept a single value (``?severity=WARN``) or a comma-separated list
+    (``?severity=WARN,ERROR``). The list form translates to a SQL
+    ``IN(...)`` clause; the single form remains a normal equality match
+    via ``IN`` with one element. Whitespace around values is trimmed.
+
+    Closes EVAL-003's source filter: the conformance check fetches with
+    ``?source=conformance_llm,conformance_deterministic,...`` and expects
+    SQL ``IN`` semantics. The previous single-equality match would treat
+    the whole comma-string as a single literal ``source`` value and
+    return zero rows, silently breaking the check.
+    """
     settings = get_settings()
+
+    repo_filter = _csv_filter(repo)
+    dimension_filter = _csv_filter(dimension)
+    severity_filter = _csv_filter(severity)
+    source_filter = _csv_filter(source)
 
     eligible = _eligible_latest_evaluation_ids_subquery()
     # Order by COALESCE(evaluated_at, created_at) DESC with id DESC as a
@@ -130,26 +165,26 @@ async def list_evaluations(
         .where(DbEval.id.in_(eligible))
         .order_by(_EVALUATED_AT.desc(), DbEval.id.desc())
     )
-    if repo:
-        stmt = stmt.where(DbEval.repo == repo)
-    if dimension:
-        stmt = stmt.where(DbEval.dimension == dimension)
-    if severity:
-        stmt = stmt.where(DbEval.severity == severity)
-    if source:
-        stmt = stmt.where(DbEval.source == source)
+    if repo_filter:
+        stmt = stmt.where(DbEval.repo.in_(repo_filter))
+    if dimension_filter:
+        stmt = stmt.where(DbEval.dimension.in_(dimension_filter))
+    if severity_filter:
+        stmt = stmt.where(DbEval.severity.in_(severity_filter))
+    if source_filter:
+        stmt = stmt.where(DbEval.source.in_(source_filter))
     if run_id is not None:
         stmt = stmt.where(DbEval.run_id == run_id)
 
     total_stmt = select(func.count()).select_from(DbEval).where(DbEval.id.in_(eligible))
-    if repo:
-        total_stmt = total_stmt.where(DbEval.repo == repo)
-    if dimension:
-        total_stmt = total_stmt.where(DbEval.dimension == dimension)
-    if severity:
-        total_stmt = total_stmt.where(DbEval.severity == severity)
-    if source:
-        total_stmt = total_stmt.where(DbEval.source == source)
+    if repo_filter:
+        total_stmt = total_stmt.where(DbEval.repo.in_(repo_filter))
+    if dimension_filter:
+        total_stmt = total_stmt.where(DbEval.dimension.in_(dimension_filter))
+    if severity_filter:
+        total_stmt = total_stmt.where(DbEval.severity.in_(severity_filter))
+    if source_filter:
+        total_stmt = total_stmt.where(DbEval.source.in_(source_filter))
     if run_id is not None:
         total_stmt = total_stmt.where(DbEval.run_id == run_id)
     total = (await session.execute(total_stmt)).scalar_one()
