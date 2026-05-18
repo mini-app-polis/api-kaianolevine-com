@@ -1,3 +1,10 @@
+## [1.34.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.3...v1.34.4) (2026-05-18)
+
+
+### Bug Fixes
+
+* allowing standards to be none in report ([11a3626](https://github.com/mini-app-polis/api-kaianolevine-com/commit/11a3626adec41f26ffe595407a87a3f43d6fc4aa))
+
 ## [1.34.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.2...v1.34.3) (2026-05-17)
 
 
