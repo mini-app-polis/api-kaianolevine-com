@@ -55,7 +55,14 @@ async def prefect_webhook(
     state_type = payload.state_type or "unknown"
     finding = f"Flow {flow_name} entered {state_name} state"
     severity = _severity_for_state(state_type)
-    standards_version = getattr(settings, "STANDARDS_VERSION", "6.0")
+    # Prefect-webhook findings are self-reports about a flow's state
+    # transition; they aren't graded against any standards revision.
+    # Leaving standards_version null keeps Pipeline Health from showing
+    # a stale "Evaluated against: v6.0" tag on a row that wasn't
+    # evaluated against anything. The previous fallback chain via
+    # ``getattr(settings, "STANDARDS_VERSION", "6.0")`` stamped the env
+    # default (or the literal "6.0") on every webhook event.
+    standards_version = None
     repo = _FLOW_REPO_MAP.get(flow_name, "unknown")
 
     if (

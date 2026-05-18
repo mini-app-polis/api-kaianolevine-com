@@ -240,8 +240,20 @@ class PipelineEvaluationCreate(BaseModel):
     suggestion: str | None = Field(
         default=None, description="Semantic value for suggestion."
     )
-    standards_version: str = Field(
-        default="6.0", description="Semantic value for standards version."
+    standards_version: str | None = Field(
+        default=None,
+        description=(
+            "Standards-version this finding was evaluated against. Only "
+            "meaningful for conformance-evaluator paths (LLM and "
+            "deterministic) which know the standards rev they ran against. "
+            "Self-reported runs from pipeline cogs "
+            "(source=flow_inline / flow_hook) don't run against any "
+            "standards rev and leave this null. The previous default of "
+            "'6.0' stamped a stale version onto every self-report, which "
+            "then surfaced in Pipeline Health as 'Evaluated against: v6.0' "
+            "for runs that hadn't been evaluated against any standards "
+            "at all."
+        ),
     )
     source: str | None = Field(default=None, description="Semantic value for source.")
     flow_name: str | None = Field(
