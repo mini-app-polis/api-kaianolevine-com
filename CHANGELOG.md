@@ -1,3 +1,10 @@
+# [1.37.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.36.0...v1.37.0) (2026-05-20)
+
+
+### Features
+
+* WCS entity substrate endpoints — write, read, corrections, additions ([5b009ad](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5b009ad3b52302f3e3291266ae263e1f72de5434))
+
 # [1.36.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.35.0...v1.36.0) (2026-05-20)
 
 
