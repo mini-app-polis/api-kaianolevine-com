@@ -1,3 +1,10 @@
+# [1.35.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.4...v1.35.0) (2026-05-20)
+
+
+### Features
+
+* migration for updated notes processing and design support docs ([2f613cb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2f613cbe0451d2f51a2e474b7393413b3b476738))
+
 ## [1.34.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.3...v1.34.4) (2026-05-18)
 
 
