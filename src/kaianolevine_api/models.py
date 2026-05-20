@@ -305,17 +305,26 @@ class WcsTranscript(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    notes: Mapped[list[WcsNote]] = relationship(
+    notes: Mapped[list[LegacyWcsNote]] = relationship(
+        back_populates="transcript",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    sources: Mapped[list[WcsSource]] = relationship(
         back_populates="transcript",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
 
 
-class WcsNote(Base):
-    """Structured notes produced by the LLM from a WCS lesson transcript."""
+class LegacyWcsNote(Base):
+    """Legacy structured notes from LLM extraction (pre-entity-substrate).
 
-    __tablename__ = "wcs_notes"
+    Table renamed to ``_legacy_wcs_notes`` per ADR-0004; preserved during the
+    4-week reevaluation window while the entity substrate is rolled out.
+    """
+
+    __tablename__ = "_legacy_wcs_notes"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -424,7 +433,7 @@ class WcsNoteGrant(Base):
     )
     note_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("wcs_notes.id", ondelete="CASCADE"),
+        ForeignKey("_legacy_wcs_notes.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -442,7 +451,7 @@ class WcsNoteGrant(Base):
     user: Mapped[WcsUserProfile] = relationship(
         back_populates="grants", lazy="selectin"
     )
-    note: Mapped[WcsNote] = relationship(back_populates="grants", lazy="selectin")
+    note: Mapped[LegacyWcsNote] = relationship(back_populates="grants", lazy="selectin")
 
 
 # ── WCS Q&A retrieval ─────────────────────────────────────────────────────────
@@ -461,7 +470,7 @@ class WcsNoteEmbedding(Base):
 
     note_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("wcs_notes.id", ondelete="CASCADE"),
+        ForeignKey("_legacy_wcs_notes.id", ondelete="CASCADE"),
         primary_key=True,
     )
     embedding_model: Mapped[str] = mapped_column(String, primary_key=True)
@@ -551,4 +560,849 @@ class WcsQaEvalRun(Base):
     manual_grade_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     ran_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ── WCS entity substrate (migration 019) ─────────────────────────────────────
+
+
+class WcsInstructor(Base):
+    """Canonical person row (instructor, student, or cited dancer)."""
+
+    __tablename__ = "wcs_instructors"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
+    background_md: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    teaching_themes_md: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    notable_framings_md: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_instructors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        server_onupdate=func.now(),
+        nullable=False,
+    )
+
+    aliases: Mapped[list[WcsInstructorAlias]] = relationship(
+        back_populates="instructor",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class WcsInstructorAlias(Base):
+    """Naming surface over instructors."""
+
+    __tablename__ = "wcs_instructor_aliases"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    instructor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_instructors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    instructor: Mapped[WcsInstructor] = relationship(
+        back_populates="aliases", lazy="selectin"
+    )
+
+
+class WcsSource(Base):
+    """Canonical lesson record (post-entity-substrate)."""
+
+    __tablename__ = "wcs_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    transcript_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_transcripts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    session_type: Mapped[str] = mapped_column(
+        Text, nullable=False, default="other", server_default="other"
+    )
+    instructors_raw: Mapped[list[str]] = mapped_column(
+        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        nullable=False,
+        default=list,
+    )
+    students_raw: Mapped[list[str]] = mapped_column(
+        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        nullable=False,
+        default=list,
+    )
+    organization: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    visibility: Mapped[str] = mapped_column(
+        Text, nullable=False, default="private", server_default="private"
+    )
+    is_default_visible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        server_onupdate=func.now(),
+        nullable=False,
+    )
+
+    transcript: Mapped[WcsTranscript] = relationship(
+        back_populates="sources", lazy="selectin"
+    )
+    extractions: Mapped[list[WcsSourceExtraction]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    grants: Mapped[list[WcsSourceGrant]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    attributions: Mapped[list[WcsSourceAttribution]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    definitions: Mapped[list[WcsEntityDefinition]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    relations: Mapped[list[WcsEntityRelation]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    references: Mapped[list[WcsSourceReference]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    drill_purposes: Mapped[list[WcsDrillPurpose]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    technique_requirements: Mapped[list[WcsTechniqueRequirement]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class WcsSourceExtraction(Base):
+    """Versioned LLM extraction output for a source."""
+
+    __tablename__ = "wcs_source_extractions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    extractor_version: Mapped[str] = mapped_column(Text, nullable=False)
+    extractor_model: Mapped[str] = mapped_column(Text, nullable=False)
+    extractor_provider: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_output: Mapped[dict] = mapped_column(JSON, nullable=False)
+    extracted_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    notes: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+    source: Mapped[WcsSource] = relationship(
+        back_populates="extractions", lazy="selectin"
+    )
+
+
+class WcsSourceGrant(Base):
+    """Explicit per-user access to a WCS source."""
+
+    __tablename__ = "wcs_source_grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("wcs_user_profiles.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    granted_by: Mapped[str] = mapped_column(Text, nullable=False)
+    granted_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "source_id", name="uq_wcs_source_grants_user_source"
+        ),
+    )
+
+    source: Mapped[WcsSource] = relationship(back_populates="grants", lazy="selectin")
+
+
+class WcsEntity(Base):
+    """Canonical WCS-domain entity (concept, technique, pattern, or drill)."""
+
+    __tablename__ = "wcs_entities"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    overview_md: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="stub", server_default="stub"
+    )
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    external_origin: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        server_onupdate=func.now(),
+        nullable=False,
+    )
+
+    aliases: Mapped[list[WcsEntityAlias]] = relationship(
+        back_populates="entity",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    definitions: Mapped[list[WcsEntityDefinition]] = relationship(
+        back_populates="entity",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    attributions: Mapped[list[WcsSourceAttribution]] = relationship(
+        back_populates="entity",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    relations_from: Mapped[list[WcsEntityRelation]] = relationship(
+        back_populates="from_entity",
+        foreign_keys="WcsEntityRelation.from_entity_id",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    relations_to: Mapped[list[WcsEntityRelation]] = relationship(
+        back_populates="to_entity",
+        foreign_keys="WcsEntityRelation.to_entity_id",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class WcsEntityAlias(Base):
+    """Naming surface over entities."""
+
+    __tablename__ = "wcs_entity_aliases"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    notes: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    entity: Mapped[WcsEntity] = relationship(back_populates="aliases", lazy="selectin")
+
+
+class WcsEntityDefinition(Base):
+    """Per-source vocabulary definition for an entity."""
+
+    __tablename__ = "wcs_entity_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    instructor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_instructors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    term: Mapped[str] = mapped_column(Text, nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    entity: Mapped[WcsEntity] = relationship(
+        back_populates="definitions", lazy="selectin"
+    )
+    source: Mapped[WcsSource] = relationship(
+        back_populates="definitions", lazy="selectin"
+    )
+    instructor: Mapped[WcsInstructor | None] = relationship(lazy="selectin")
+
+
+class WcsEntityRelation(Base):
+    """Cross-entity edge asserted by a source or manual addition."""
+
+    __tablename__ = "wcs_entity_relations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    from_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    from_entity: Mapped[WcsEntity] = relationship(
+        back_populates="relations_from",
+        foreign_keys=[from_entity_id],
+        lazy="selectin",
+    )
+    to_entity: Mapped[WcsEntity] = relationship(
+        back_populates="relations_to",
+        foreign_keys=[to_entity_id],
+        lazy="selectin",
+    )
+    source: Mapped[WcsSource | None] = relationship(
+        back_populates="relations", lazy="selectin"
+    )
+
+
+class WcsSourceAttribution(Base):
+    """Claim that a source attributes teaching or mention to an entity."""
+
+    __tablename__ = "wcs_source_attributions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    instructor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_instructors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    attribution_kind: Mapped[str] = mapped_column(
+        Text, nullable=False, default="taught", server_default="taught"
+    )
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    raw_term: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    position: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    drill_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drill_steps: Mapped[list[str] | None] = mapped_column(
+        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
+    mistake_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    source: Mapped[WcsSource] = relationship(
+        back_populates="attributions", lazy="selectin"
+    )
+    entity: Mapped[WcsEntity] = relationship(
+        back_populates="attributions", lazy="selectin"
+    )
+    instructor: Mapped[WcsInstructor | None] = relationship(lazy="selectin")
+
+
+class WcsSourceReference(Base):
+    """Person mentioned in a source but not as a teaching attribution."""
+
+    __tablename__ = "wcs_source_references"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    instructor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_instructors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    context: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    ref_type: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    source: Mapped[WcsSource] = relationship(
+        back_populates="references", lazy="selectin"
+    )
+    instructor: Mapped[WcsInstructor] = relationship(lazy="selectin")
+
+
+class WcsDrillPurpose(Base):
+    """Skill a drill develops (skill layer)."""
+
+    __tablename__ = "wcs_drill_purposes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    drill_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    skill_name: Mapped[str] = mapped_column(Text, nullable=False)
+    skill_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    focus_context: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    drill_entity: Mapped[WcsEntity] = relationship(lazy="selectin")
+    source: Mapped[WcsSource | None] = relationship(
+        back_populates="drill_purposes", lazy="selectin"
+    )
+
+
+class WcsTechniqueRequirement(Base):
+    """Skill a technique requires (skill layer)."""
+
+    __tablename__ = "wcs_technique_requirements"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    technique_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    skill_name: Mapped[str] = mapped_column(Text, nullable=False)
+    skill_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, default="extraction", server_default="extraction"
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    technique_entity: Mapped[WcsEntity] = relationship(lazy="selectin")
+    source: Mapped[WcsSource | None] = relationship(
+        back_populates="technique_requirements", lazy="selectin"
+    )
+
+
+class WcsNameCorrection(Base):
+    """Global or per-source name fix applied before entity/instructor resolution."""
+
+    __tablename__ = "wcs_name_corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    raw_name: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_name: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(
+        Text, nullable=False, default="global", server_default="global"
+    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsAttributionCorrection(Base):
+    """Override on a field of an extracted attribution."""
+
+    __tablename__ = "wcs_attribution_corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attribution_target: Mapped[dict] = mapped_column(JSON, nullable=False)
+    field: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsSourceMetadataCorrection(Base):
+    """Override on source metadata parsed from filename."""
+
+    __tablename__ = "wcs_source_metadata_corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    field: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsAttributionAddition(Base):
+    """Manual attribution not from any extraction."""
+
+    __tablename__ = "wcs_attribution_additions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    entity_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    instructor_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attribution_kind: Mapped[str] = mapped_column(
+        Text, nullable=False, default="taught", server_default="taught"
+    )
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsDrillPurposeAddition(Base):
+    """Manual drill purpose not from any extraction."""
+
+    __tablename__ = "wcs_drill_purpose_additions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    drill_entity_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    skill_name: Mapped[str] = mapped_column(Text, nullable=False)
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    focus_context: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsTechniqueRequirementAddition(Base):
+    """Manual technique requirement not from any extraction."""
+
+    __tablename__ = "wcs_technique_requirement_additions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    technique_entity_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("wcs_sources.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    skill_name: Mapped[str] = mapped_column(Text, nullable=False)
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+
+
+class WcsEntityRelationAddition(Base):
+    """Manual entity relation not from any extraction."""
+
+    __tablename__ = "wcs_entity_relation_additions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    from_entity_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    to_entity_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    relation_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    prose: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
     )

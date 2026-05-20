@@ -16,7 +16,7 @@ from kaianolevine_api.agents.wcs_qa.citations import (
     enrich_citations,
     parse_citations_block,
 )
-from kaianolevine_api.models import WcsNote, WcsTranscript, WcsTranscriptChunk
+from kaianolevine_api.models import LegacyWcsNote, WcsTranscript, WcsTranscriptChunk
 
 SITE_URL = "https://wcs.example.com"
 
@@ -151,7 +151,7 @@ async def db_session(async_engine) -> AsyncIterator[AsyncSession]:
 
 async def _seed_note_with_chunk(
     session: AsyncSession,
-) -> tuple[WcsNote, WcsTranscriptChunk]:
+) -> tuple[LegacyWcsNote, WcsTranscriptChunk]:
     transcript = WcsTranscript(
         owner_id="dev-owner",
         raw_text="some transcript text",
@@ -163,7 +163,7 @@ async def _seed_note_with_chunk(
     await session.commit()
     await session.refresh(transcript)
 
-    note = WcsNote(
+    note = LegacyWcsNote(
         owner_id="dev-owner",
         transcript_id=transcript.id,
         title="Anchor step",

@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from kaianolevine_api.models import WcsNote, WcsTranscript
+from kaianolevine_api.models import LegacyWcsNote, WcsTranscript
 from kaianolevine_api.retrieval.wcs.convergence import refresh_embeddings
 from kaianolevine_api.retrieval.wcs.schemas import (
     NoteFilters,
@@ -133,8 +133,8 @@ async def _seed_note(
     key_concepts: list[str] | None = None,
     is_default_visible: bool = False,
     owner_id: str = "dev-owner",
-) -> WcsNote:
-    n = WcsNote(
+) -> LegacyWcsNote:
+    n = LegacyWcsNote(
         owner_id=owner_id,
         transcript_id=transcript_id,
         title=title,
@@ -358,7 +358,7 @@ async def test_search_notes_visibility_default_visible_passes(
     ids = await _populate_corpus(db_session, stub_embedder)
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE wcs_notes SET is_default_visible = 1 WHERE id = :id"),
+            text("UPDATE _legacy_wcs_notes SET is_default_visible = 1 WHERE id = :id"),
             {"id": ids["n_anchor"].hex},
         )
     hits = await search_notes(

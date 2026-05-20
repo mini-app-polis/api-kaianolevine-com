@@ -24,7 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import (
-    WcsNote,
+    LegacyWcsNote,
     WcsNoteEmbedding,
     WcsTranscript,
     WcsTranscriptChunk,
@@ -160,7 +160,7 @@ async def _converge_notes(
     embedding_model: str,
     flattener_version: int,
 ) -> dict[str, int]:
-    notes_q = await session.execute(select(WcsNote))
+    notes_q = await session.execute(select(LegacyWcsNote))
     notes = list(notes_q.scalars().all())
     if not notes:
         return {"total": 0, "embedded": 0, "skipped": 0}
@@ -331,7 +331,7 @@ async def _resolve_transcript_title(
     staying deterministic for transcripts with zero or multiple notes.
     """
     notes_q = await session.execute(
-        select(WcsNote.title).where(WcsNote.transcript_id == transcript.id)
+        select(LegacyWcsNote.title).where(LegacyWcsNote.transcript_id == transcript.id)
     )
     titles = [row[0] for row in notes_q.all()]
     if len(titles) == 1 and titles[0]:

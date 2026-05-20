@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import WcsNote, WcsTranscript, WcsTranscriptChunk
+from ...models import LegacyWcsNote, WcsTranscript, WcsTranscriptChunk
 from ...services.wcs_access import user_can_see_note
 
 SENTINEL_RE = re.compile(
@@ -281,12 +281,12 @@ async def enrich_citations(
 
 async def _resolve_note(
     session: AsyncSession, note_id_str: str, viewer_id: str
-) -> WcsNote | None:
+) -> LegacyWcsNote | None:
     try:
         note_uuid = uuid.UUID(note_id_str)
     except (ValueError, TypeError):
         return None
-    note = await session.get(WcsNote, note_uuid)
+    note = await session.get(LegacyWcsNote, note_uuid)
     if note is None:
         return None
     if not await user_can_see_note(session, viewer_id, note):
@@ -343,7 +343,7 @@ async def _resolve_chunk(
 
     transcript = await session.get(WcsTranscript, transcript_uuid)
     note_q = await session.execute(
-        select(WcsNote).where(WcsNote.transcript_id == transcript_uuid)
+        select(LegacyWcsNote).where(LegacyWcsNote.transcript_id == transcript_uuid)
     )
     notes = list(note_q.scalars().all())
     if len(notes) == 1:

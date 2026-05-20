@@ -782,3 +782,340 @@ class WcsNotePatch(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ── WCS entity substrate (extraction payloads, canonical reads, corrections) ──
+
+
+class WcsExtractionEntity(BaseModel):
+    """One entity claim extracted from a source."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["concept", "technique", "pattern", "drill"]
+    name: str = Field(min_length=1, max_length=80)
+    prose: str = ""
+    external_origin: dict | None = None
+
+
+class WcsExtractionEntityDefinition(BaseModel):
+    """Per-source vocabulary definition from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    entity_name: str = Field(min_length=1, max_length=80)
+    definition: str = Field(min_length=1)
+
+
+class WcsExtractionEntityRelation(BaseModel):
+    """Cross-entity relation from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    from_: str = Field(alias="from", min_length=1, max_length=80)
+    to: str = Field(min_length=1, max_length=80)
+    relation_kind: str = Field(min_length=1, max_length=60)
+    prose: str = ""
+
+
+class WcsExtractionDrillPurpose(BaseModel):
+    """Drill purpose from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    drill_name: str = Field(min_length=1, max_length=80)
+    skill_description: str = Field(min_length=1, max_length=120)
+    focus_context: str = ""
+
+
+class WcsExtractionTechniqueRequirement(BaseModel):
+    """Technique requirement from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    technique_name: str = Field(min_length=1, max_length=80)
+    skill_description: str = Field(min_length=1, max_length=120)
+
+
+class WcsExtractionCommonMistake(BaseModel):
+    """Common mistake from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    entity_name: str | None = None
+    mistake: str = Field(min_length=1)
+    correction: str = Field(min_length=1)
+
+
+class WcsExtractionCompetitionNote(BaseModel):
+    """Competition note from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    note: str = Field(min_length=1)
+    entity_name: str | None = None
+    context: str = ""
+
+
+class WcsExtractionReference(BaseModel):
+    """Person reference from extraction."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(min_length=1, max_length=60)
+    type: (
+        Literal[
+            "instructor",
+            "teacher",
+            "dancer",
+            "judge",
+            "competitor",
+            "coach",
+            "pro",
+        ]
+        | None
+    ) = None
+    context: str = ""
+
+
+class WcsExtractionRawOutput(BaseModel):
+    """The full extraction payload produced by transcription-cog's prompt.
+
+    Matches EXTRACTION_SCHEMA in transcription_cog/schema.py.
+    """
+
+    model_config = ConfigDict(extra="allow")  # forward-compatible
+
+    title: str = ""
+    summary: str = ""
+    entities: list[WcsExtractionEntity] = Field(default_factory=list)
+    entity_definitions: list[WcsExtractionEntityDefinition] = Field(
+        default_factory=list
+    )
+    entity_relations: list[WcsExtractionEntityRelation] = Field(default_factory=list)
+    drill_purposes: list[WcsExtractionDrillPurpose] = Field(default_factory=list)
+    technique_requirements: list[WcsExtractionTechniqueRequirement] = Field(
+        default_factory=list
+    )
+    common_mistakes: list[WcsExtractionCommonMistake] = Field(default_factory=list)
+    competition_notes: list[WcsExtractionCompetitionNote] = Field(default_factory=list)
+    student_observations: list[dict] = Field(default_factory=list)
+    action_items: list[dict] = Field(default_factory=list)
+    quotes: list[dict] = Field(default_factory=list)
+    references: list[WcsExtractionReference] = Field(default_factory=list)
+    off_topic_notes: list[dict] = Field(default_factory=list)
+    suggested_new_sections: list[dict] = Field(default_factory=list)
+
+
+class WcsSourceCreate(BaseModel):
+    """Payload for POST /v1/wcs/sources."""
+
+    transcript_id: uuid.UUID
+    title: str | None = None
+    session_date: dt.date | None = None
+    session_type: str = "other"
+    instructors_raw: list[str] = Field(default_factory=list)
+    students_raw: list[str] = Field(default_factory=list)
+    organization: str = ""
+    visibility: str = "private"
+    is_default_visible: bool = False
+    extractor_version: str
+    extractor_model: str
+    extractor_provider: str
+    prompt_version: str
+    raw_output: WcsExtractionRawOutput
+
+
+class WcsEntityItem(BaseModel):
+    """Canonical entity returned by wiki/read endpoints."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    slug: str
+    canonical_name: str
+    kind: str
+    overview_md: str
+    status: str
+    external_origin: dict
+    aliases: list[str] = Field(default_factory=list)
+
+
+class WcsSourceAttributionItem(BaseModel):
+    """Source attribution row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_id: uuid.UUID
+    instructor_id: uuid.UUID | None
+    attribution_kind: str
+    prose: str
+    raw_term: str
+    position: int
+    drill_goal: str | None = None
+    drill_steps: list[str] | None = None
+    mistake_text: str | None = None
+    correction_text: str | None = None
+    origin: str
+
+
+class WcsEntityRelationItem(BaseModel):
+    """Entity relation row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    from_entity_id: uuid.UUID
+    to_entity_id: uuid.UUID
+    relation_kind: str
+    source_id: uuid.UUID | None
+    prose: str
+    origin: str
+
+
+class WcsDrillPurposeItem(BaseModel):
+    """Drill purpose row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    drill_entity_id: uuid.UUID
+    source_id: uuid.UUID | None
+    skill_name: str
+    skill_slug: str
+    prose: str
+    focus_context: str
+    origin: str
+
+
+class WcsTechniqueRequirementItem(BaseModel):
+    """Technique requirement row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    technique_entity_id: uuid.UUID
+    source_id: uuid.UUID | None
+    skill_name: str
+    skill_slug: str
+    prose: str
+    origin: str
+
+
+class WcsEntityDefinitionItem(BaseModel):
+    """Entity definition row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    entity_id: uuid.UUID
+    source_id: uuid.UUID
+    instructor_id: uuid.UUID | None
+    term: str
+    definition: str
+    position: int
+    origin: str
+
+
+class WcsInstructorItem(BaseModel):
+    """Instructor row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    slug: str
+    canonical_name: str
+    background_md: str
+    teaching_themes_md: str
+    notable_framings_md: str
+    aliases: list[str] = Field(default_factory=list)
+
+
+class WcsSourceItem(BaseModel):
+    """Source row for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    transcript_id: uuid.UUID
+    title: str | None
+    session_date: dt.date | None
+    session_type: str
+    instructors_raw: list[str]
+    students_raw: list[str]
+    organization: str
+    visibility: str
+    is_default_visible: bool
+    created_at: dt.datetime
+
+
+class WcsNameCorrectionCreate(BaseModel):
+    """Payload for POST name correction admin endpoint."""
+
+    raw_name: str = Field(min_length=1)
+    corrected_name: str = Field(min_length=1)
+    scope: Literal["global", "source"] = "global"
+    source_id: uuid.UUID | None = None
+    reason: str = ""
+
+
+class WcsAttributionCorrectionCreate(BaseModel):
+    """Payload for POST attribution correction admin endpoint."""
+
+    source_id: uuid.UUID
+    attribution_target: dict
+    field: str
+    corrected_value: dict
+    reason: str = ""
+
+
+class WcsSourceMetadataCorrectionCreate(BaseModel):
+    """Payload for POST source metadata correction admin endpoint."""
+
+    source_id: uuid.UUID
+    field: str
+    corrected_value: dict
+    reason: str = ""
+
+
+class WcsAttributionAdditionCreate(BaseModel):
+    """Payload for POST attribution addition admin endpoint."""
+
+    source_id: uuid.UUID | None = None
+    entity_slug: str
+    instructor_slug: str | None = None
+    attribution_kind: str = "taught"
+    prose: str = ""
+    reason: str = ""
+
+
+class WcsDrillPurposeAdditionCreate(BaseModel):
+    """Payload for POST drill purpose addition admin endpoint."""
+
+    drill_entity_slug: str
+    source_id: uuid.UUID | None = None
+    skill_name: str
+    prose: str = ""
+    focus_context: str = ""
+    reason: str = ""
+
+
+class WcsTechniqueRequirementAdditionCreate(BaseModel):
+    """Payload for POST technique requirement addition admin endpoint."""
+
+    technique_entity_slug: str
+    source_id: uuid.UUID | None = None
+    skill_name: str
+    prose: str = ""
+    reason: str = ""
+
+
+class WcsEntityRelationAdditionCreate(BaseModel):
+    """Payload for POST entity relation addition admin endpoint."""
+
+    from_entity_slug: str
+    to_entity_slug: str
+    relation_kind: str
+    prose: str = ""
+    reason: str = ""

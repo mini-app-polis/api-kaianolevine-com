@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import get_current_owner, require_wcs_admin
 from ..config import get_settings
 from ..database import get_db_session
-from ..models import WcsNote as DbNote
+from ..models import LegacyWcsNote as DbNote
 from ..models import WcsNoteGrant, WcsUserProfile
 from ..schemas import (
     Envelope,

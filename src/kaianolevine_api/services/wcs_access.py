@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import WcsNote as DbNote
+from ..models import LegacyWcsNote as DbNote
 from ..models import WcsNoteGrant, WcsUserProfile
 
 

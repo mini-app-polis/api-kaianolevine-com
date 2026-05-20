@@ -182,7 +182,7 @@ async def test_refresh_re_embeds_after_note_edit(
 
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE wcs_notes SET title = 'New title' WHERE id = :id"),
+            text("UPDATE _legacy_wcs_notes SET title = 'New title' WHERE id = :id"),
             {"id": _sqlite_uuid(note["id"])},
         )
 

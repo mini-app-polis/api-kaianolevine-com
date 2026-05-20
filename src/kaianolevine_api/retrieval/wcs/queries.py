@@ -21,7 +21,7 @@ from sqlalchemy import or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import (
-    WcsNote,
+    LegacyWcsNote,
     WcsNoteEmbedding,
     WcsNoteGrant,
     WcsTranscript,
@@ -50,8 +50,8 @@ async def _build_visibility_clause(session: AsyncSession, viewer_id: str):
 
     grant_subq = select(WcsNoteGrant.note_id).where(WcsNoteGrant.user_id == viewer_id)
     return or_(
-        WcsNote.is_default_visible.is_(True),
-        WcsNote.id.in_(grant_subq),
+        LegacyWcsNote.is_default_visible.is_(True),
+        LegacyWcsNote.id.in_(grant_subq),
     )
 
 
@@ -59,13 +59,13 @@ def _apply_note_metadata_filters(stmt, filters: NoteFilters | None):
     if filters is None:
         return stmt
     if filters.date_from is not None:
-        stmt = stmt.where(WcsNote.session_date >= filters.date_from)
+        stmt = stmt.where(LegacyWcsNote.session_date >= filters.date_from)
     if filters.date_to is not None:
-        stmt = stmt.where(WcsNote.session_date <= filters.date_to)
+        stmt = stmt.where(LegacyWcsNote.session_date <= filters.date_to)
     if filters.session_type is not None:
-        stmt = stmt.where(WcsNote.session_type == filters.session_type)
+        stmt = stmt.where(LegacyWcsNote.session_type == filters.session_type)
     if filters.organization is not None:
-        stmt = stmt.where(WcsNote.organization == filters.organization)
+        stmt = stmt.where(LegacyWcsNote.organization == filters.organization)
     return stmt
 
 
@@ -73,9 +73,9 @@ def _apply_transcript_metadata_filters(stmt, filters: TranscriptFilters | None):
     if filters is None:
         return stmt
     if filters.date_from is not None:
-        stmt = stmt.where(WcsNote.session_date >= filters.date_from)
+        stmt = stmt.where(LegacyWcsNote.session_date >= filters.date_from)
     if filters.date_to is not None:
-        stmt = stmt.where(WcsNote.session_date <= filters.date_to)
+        stmt = stmt.where(LegacyWcsNote.session_date <= filters.date_to)
     return stmt
 
 
@@ -105,15 +105,15 @@ async def search_notes_db(
     viewer_id: str,
     embedding_model: str,
     flattener_version: int,
-) -> list[tuple[WcsNote, float]]:
+) -> list[tuple[LegacyWcsNote, float]]:
     """Return up to k (note, score) pairs visible to viewer, ordered by similarity."""
     visibility = await _build_visibility_clause(session, viewer_id)
 
     if _is_postgres(session):
         distance = WcsNoteEmbedding.embedding.cosine_distance(query_vec)
         stmt = (
-            select(WcsNote, distance.label("dist"))
-            .join(WcsNoteEmbedding, WcsNoteEmbedding.note_id == WcsNote.id)
+            select(LegacyWcsNote, distance.label("dist"))
+            .join(WcsNoteEmbedding, WcsNoteEmbedding.note_id == LegacyWcsNote.id)
             .where(
                 WcsNoteEmbedding.embedding_model == embedding_model,
                 WcsNoteEmbedding.flattener_version == flattener_version,
@@ -122,15 +122,15 @@ async def search_notes_db(
         )
         stmt = _apply_note_metadata_filters(stmt, filters)
         if filters and filters.instructors:
-            stmt = stmt.where(WcsNote.instructors.overlap(filters.instructors))
+            stmt = stmt.where(LegacyWcsNote.instructors.overlap(filters.instructors))
         stmt = stmt.order_by(distance.asc()).limit(k)
         rows = (await session.execute(stmt)).all()
         return [(note, 1.0 - float(dist)) for note, dist in rows]
 
     # SQLite path: pull candidates, score in Python.
     stmt = (
-        select(WcsNote, WcsNoteEmbedding.embedding)
-        .join(WcsNoteEmbedding, WcsNoteEmbedding.note_id == WcsNote.id)
+        select(LegacyWcsNote, WcsNoteEmbedding.embedding)
+        .join(WcsNoteEmbedding, WcsNoteEmbedding.note_id == LegacyWcsNote.id)
         .where(
             WcsNoteEmbedding.embedding_model == embedding_model,
             WcsNoteEmbedding.flattener_version == flattener_version,
@@ -140,7 +140,7 @@ async def search_notes_db(
     stmt = _apply_note_metadata_filters(stmt, filters)
     rows = (await session.execute(stmt)).all()
     wanted = filters.instructors if filters else None
-    scored: list[tuple[WcsNote, float]] = []
+    scored: list[tuple[LegacyWcsNote, float]] = []
     for note, embedding in rows:
         if not _instructors_match(list(note.instructors or []), wanted):
             continue
@@ -159,21 +159,23 @@ async def search_transcripts_db(
     owner_id: str,
     embedding_model: str,
     chunking_version: int,
-) -> list[tuple[WcsTranscriptChunk, WcsTranscript, WcsNote | None, float]]:
+) -> list[tuple[WcsTranscriptChunk, WcsTranscript, LegacyWcsNote | None, float]]:
     """Return up to k (chunk, transcript, linked_note_or_none, score) tuples.
 
     Owner-scoped (transcripts have no grant model in v1). Date and instructor
-    filters are joined through the linked WcsNote when present.
+    filters are joined through the linked LegacyWcsNote when present.
     """
     if _is_postgres(session):
         distance = WcsTranscriptChunk.embedding.cosine_distance(query_vec)
         stmt = (
-            select(WcsTranscriptChunk, WcsTranscript, WcsNote, distance.label("dist"))
+            select(
+                WcsTranscriptChunk, WcsTranscript, LegacyWcsNote, distance.label("dist")
+            )
             .join(
                 WcsTranscript,
                 WcsTranscript.id == WcsTranscriptChunk.transcript_id,
             )
-            .outerjoin(WcsNote, WcsNote.transcript_id == WcsTranscript.id)
+            .outerjoin(LegacyWcsNote, LegacyWcsNote.transcript_id == WcsTranscript.id)
             .where(
                 WcsTranscriptChunk.embedding_model == embedding_model,
                 WcsTranscriptChunk.chunking_version == chunking_version,
@@ -182,7 +184,7 @@ async def search_transcripts_db(
         )
         stmt = _apply_transcript_metadata_filters(stmt, filters)
         if filters and filters.instructors:
-            stmt = stmt.where(WcsNote.instructors.overlap(filters.instructors))
+            stmt = stmt.where(LegacyWcsNote.instructors.overlap(filters.instructors))
         stmt = stmt.order_by(distance.asc()).limit(k)
         rows = (await session.execute(stmt)).all()
         return [
@@ -192,12 +194,12 @@ async def search_transcripts_db(
 
     # SQLite path
     stmt = (
-        select(WcsTranscriptChunk, WcsTranscript, WcsNote)
+        select(WcsTranscriptChunk, WcsTranscript, LegacyWcsNote)
         .join(
             WcsTranscript,
             WcsTranscript.id == WcsTranscriptChunk.transcript_id,
         )
-        .outerjoin(WcsNote, WcsNote.transcript_id == WcsTranscript.id)
+        .outerjoin(LegacyWcsNote, LegacyWcsNote.transcript_id == WcsTranscript.id)
         .where(
             WcsTranscriptChunk.embedding_model == embedding_model,
             WcsTranscriptChunk.chunking_version == chunking_version,
@@ -208,7 +210,9 @@ async def search_transcripts_db(
     rows = (await session.execute(stmt)).all()
 
     wanted = filters.instructors if filters else None
-    scored: list[tuple[WcsTranscriptChunk, WcsTranscript, WcsNote | None, float]] = []
+    scored: list[
+        tuple[WcsTranscriptChunk, WcsTranscript, LegacyWcsNote | None, float]
+    ] = []
     seen_chunk_ids: set[str] = set()
     for chunk, transcript, note in rows:
         if chunk.chunk_id in seen_chunk_ids:
@@ -224,14 +228,16 @@ async def search_transcripts_db(
     return scored[:k]
 
 
-async def fetch_note(session: AsyncSession, note_id: uuid.UUID) -> WcsNote | None:
-    """Return a single ``WcsNote`` by primary key, or None if not found.
+async def fetch_note(session: AsyncSession, note_id: uuid.UUID) -> LegacyWcsNote | None:
+    """Return a single ``LegacyWcsNote`` by primary key, or None if not found.
 
     No visibility check is applied here — callers (the agent's ``get_note``
     tool, citation enrichment) are responsible for enforcing the
     default-visible / admin / explicit-grant rules.
     """
-    result = await session.execute(select(WcsNote).where(WcsNote.id == note_id))
+    result = await session.execute(
+        select(LegacyWcsNote).where(LegacyWcsNote.id == note_id)
+    )
     return result.scalars().first()
 
 
@@ -277,10 +283,10 @@ async def fetch_transcript(
 
 async def fetch_linked_note_for_transcript(
     session: AsyncSession, transcript_id: uuid.UUID
-) -> WcsNote | None:
+) -> LegacyWcsNote | None:
     """Returns the single linked note when there's exactly one, else None."""
     result = await session.execute(
-        select(WcsNote).where(WcsNote.transcript_id == transcript_id)
+        select(LegacyWcsNote).where(LegacyWcsNote.transcript_id == transcript_id)
     )
     notes = list(result.scalars().all())
     return notes[0] if len(notes) == 1 else None

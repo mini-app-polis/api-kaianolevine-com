@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kaianolevine_api.agents.wcs_qa.config import AgentConfig
 from kaianolevine_api.agents.wcs_qa.loop import AgentResult, run_agent
-from kaianolevine_api.models import WcsNote, WcsTranscript
+from kaianolevine_api.models import LegacyWcsNote, WcsTranscript
 from kaianolevine_api.retrieval.wcs.convergence import refresh_embeddings
 
 # ── Test config ───────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ def embedder() -> KeywordEmbedder:
     return KeywordEmbedder()
 
 
-async def _seed_one_note(db_session: AsyncSession) -> WcsNote:
+async def _seed_one_note(db_session: AsyncSession) -> LegacyWcsNote:
     transcript = WcsTranscript(
         owner_id="dev-owner",
         raw_text="Working with Sarah on anchor step timing today.",
@@ -147,7 +147,7 @@ async def _seed_one_note(db_session: AsyncSession) -> WcsNote:
     await db_session.commit()
     await db_session.refresh(transcript)
 
-    note = WcsNote(
+    note = LegacyWcsNote(
         owner_id="dev-owner",
         transcript_id=transcript.id,
         title="Anchor step deep dive",
