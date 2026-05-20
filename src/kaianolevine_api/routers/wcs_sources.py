@@ -1,4 +1,43 @@
-"""WCS sources router — ingest endpoint for transcription-cog."""
+"""WCS sources router — POST /v1/wcs/sources.
+
+Called by transcription-cog after extracting a transcript. Creates the
+wcs_sources row, writes the new active wcs_source_extractions row, and
+runs the Composition Service synchronously to derive canonical-layer
+rows before returning.
+
+# Synchronous composition (deliberate)
+
+Composition runs in the request lifecycle — the endpoint does not return
+until canonical-layer rows are written. This is a proof-of-concept-scale
+choice. Reasons:
+
+  - Simplicity: callers (transcription-cog) get a deterministic
+    "canonical layer is current" guarantee on 200 response. No follow-up
+    polling, no eventual-consistency caveats in downstream readers.
+  - Atomicity: source + extraction + canonical rows commit in one
+    transaction. Composition failure rolls the whole write back, so the
+    DB never holds an extraction without its derived canonical rows.
+  - Corpus size: ~100 sources at scale, each composing in well under a
+    second. The synchronous cost is invisible at this scale.
+
+# When to revisit
+
+Move composition to a background task (Prefect flow, FastAPI BackgroundTask,
+or a deferred queue) if any of these become true:
+
+  - Composition for a single source exceeds ~2 seconds, making the POST
+    feel slow to transcription-cog's flow.
+  - Bulk re-composition (e.g. after a global name correction) needs to
+    fan out across many sources; doing that synchronously inside a single
+    request blocks the worker.
+  - The endpoint moves to a context where the caller can't tolerate
+    request-level coupling to composition (e.g. user-facing UI ingestion).
+
+Until one of those triggers, synchronous composition is the right call.
+The cost of moving to async later is small: change compose_source's
+invocation from ``await compose_source(...)`` to a task enqueue, and add
+a status field on wcs_source_extractions to track composition state.
+"""
 
 from __future__ import annotations
 
@@ -30,12 +69,14 @@ log = logger_mod.get_logger()
     summary="Ingest a WCS source (lesson) with its extraction",
     description=(
         "Called by transcription-cog after extracting a transcript. "
-        "Creates the wcs_sources row (or updates the existing row for the "
-        "same transcript_id), writes a new active wcs_source_extractions "
-        "row (demoting any previous active extraction), then runs the "
-        "Composition Service to derive canonical layer rows. Re-running "
-        "against the same transcript produces a new extraction version on "
-        "the existing source, not a duplicate source row."
+        "Creates the wcs_sources row, writes the new extraction as the "
+        "active wcs_source_extractions row, demotes any previous active "
+        "extraction, then runs the Composition Service **synchronously** "
+        "to derive canonical-layer rows. The endpoint returns once "
+        "canonical rows are committed — there is no eventual consistency "
+        "for downstream readers. See module docstring for the rationale "
+        "and conditions under which this should be moved to a background "
+        "task."
     ),
 )
 async def create_source(

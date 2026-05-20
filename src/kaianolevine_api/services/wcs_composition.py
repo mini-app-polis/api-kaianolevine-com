@@ -299,7 +299,33 @@ async def compose_source(
     session: AsyncSession,
     source_id: uuid.UUID,
 ) -> CompositionResult:
-    """Re-derive canonical layer rows for a single source."""
+    """Re-derive canonical layer rows for a single source.
+
+    Reads the active source_extraction plus all applicable corrections and
+    additions. Writes wcs_source_attributions, wcs_entity_definitions,
+    wcs_entity_relations, wcs_drill_purposes, wcs_technique_requirements,
+    wcs_source_references rows. Creates wcs_entities and wcs_instructors
+    rows as needed via entity resolution.
+
+    Idempotent: re-running for the same source with the same inputs produces
+    the same canonical state. Existing canonical rows for the source are
+    deleted before re-composition (DELETE THEN INSERT pattern), so polish
+    prose on entity rows is preserved (it lives on wcs_entities.overview_md,
+    not on source-attributed rows).
+
+    # Invocation model
+
+    Designed to be called synchronously inside a request lifecycle (notably
+    by POST /v1/wcs/sources and the admin recompose endpoints). The caller
+    holds the AsyncSession and the transaction; this function does not
+    commit or roll back — it writes rows and lets the caller commit. This
+    keeps the composition + source-write atomic from the caller's
+    perspective: either both succeed and commit together, or neither does.
+
+    Runtime is O(extraction size) — typically well under a second for a
+    single lesson at proof-of-concept scale. See routers/wcs_sources.py
+    module docstring for when to move callers to async invocation.
+    """
     log.info("%s compose_source source_id=%s", LOG_START, source_id)
 
     source = await session.get(WcsSource, source_id)
