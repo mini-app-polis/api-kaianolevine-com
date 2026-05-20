@@ -1,3 +1,10 @@
+# [1.36.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.35.0...v1.36.0) (2026-05-20)
+
+
+### Features
+
+* WCS entity substrate foundation — models, schemas, composition service ([70bb326](https://github.com/mini-app-polis/api-kaianolevine-com/commit/70bb326fcc226326747193badad64fa085659742))
+
 # [1.35.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.34.4...v1.35.0) (2026-05-20)
 
 
