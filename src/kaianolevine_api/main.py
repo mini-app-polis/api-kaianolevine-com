@@ -31,9 +31,12 @@ from .routers import (
     spotify,
     stats,
     tracks,
+    wcs_admin,
     wcs_auth,
     wcs_notes,
     wcs_qa,
+    wcs_sources,
+    wcs_wiki,
     webhook,
 )
 from .schemas import ErrorDetail, ErrorEnvelope
@@ -178,8 +181,11 @@ def _build_app() -> FastAPI:
     app.include_router(contact.router, prefix="/v1", tags=["contact"])
     app.include_router(resume.router, prefix="/v1", tags=["resume"])
     app.include_router(wcs_notes.router, prefix="/v1", tags=["wcs"])
+    app.include_router(wcs_sources.router, prefix="/v1", tags=["wcs"])
+    app.include_router(wcs_wiki.router, prefix="/v1", tags=["wcs"])
     app.include_router(wcs_auth.router, prefix="/v1", tags=["wcs"])
     app.include_router(wcs_qa.router, prefix="/v1", tags=["wcs"])
+    app.include_router(wcs_admin.router, prefix="/v1", tags=["wcs-admin"])
 
     return app
 

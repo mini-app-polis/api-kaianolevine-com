@@ -28,8 +28,16 @@ Route groups:
 - `/v1/prefect-webhook` — Prefect flow-run webhook
 - `/v1/contact` — public contact form (CORS + Turnstile gated)
 - `/v1/resume` — resume PDF proxy (Google Drive)
-- `/v1/wcs/transcripts`, `/v1/wcs/notes`, `/v1/wcs/notes/all`, `/v1/wcs/notes/{id}` — WCS notes pipeline
+- `/v1/wcs/transcripts`, `/v1/wcs/notes`, `/v1/wcs/notes/all`, `/v1/wcs/notes/{id}` — WCS notes pipeline (legacy)
+- `/v1/wcs/sources` — ingest WCS lesson extractions
+- `/v1/wcs/wiki/concepts|techniques|patterns|drills/{slug}` — entity views
+- `/v1/wcs/wiki/instructors/{slug}` — instructor views
+- `/v1/wcs/wiki/sources/{id}` — source views
+- `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog)
 - `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
+- `/v1/wcs/admin/corrections/*`, `/v1/wcs/admin/additions/*` — input-layer overrides
+- `/v1/wcs/admin/recompose/{source_id}` — manual composition trigger
+- `/v1/wcs/admin/gaps/*` — curation gap-finding
 - Unversioned meta routes: `/health` (liveness), `/version` (deployed version), `/` (redirects to `/docs`)
 
 ## Developer Setup

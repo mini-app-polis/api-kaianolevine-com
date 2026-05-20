@@ -11,6 +11,9 @@ __all__ = [
     "webhook",
     "contact",
     "resume",
+    "wcs_admin",
     "wcs_auth",
     "wcs_notes",
+    "wcs_sources",
+    "wcs_wiki",
 ]

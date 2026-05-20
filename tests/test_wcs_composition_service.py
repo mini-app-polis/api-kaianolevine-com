@@ -267,6 +267,7 @@ async def test_compose_source_writes_canonical_rows(db_session: AsyncSession) ->
     source, _ = await _seed_source_with_extraction(db_session)
 
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     attr_count = (
         await db_session.execute(
@@ -346,6 +347,7 @@ async def test_compose_source_writes_canonical_rows(db_session: AsyncSession) ->
 async def test_compose_source_idempotent(db_session: AsyncSession) -> None:
     source, _ = await _seed_source_with_extraction(db_session)
     await compose_source(db_session, source.id)
+    await db_session.commit()
     first_count = (
         await db_session.execute(
             select(func.count())
@@ -355,6 +357,7 @@ async def test_compose_source_idempotent(db_session: AsyncSession) -> None:
     ).scalar_one()
 
     await compose_source(db_session, source.id)
+    await db_session.commit()
     second_count = (
         await db_session.execute(
             select(func.count())
@@ -380,6 +383,7 @@ async def test_compose_source_attribution_correction_overrides(
     await db_session.commit()
 
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     taught = (
         (
@@ -400,6 +404,7 @@ async def test_compose_source_attribution_correction_overrides(
 async def test_compose_source_additions_append(db_session: AsyncSession) -> None:
     source, _ = await _seed_source_with_extraction(db_session)
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     entity = await resolve_entity(db_session, "Settle", "concept")
     await db_session.commit()
@@ -438,6 +443,7 @@ async def test_compose_source_additions_append(db_session: AsyncSession) -> None
     await db_session.commit()
 
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     manual_attrs = (
         (
@@ -475,6 +481,7 @@ async def test_compose_preserves_entity_overview_md(db_session: AsyncSession) ->
     await db_session.commit()
 
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     refreshed = await db_session.get(WcsEntity, entity.id)
     assert refreshed is not None
@@ -490,6 +497,7 @@ async def test_compose_no_instructors_writes_null_instructor_attribution(
         instructors_raw=[],
     )
     await compose_source(db_session, source.id)
+    await db_session.commit()
 
     attrs = (
         (

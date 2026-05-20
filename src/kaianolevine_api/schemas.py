@@ -1119,3 +1119,100 @@ class WcsEntityRelationAdditionCreate(BaseModel):
     relation_kind: str
     prose: str = ""
     reason: str = ""
+
+
+class WcsSourceReferenceItem(BaseModel):
+    """Person reference in a source for API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_id: uuid.UUID
+    instructor_id: uuid.UUID
+    context: str
+    ref_type: str
+    origin: str
+
+
+class WcsEntityViewItem(BaseModel):
+    """Full entity view with attributions, definitions, relations, skill layer."""
+
+    entity: WcsEntityItem
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
+    relations_from: list[WcsEntityRelationItem] = Field(default_factory=list)
+    relations_to: list[WcsEntityRelationItem] = Field(default_factory=list)
+    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list)
+    technique_requirements: list[WcsTechniqueRequirementItem] = Field(
+        default_factory=list
+    )
+
+
+class WcsInstructorViewItem(BaseModel):
+    """Full instructor view with attributions, definitions, and references."""
+
+    instructor: WcsInstructorItem
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
+    referenced_in: list[WcsSourceReferenceItem] = Field(default_factory=list)
+
+
+class WcsSourceViewItem(BaseModel):
+    """Full source view with all canonical rows derived from it."""
+
+    source: WcsSourceItem
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
+    relations: list[WcsEntityRelationItem] = Field(default_factory=list)
+    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list)
+    technique_requirements: list[WcsTechniqueRequirementItem] = Field(
+        default_factory=list
+    )
+    references: list[WcsSourceReferenceItem] = Field(default_factory=list)
+
+
+class WcsWikiExportItem(BaseModel):
+    """Bulk corpus export for wiki-curator-cog."""
+
+    entities: list[WcsEntityItem]
+    instructors: list[WcsInstructorItem]
+    sources: list[WcsSourceItem]
+    attributions: list[WcsSourceAttributionItem]
+    definitions: list[WcsEntityDefinitionItem]
+    relations: list[WcsEntityRelationItem]
+    drill_purposes: list[WcsDrillPurposeItem]
+    technique_requirements: list[WcsTechniqueRequirementItem]
+    references: list[WcsSourceReferenceItem]
+    exported_at: dt.datetime
+
+
+class WcsAdminCorrectionResult(BaseModel):
+    """Result of an admin correction or addition write."""
+
+    id: uuid.UUID
+    field: str | None = None
+    recomposed_source_ids: list[uuid.UUID] = Field(default_factory=list)
+    deferred: bool = False
+    message: str = ""
+
+
+class WcsRecomposeResult(BaseModel):
+    """Result of a manual compose_source run."""
+
+    source_id: uuid.UUID
+    attributions_written: int
+    definitions_written: int
+    relations_written: int
+    drill_purposes_written: int
+    technique_requirements_written: int
+    references_written: int
+
+
+class WcsGapItem(BaseModel):
+    """Lightweight curation gap descriptor."""
+
+    slug: str
+    name: str
+    kind: str | None = None
+    count: int = 0
+    detail: str = ""

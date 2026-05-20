@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS, LOG_WARNING, get_logger
 from sqlalchemy import delete, select
@@ -34,6 +35,29 @@ from ..schemas import WcsExtractionRawOutput
 log = get_logger()
 
 _COMPETITION_STRATEGY_NAME = "Competition Strategy"
+
+
+@dataclass(frozen=True)
+class CompositionResult:
+    """Counts of canonical rows written by compose_source."""
+
+    attributions_written: int = 0
+    definitions_written: int = 0
+    relations_written: int = 0
+    drill_purposes_written: int = 0
+    technique_requirements_written: int = 0
+    references_written: int = 0
+
+    @classmethod
+    def from_counts(cls, counts: dict[str, int]) -> CompositionResult:
+        return cls(
+            attributions_written=counts.get("attributions", 0),
+            definitions_written=counts.get("definitions", 0),
+            relations_written=counts.get("relations", 0),
+            drill_purposes_written=counts.get("drill_purposes", 0),
+            technique_requirements_written=counts.get("technique_requirements", 0),
+            references_written=counts.get("references", 0),
+        )
 
 
 def slugify(name: str) -> str:
@@ -274,14 +298,14 @@ def _apply_entity_extraction_corrections(
 async def compose_source(
     session: AsyncSession,
     source_id: uuid.UUID,
-) -> None:
+) -> CompositionResult:
     """Re-derive canonical layer rows for a single source."""
     log.info("%s compose_source source_id=%s", LOG_START, source_id)
 
     source = await session.get(WcsSource, source_id)
     if source is None:
         log.warning("%s source not found id=%s", LOG_WARNING, source_id)
-        return
+        return CompositionResult()
 
     ext_result = await session.execute(
         select(WcsSourceExtraction).where(
@@ -292,7 +316,7 @@ async def compose_source(
     extraction = ext_result.scalars().first()
     if extraction is None:
         log.warning("%s no active extraction for source_id=%s", LOG_WARNING, source_id)
-        return
+        return CompositionResult()
 
     corr_result = await session.execute(
         select(WcsAttributionCorrection).where(
@@ -607,17 +631,18 @@ async def compose_source(
         )
         counts["relations"] += 1
 
-    await session.commit()
+    result = CompositionResult.from_counts(counts)
 
     log.info(
         "%s compose_source source_id=%s attributions=%d definitions=%d "
         "relations=%d drill_purposes=%d technique_requirements=%d references=%d",
         LOG_SUCCESS,
         source_id,
-        counts["attributions"],
-        counts["definitions"],
-        counts["relations"],
-        counts["drill_purposes"],
-        counts["technique_requirements"],
-        counts["references"],
+        result.attributions_written,
+        result.definitions_written,
+        result.relations_written,
+        result.drill_purposes_written,
+        result.technique_requirements_written,
+        result.references_written,
     )
+    return result
