@@ -97,6 +97,62 @@ async def test_list_concepts_paginated(client, seeded_source) -> None:
     assert len(body["data"]) >= 1
 
 
+# ---------------------------------------------------------------------------
+# Contract tests (TEST-010) — one per remaining wiki list endpoint, asserting
+# the {data, meta} envelope shape so every FastAPI route in this router has
+# an explicit envelope-checking test.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/wcs/wiki/techniques",
+        "/v1/wcs/wiki/patterns",
+        "/v1/wcs/wiki/drills",
+    ],
+)
+async def test_list_entity_kinds_envelope_shape(client, seeded_source, path) -> None:
+    """Contract: every wiki list endpoint returns the {data, meta} envelope."""
+    resp = await client.get(f"{path}?limit=10&offset=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "data" in body
+    assert "meta" in body
+    assert isinstance(body["data"], list)
+    assert "total" in body["meta"]
+
+
+async def test_list_instructors_envelope_shape(client, seeded_source) -> None:
+    """Contract: GET /wcs/wiki/instructors returns the {data, meta} envelope."""
+    resp = await client.get("/v1/wcs/wiki/instructors?limit=10&offset=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "data" in body
+    assert "meta" in body
+    assert isinstance(body["data"], list)
+
+
+async def test_list_sources_envelope_shape(client, seeded_source) -> None:
+    """Contract: GET /wcs/wiki/sources returns the {data, meta} envelope."""
+    resp = await client.get("/v1/wcs/wiki/sources?limit=10&offset=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "data" in body
+    assert "meta" in body
+    assert isinstance(body["data"], list)
+
+
+async def test_entity_not_found_error_envelope(client) -> None:
+    """Contract: missing entity returns the {error: {code, message}} envelope."""
+    resp = await client.get("/v1/wcs/wiki/concepts/no-such-slug")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert "error" in body
+    assert "code" in body["error"]
+    assert "message" in body["error"]
+
+
 async def test_get_instructor_view(client, seeded_source) -> None:
     resp = await client.get("/v1/wcs/wiki/instructors/kaiano")
     assert resp.status_code == 200

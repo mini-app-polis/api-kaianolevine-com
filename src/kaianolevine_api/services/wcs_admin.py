@@ -36,6 +36,7 @@ async def create_name_correction(
     owner_id: str,
     payload: WcsNameCorrectionCreate,
 ) -> tuple[WcsNameCorrection, list[uuid.UUID], bool, str]:
+    """Persist a name correction row; recompose its source unless the scope is global."""
     row = WcsNameCorrection(
         raw_name=payload.raw_name,
         corrected_name=payload.corrected_name,
@@ -64,6 +65,7 @@ async def create_attribution_correction(
     owner_id: str,
     payload: WcsAttributionCorrectionCreate,
 ) -> tuple[WcsAttributionCorrection, list[uuid.UUID]]:
+    """Persist an attribution correction row and recompose the affected source."""
     row = WcsAttributionCorrection(
         source_id=payload.source_id,
         attribution_target=payload.attribution_target,
@@ -83,6 +85,7 @@ async def create_metadata_correction(
     owner_id: str,
     payload: WcsSourceMetadataCorrectionCreate,
 ) -> tuple[WcsSourceMetadataCorrection, list[uuid.UUID]]:
+    """Persist a metadata correction, apply it to the source row, and recompose."""
     row = WcsSourceMetadataCorrection(
         source_id=payload.source_id,
         field=payload.field,
@@ -131,6 +134,7 @@ async def create_attribution_addition(
     owner_id: str,
     payload: WcsAttributionAdditionCreate,
 ) -> tuple[WcsAttributionAddition, list[uuid.UUID]]:
+    """Persist an admin-authored attribution addition and recompose its source."""
     row = WcsAttributionAddition(
         source_id=payload.source_id,
         entity_slug=payload.entity_slug,
@@ -154,6 +158,7 @@ async def create_drill_purpose_addition(
     owner_id: str,
     payload: WcsDrillPurposeAdditionCreate,
 ) -> tuple[WcsDrillPurposeAddition, list[uuid.UUID]]:
+    """Persist an admin-authored drill-purpose addition and recompose its source."""
     row = WcsDrillPurposeAddition(
         drill_entity_slug=payload.drill_entity_slug,
         source_id=payload.source_id,
@@ -177,6 +182,7 @@ async def create_technique_requirement_addition(
     owner_id: str,
     payload: WcsTechniqueRequirementAdditionCreate,
 ) -> tuple[WcsTechniqueRequirementAddition, list[uuid.UUID]]:
+    """Persist an admin-authored technique-requirement addition and recompose its source."""
     row = WcsTechniqueRequirementAddition(
         technique_entity_slug=payload.technique_entity_slug,
         source_id=payload.source_id,
@@ -199,6 +205,11 @@ async def create_entity_relation_addition(
     owner_id: str,
     payload: WcsEntityRelationAdditionCreate,
 ) -> tuple[WcsEntityRelationAddition, list[uuid.UUID]]:
+    """Persist an entity-relation addition and recompose every active source.
+
+    Entity relations are global (not tied to a single source), so every source
+    whose extraction is active gets recomposed.
+    """
     row = WcsEntityRelationAddition(
         from_entity_slug=payload.from_entity_slug,
         to_entity_slug=payload.to_entity_slug,
@@ -229,6 +240,7 @@ async def recompose_source(
     session: AsyncSession,
     source_id: uuid.UUID,
 ) -> CompositionResult | None:
+    """Re-run composition for the given source, returning the result or None if not found."""
     source = await session.get(WcsSource, source_id)
     if source is None:
         return None

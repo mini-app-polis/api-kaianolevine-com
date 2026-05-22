@@ -99,6 +99,7 @@ async def get_instructor(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsInstructorViewItem]:
+    """Return the full wiki view for one instructor; 404 if the slug is unknown."""
     settings = get_settings()
     view = await wiki_svc.get_instructor_view(session, owner_id, slug=slug)
     if view is None:
@@ -118,6 +119,7 @@ async def list_instructors(
     _owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsInstructorItem]]:
+    """Return a paginated list of instructors with the total instructor count."""
     settings = get_settings()
     items, total = await wiki_svc.list_instructors(session, limit=limit, offset=offset)
     return success_envelope(
@@ -136,6 +138,7 @@ async def get_source(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsSourceViewItem]:
+    """Return the full wiki view for one source; 404 if the source is not visible to the caller."""
     settings = get_settings()
     view = await wiki_svc.get_source_view(session, owner_id, source_id=source_id)
     if view is None:
@@ -155,6 +158,7 @@ async def list_sources(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[WcsSourceItem]]:
+    """Return a paginated list of sources visible to the caller with the total source count."""
     settings = get_settings()
     items, total = await wiki_svc.list_sources(
         session, owner_id, limit=limit, offset=offset
@@ -177,6 +181,7 @@ async def export_wiki(
     owner_id: str = Depends(get_current_owner),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiExportItem]:
+    """Return the full WCS corpus visible to the caller in one response (used by wiki-curator-cog)."""
     log.info("%s wiki export user=%s", LOG_START, owner_id)
     settings = get_settings()
     data = await wiki_svc.export_wiki_corpus(session, owner_id)

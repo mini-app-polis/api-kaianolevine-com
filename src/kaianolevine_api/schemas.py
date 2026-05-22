@@ -792,10 +792,10 @@ class WcsExtractionEntity(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    kind: Literal["concept", "technique", "pattern", "drill"]
-    name: str = Field(min_length=1, max_length=80)
-    prose: str = ""
-    external_origin: dict | None = None
+    kind: Literal["concept", "technique", "pattern", "drill"] = Field(..., description="Discriminator for the entity kind (concept, technique, pattern, drill).")
+    name: str = Field(min_length=1, max_length=80, description="Human-readable name.")
+    prose: str = Field("", description="Free-text content for this row.")
+    external_origin: dict | None = Field(None, description="Optional external attribution (book, video, etc.).")
 
 
 class WcsExtractionEntityDefinition(BaseModel):
@@ -803,8 +803,8 @@ class WcsExtractionEntityDefinition(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    entity_name: str = Field(min_length=1, max_length=80)
-    definition: str = Field(min_length=1)
+    entity_name: str = Field(min_length=1, max_length=80, description="Display name of the WCS entity.")
+    definition: str = Field(min_length=1, description="Definition prose attached to an entity for one source.")
 
 
 class WcsExtractionEntityRelation(BaseModel):
@@ -812,10 +812,10 @@ class WcsExtractionEntityRelation(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    from_: str = Field(alias="from", min_length=1, max_length=80)
-    to: str = Field(min_length=1, max_length=80)
-    relation_kind: str = Field(min_length=1, max_length=60)
-    prose: str = ""
+    from_: str = Field(alias="from", min_length=1, max_length=80, description="From.")
+    to: str = Field(min_length=1, max_length=80, description="To.")
+    relation_kind: str = Field(min_length=1, max_length=60, description="Discriminator for the entity-to-entity relation type.")
+    prose: str = Field("", description="Free-text content for this row.")
 
 
 class WcsExtractionDrillPurpose(BaseModel):
@@ -823,9 +823,9 @@ class WcsExtractionDrillPurpose(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    drill_name: str = Field(min_length=1, max_length=80)
-    skill_description: str = Field(min_length=1, max_length=120)
-    focus_context: str = ""
+    drill_name: str = Field(min_length=1, max_length=80, description="Drill name.")
+    skill_description: str = Field(min_length=1, max_length=120, description="Free-text description of the skill.")
+    focus_context: str = Field("", description="Focus or context hint that scopes how this row applies.")
 
 
 class WcsExtractionTechniqueRequirement(BaseModel):
@@ -833,8 +833,8 @@ class WcsExtractionTechniqueRequirement(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    technique_name: str = Field(min_length=1, max_length=80)
-    skill_description: str = Field(min_length=1, max_length=120)
+    technique_name: str = Field(min_length=1, max_length=80, description="Technique name.")
+    skill_description: str = Field(min_length=1, max_length=120, description="Free-text description of the skill.")
 
 
 class WcsExtractionCommonMistake(BaseModel):
@@ -842,9 +842,9 @@ class WcsExtractionCommonMistake(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    entity_name: str | None = None
-    mistake: str = Field(min_length=1)
-    correction: str = Field(min_length=1)
+    entity_name: str | None = Field(None, description="Display name of the WCS entity.")
+    mistake: str = Field(min_length=1, description="Mistake.")
+    correction: str = Field(min_length=1, description="Correction.")
 
 
 class WcsExtractionCompetitionNote(BaseModel):
@@ -852,9 +852,9 @@ class WcsExtractionCompetitionNote(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    note: str = Field(min_length=1)
-    entity_name: str | None = None
-    context: str = ""
+    note: str = Field(min_length=1, description="Note.")
+    entity_name: str | None = Field(None, description="Display name of the WCS entity.")
+    context: str = Field("", description="Free-text context for the reference.")
 
 
 class WcsExtractionReference(BaseModel):
@@ -862,7 +862,7 @@ class WcsExtractionReference(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    name: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=60, description="Human-readable name.")
     type: (
         Literal[
             "instructor",
@@ -874,8 +874,8 @@ class WcsExtractionReference(BaseModel):
             "pro",
         ]
         | None
-    ) = None
-    context: str = ""
+    ) = Field(None, description="Type.")
+    context: str = Field("", description="Free-text context for the reference.")
 
 
 class WcsExtractionRawOutput(BaseModel):
@@ -886,44 +886,46 @@ class WcsExtractionRawOutput(BaseModel):
 
     model_config = ConfigDict(extra="allow")  # forward-compatible
 
-    title: str = ""
-    summary: str = ""
-    entities: list[WcsExtractionEntity] = Field(default_factory=list)
+    title: str = Field("", description="Topic or display title.")
+    summary: str = Field("", description="Summary.")
+    entities: list[WcsExtractionEntity] = Field(default_factory=list, description="WCS entity rows attached to this response.")
     entity_definitions: list[WcsExtractionEntityDefinition] = Field(
-        default_factory=list
+        default_factory=list,
+        description="Entity definitions.",
     )
-    entity_relations: list[WcsExtractionEntityRelation] = Field(default_factory=list)
-    drill_purposes: list[WcsExtractionDrillPurpose] = Field(default_factory=list)
+    entity_relations: list[WcsExtractionEntityRelation] = Field(default_factory=list, description="Entity relations.")
+    drill_purposes: list[WcsExtractionDrillPurpose] = Field(default_factory=list, description="Drill-to-purpose links sourced from this row.")
     technique_requirements: list[WcsExtractionTechniqueRequirement] = Field(
-        default_factory=list
+        default_factory=list,
+        description="Technique-to-requirement links sourced from this row.",
     )
-    common_mistakes: list[WcsExtractionCommonMistake] = Field(default_factory=list)
-    competition_notes: list[WcsExtractionCompetitionNote] = Field(default_factory=list)
-    student_observations: list[dict] = Field(default_factory=list)
-    action_items: list[dict] = Field(default_factory=list)
-    quotes: list[dict] = Field(default_factory=list)
-    references: list[WcsExtractionReference] = Field(default_factory=list)
-    off_topic_notes: list[dict] = Field(default_factory=list)
-    suggested_new_sections: list[dict] = Field(default_factory=list)
+    common_mistakes: list[WcsExtractionCommonMistake] = Field(default_factory=list, description="Common mistakes.")
+    competition_notes: list[WcsExtractionCompetitionNote] = Field(default_factory=list, description="Competition notes.")
+    student_observations: list[dict] = Field(default_factory=list, description="Student observations.")
+    action_items: list[dict] = Field(default_factory=list, description="Action items.")
+    quotes: list[dict] = Field(default_factory=list, description="Quotes.")
+    references: list[WcsExtractionReference] = Field(default_factory=list, description="Bare-reference rows (instructors mentioned but not attributed).")
+    off_topic_notes: list[dict] = Field(default_factory=list, description="Off topic notes.")
+    suggested_new_sections: list[dict] = Field(default_factory=list, description="Suggested new sections.")
 
 
 class WcsSourceCreate(BaseModel):
     """Payload for POST /v1/wcs/sources."""
 
-    transcript_id: uuid.UUID
-    title: str | None = None
-    session_date: dt.date | None = None
-    session_type: str = "other"
-    instructors_raw: list[str] = Field(default_factory=list)
-    students_raw: list[str] = Field(default_factory=list)
-    organization: str = ""
-    visibility: str = "private"
-    is_default_visible: bool = False
-    extractor_version: str
-    extractor_model: str
-    extractor_provider: str
-    prompt_version: str
-    raw_output: WcsExtractionRawOutput
+    transcript_id: uuid.UUID = Field(..., description="Identifier of the upstream transcript.")
+    title: str | None = Field(None, description="Topic or display title.")
+    session_date: dt.date | None = Field(None, description="Calendar date of the lesson session.")
+    session_type: str = Field("other", description="Session type — e.g. private_lesson, group_class, other.")
+    instructors_raw: list[str] = Field(default_factory=list, description="Verbatim upstream instructor names before alias resolution.")
+    students_raw: list[str] = Field(default_factory=list, description="Verbatim upstream student names before alias resolution.")
+    organization: str = Field("", description="Organization, studio, or event context for the session.")
+    visibility: str = Field("private", description="Coarse access-control flag (private vs. public).")
+    is_default_visible: bool = Field(False, description="Whether the source is shown in the default catalog.")
+    extractor_version: str = Field(..., description="Extractor version.")
+    extractor_model: str = Field(..., description="Extractor model.")
+    extractor_provider: str = Field(..., description="Extractor provider.")
+    prompt_version: str = Field(..., description="Prompt version.")
+    raw_output: WcsExtractionRawOutput = Field(..., description="Raw upstream extraction payload, unparsed.")
 
 
 class WcsEntityItem(BaseModel):
@@ -931,14 +933,14 @@ class WcsEntityItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    slug: str
-    canonical_name: str
-    kind: str
-    overview_md: str
-    status: str
-    external_origin: dict
-    aliases: list[str] = Field(default_factory=list)
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    slug: str = Field(..., description="Lowercase, hyphen-separated canonical identifier.")
+    canonical_name: str = Field(..., description="Canonical, post-collapse display name.")
+    kind: str = Field(..., description="Discriminator for the entity kind (concept, technique, pattern, drill).")
+    overview_md: str = Field(..., description="Overview md.")
+    status: str = Field(..., description="Lifecycle status flag (e.g., stub, draft, mature).")
+    external_origin: dict = Field(..., description="Optional external attribution (book, video, etc.).")
+    aliases: list[str] = Field(default_factory=list, description="Variant names that resolve to this canonical row.")
 
 
 class WcsSourceAttributionItem(BaseModel):
@@ -946,18 +948,18 @@ class WcsSourceAttributionItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    source_id: uuid.UUID
-    instructor_id: uuid.UUID | None
-    attribution_kind: str
-    prose: str
-    raw_term: str
-    position: int
-    drill_goal: str | None = None
-    drill_steps: list[str] | None = None
-    mistake_text: str | None = None
-    correction_text: str | None = None
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    instructor_id: uuid.UUID | None = Field(..., description="Identifier of the WCS instructor.")
+    attribution_kind: str = Field(..., description="Discriminator for the attribution row type.")
+    prose: str = Field(..., description="Free-text content for this row.")
+    raw_term: str = Field(..., description="Raw term string as it appeared in the upstream extraction.")
+    position: int = Field(..., description="Ordinal position of the row within its source.")
+    drill_goal: str | None = Field(None, description="Drill goal.")
+    drill_steps: list[str] | None = Field(None, description="Drill steps.")
+    mistake_text: str | None = Field(None, description="Mistake text.")
+    correction_text: str | None = Field(None, description="Correction text.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsEntityRelationItem(BaseModel):
@@ -965,13 +967,13 @@ class WcsEntityRelationItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    from_entity_id: uuid.UUID
-    to_entity_id: uuid.UUID
-    relation_kind: str
-    source_id: uuid.UUID | None
-    prose: str
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    from_entity_id: uuid.UUID = Field(..., description="From entity id.")
+    to_entity_id: uuid.UUID = Field(..., description="To entity id.")
+    relation_kind: str = Field(..., description="Discriminator for the entity-to-entity relation type.")
+    source_id: uuid.UUID | None = Field(..., description="Identifier of the WCS source this row belongs to.")
+    prose: str = Field(..., description="Free-text content for this row.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsDrillPurposeItem(BaseModel):
@@ -979,14 +981,14 @@ class WcsDrillPurposeItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    drill_entity_id: uuid.UUID
-    source_id: uuid.UUID | None
-    skill_name: str
-    skill_slug: str
-    prose: str
-    focus_context: str
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    drill_entity_id: uuid.UUID = Field(..., description="Drill entity id.")
+    source_id: uuid.UUID | None = Field(..., description="Identifier of the WCS source this row belongs to.")
+    skill_name: str = Field(..., description="Human-readable skill name this row references.")
+    skill_slug: str = Field(..., description="Skill slug.")
+    prose: str = Field(..., description="Free-text content for this row.")
+    focus_context: str = Field(..., description="Focus or context hint that scopes how this row applies.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsTechniqueRequirementItem(BaseModel):
@@ -994,13 +996,13 @@ class WcsTechniqueRequirementItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    technique_entity_id: uuid.UUID
-    source_id: uuid.UUID | None
-    skill_name: str
-    skill_slug: str
-    prose: str
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    technique_entity_id: uuid.UUID = Field(..., description="Technique entity id.")
+    source_id: uuid.UUID | None = Field(..., description="Identifier of the WCS source this row belongs to.")
+    skill_name: str = Field(..., description="Human-readable skill name this row references.")
+    skill_slug: str = Field(..., description="Skill slug.")
+    prose: str = Field(..., description="Free-text content for this row.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsEntityDefinitionItem(BaseModel):
@@ -1008,14 +1010,14 @@ class WcsEntityDefinitionItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    entity_id: uuid.UUID
-    source_id: uuid.UUID
-    instructor_id: uuid.UUID | None
-    term: str
-    definition: str
-    position: int
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    entity_id: uuid.UUID = Field(..., description="Identifier of the WCS entity.")
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    instructor_id: uuid.UUID | None = Field(..., description="Identifier of the WCS instructor.")
+    term: str = Field(..., description="Term.")
+    definition: str = Field(..., description="Definition prose attached to an entity for one source.")
+    position: int = Field(..., description="Ordinal position of the row within its source.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsInstructorItem(BaseModel):
@@ -1023,13 +1025,13 @@ class WcsInstructorItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    slug: str
-    canonical_name: str
-    background_md: str
-    teaching_themes_md: str
-    notable_framings_md: str
-    aliases: list[str] = Field(default_factory=list)
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    slug: str = Field(..., description="Lowercase, hyphen-separated canonical identifier.")
+    canonical_name: str = Field(..., description="Canonical, post-collapse display name.")
+    background_md: str = Field(..., description="Background md.")
+    teaching_themes_md: str = Field(..., description="Teaching themes md.")
+    notable_framings_md: str = Field(..., description="Notable framings md.")
+    aliases: list[str] = Field(default_factory=list, description="Variant names that resolve to this canonical row.")
 
 
 class WcsSourceItem(BaseModel):
@@ -1037,88 +1039,88 @@ class WcsSourceItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    transcript_id: uuid.UUID
-    title: str | None
-    session_date: dt.date | None
-    session_type: str
-    instructors_raw: list[str]
-    students_raw: list[str]
-    organization: str
-    visibility: str
-    is_default_visible: bool
-    created_at: dt.datetime
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    transcript_id: uuid.UUID = Field(..., description="Identifier of the upstream transcript.")
+    title: str | None = Field(..., description="Topic or display title.")
+    session_date: dt.date | None = Field(..., description="Calendar date of the lesson session.")
+    session_type: str = Field(..., description="Session type — e.g. private_lesson, group_class, other.")
+    instructors_raw: list[str] = Field(..., description="Verbatim upstream instructor names before alias resolution.")
+    students_raw: list[str] = Field(..., description="Verbatim upstream student names before alias resolution.")
+    organization: str = Field(..., description="Organization, studio, or event context for the session.")
+    visibility: str = Field(..., description="Coarse access-control flag (private vs. public).")
+    is_default_visible: bool = Field(..., description="Whether the source is shown in the default catalog.")
+    created_at: dt.datetime = Field(..., description="Timestamp this row was created.")
 
 
 class WcsNameCorrectionCreate(BaseModel):
     """Payload for POST name correction admin endpoint."""
 
-    raw_name: str = Field(min_length=1)
-    corrected_name: str = Field(min_length=1)
-    scope: Literal["global", "source"] = "global"
-    source_id: uuid.UUID | None = None
-    reason: str = ""
+    raw_name: str = Field(min_length=1, description="Raw upstream name as it appeared before correction.")
+    corrected_name: str = Field(min_length=1, description="Corrected name to apply in place of the raw form.")
+    scope: Literal["global", "source"] = Field("global", description="Application scope of the correction (global vs. per-source).")
+    source_id: uuid.UUID | None = Field(None, description="Identifier of the WCS source this row belongs to.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsAttributionCorrectionCreate(BaseModel):
     """Payload for POST attribution correction admin endpoint."""
 
-    source_id: uuid.UUID
-    attribution_target: dict
-    field: str
-    corrected_value: dict
-    reason: str = ""
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    attribution_target: dict = Field(..., description="Locator (raw_term + position) of the attribution row to correct.")
+    field: str = Field(..., description="Name of the field being corrected.")
+    corrected_value: dict = Field(..., description="New value to apply for the corrected field.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsSourceMetadataCorrectionCreate(BaseModel):
     """Payload for POST source metadata correction admin endpoint."""
 
-    source_id: uuid.UUID
-    field: str
-    corrected_value: dict
-    reason: str = ""
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    field: str = Field(..., description="Name of the field being corrected.")
+    corrected_value: dict = Field(..., description="New value to apply for the corrected field.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsAttributionAdditionCreate(BaseModel):
     """Payload for POST attribution addition admin endpoint."""
 
-    source_id: uuid.UUID | None = None
-    entity_slug: str
-    instructor_slug: str | None = None
-    attribution_kind: str = "taught"
-    prose: str = ""
-    reason: str = ""
+    source_id: uuid.UUID | None = Field(None, description="Identifier of the WCS source this row belongs to.")
+    entity_slug: str = Field(..., description="Slug of the WCS entity.")
+    instructor_slug: str | None = Field(None, description="Slug of the WCS instructor.")
+    attribution_kind: str = Field("taught", description="Discriminator for the attribution row type.")
+    prose: str = Field("", description="Free-text content for this row.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsDrillPurposeAdditionCreate(BaseModel):
     """Payload for POST drill purpose addition admin endpoint."""
 
-    drill_entity_slug: str
-    source_id: uuid.UUID | None = None
-    skill_name: str
-    prose: str = ""
-    focus_context: str = ""
-    reason: str = ""
+    drill_entity_slug: str = Field(..., description="Slug of the drill entity this row attaches to.")
+    source_id: uuid.UUID | None = Field(None, description="Identifier of the WCS source this row belongs to.")
+    skill_name: str = Field(..., description="Human-readable skill name this row references.")
+    prose: str = Field("", description="Free-text content for this row.")
+    focus_context: str = Field("", description="Focus or context hint that scopes how this row applies.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsTechniqueRequirementAdditionCreate(BaseModel):
     """Payload for POST technique requirement addition admin endpoint."""
 
-    technique_entity_slug: str
-    source_id: uuid.UUID | None = None
-    skill_name: str
-    prose: str = ""
-    reason: str = ""
+    technique_entity_slug: str = Field(..., description="Slug of the technique entity this row attaches to.")
+    source_id: uuid.UUID | None = Field(None, description="Identifier of the WCS source this row belongs to.")
+    skill_name: str = Field(..., description="Human-readable skill name this row references.")
+    prose: str = Field("", description="Free-text content for this row.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsEntityRelationAdditionCreate(BaseModel):
     """Payload for POST entity relation addition admin endpoint."""
 
-    from_entity_slug: str
-    to_entity_slug: str
-    relation_kind: str
-    prose: str = ""
-    reason: str = ""
+    from_entity_slug: str = Field(..., description="Slug of the source entity in this relation.")
+    to_entity_slug: str = Field(..., description="Slug of the target entity in this relation.")
+    relation_kind: str = Field(..., description="Discriminator for the entity-to-entity relation type.")
+    prose: str = Field("", description="Free-text content for this row.")
+    reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
 class WcsSourceReferenceItem(BaseModel):
@@ -1126,93 +1128,95 @@ class WcsSourceReferenceItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    source_id: uuid.UUID
-    instructor_id: uuid.UUID
-    context: str
-    ref_type: str
-    origin: str
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    instructor_id: uuid.UUID = Field(..., description="Identifier of the WCS instructor.")
+    context: str = Field(..., description="Free-text context for the reference.")
+    ref_type: str = Field(..., description="Ref type.")
+    origin: str = Field(..., description="Originating source or upstream attribution metadata.")
 
 
 class WcsEntityViewItem(BaseModel):
     """Full entity view with attributions, definitions, relations, skill layer."""
 
-    entity: WcsEntityItem
-    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
-    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
-    relations_from: list[WcsEntityRelationItem] = Field(default_factory=list)
-    relations_to: list[WcsEntityRelationItem] = Field(default_factory=list)
-    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list)
+    entity: WcsEntityItem = Field(..., description="Entity.")
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list, description="Attributions sourced from this row's parent record.")
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list, description="Definitions sourced from this row's parent record.")
+    relations_from: list[WcsEntityRelationItem] = Field(default_factory=list, description="Relations from.")
+    relations_to: list[WcsEntityRelationItem] = Field(default_factory=list, description="Relations to.")
+    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list, description="Drill-to-purpose links sourced from this row.")
     technique_requirements: list[WcsTechniqueRequirementItem] = Field(
-        default_factory=list
+        default_factory=list,
+        description="Technique-to-requirement links sourced from this row.",
     )
 
 
 class WcsInstructorViewItem(BaseModel):
     """Full instructor view with attributions, definitions, and references."""
 
-    instructor: WcsInstructorItem
-    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
-    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
-    referenced_in: list[WcsSourceReferenceItem] = Field(default_factory=list)
+    instructor: WcsInstructorItem = Field(..., description="Instructor.")
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list, description="Attributions sourced from this row's parent record.")
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list, description="Definitions sourced from this row's parent record.")
+    referenced_in: list[WcsSourceReferenceItem] = Field(default_factory=list, description="Referenced in.")
 
 
 class WcsSourceViewItem(BaseModel):
     """Full source view with all canonical rows derived from it."""
 
-    source: WcsSourceItem
-    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list)
-    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list)
-    relations: list[WcsEntityRelationItem] = Field(default_factory=list)
-    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list)
+    source: WcsSourceItem = Field(..., description="Source.")
+    attributions: list[WcsSourceAttributionItem] = Field(default_factory=list, description="Attributions sourced from this row's parent record.")
+    definitions: list[WcsEntityDefinitionItem] = Field(default_factory=list, description="Definitions sourced from this row's parent record.")
+    relations: list[WcsEntityRelationItem] = Field(default_factory=list, description="Entity-to-entity relations sourced from this row.")
+    drill_purposes: list[WcsDrillPurposeItem] = Field(default_factory=list, description="Drill-to-purpose links sourced from this row.")
     technique_requirements: list[WcsTechniqueRequirementItem] = Field(
-        default_factory=list
+        default_factory=list,
+        description="Technique-to-requirement links sourced from this row.",
     )
-    references: list[WcsSourceReferenceItem] = Field(default_factory=list)
+    references: list[WcsSourceReferenceItem] = Field(default_factory=list, description="Bare-reference rows (instructors mentioned but not attributed).")
 
 
 class WcsWikiExportItem(BaseModel):
     """Bulk corpus export for wiki-curator-cog."""
 
-    entities: list[WcsEntityItem]
-    instructors: list[WcsInstructorItem]
-    sources: list[WcsSourceItem]
-    attributions: list[WcsSourceAttributionItem]
-    definitions: list[WcsEntityDefinitionItem]
-    relations: list[WcsEntityRelationItem]
-    drill_purposes: list[WcsDrillPurposeItem]
-    technique_requirements: list[WcsTechniqueRequirementItem]
-    references: list[WcsSourceReferenceItem]
-    exported_at: dt.datetime
+    entities: list[WcsEntityItem] = Field(..., description="WCS entity rows attached to this response.")
+    instructors: list[WcsInstructorItem] = Field(..., description="Instructor rows attached to this response.")
+    sources: list[WcsSourceItem] = Field(..., description="Source rows attached to this response.")
+    attributions: list[WcsSourceAttributionItem] = Field(..., description="Attributions sourced from this row's parent record.")
+    definitions: list[WcsEntityDefinitionItem] = Field(..., description="Definitions sourced from this row's parent record.")
+    relations: list[WcsEntityRelationItem] = Field(..., description="Entity-to-entity relations sourced from this row.")
+    drill_purposes: list[WcsDrillPurposeItem] = Field(..., description="Drill-to-purpose links sourced from this row.")
+    technique_requirements: list[WcsTechniqueRequirementItem] = Field(..., description="Technique-to-requirement links sourced from this row.")
+    references: list[WcsSourceReferenceItem] = Field(..., description="Bare-reference rows (instructors mentioned but not attributed).")
+    exported_at: dt.datetime = Field(..., description="Exported at.")
 
 
 class WcsAdminCorrectionResult(BaseModel):
     """Result of an admin correction or addition write."""
 
-    id: uuid.UUID
-    field: str | None = None
-    recomposed_source_ids: list[uuid.UUID] = Field(default_factory=list)
-    deferred: bool = False
-    message: str = ""
+    id: uuid.UUID = Field(..., description="Unique identifier.")
+    field: str | None = Field(None, description="Name of the field being corrected.")
+    recomposed_source_ids: list[uuid.UUID] = Field(default_factory=list, description="IDs of sources recomposed as a side effect of this action.")
+    deferred: bool = Field(False, description="Whether the action was deferred (e.g., global correction pending recompose).")
+    message: str = Field("", description="Human-readable message describing the result.")
 
 
 class WcsRecomposeResult(BaseModel):
     """Result of a manual compose_source run."""
 
-    source_id: uuid.UUID
-    attributions_written: int
-    definitions_written: int
-    relations_written: int
-    drill_purposes_written: int
-    technique_requirements_written: int
-    references_written: int
+    source_id: uuid.UUID = Field(..., description="Identifier of the WCS source this row belongs to.")
+    attributions_written: int = Field(..., description="Number of attribution rows written.")
+    definitions_written: int = Field(..., description="Number of definition rows written.")
+    relations_written: int = Field(..., description="Number of relation rows written.")
+    drill_purposes_written: int = Field(..., description="Number of drill-purpose rows written.")
+    technique_requirements_written: int = Field(..., description="Number of technique-requirement rows written.")
+    references_written: int = Field(..., description="Number of reference rows written.")
 
 
 class WcsGapItem(BaseModel):
     """Lightweight curation gap descriptor."""
 
-    slug: str
-    name: str
-    kind: str | None = None
-    count: int = 0
-    detail: str = ""
+    slug: str = Field(..., description="Lowercase, hyphen-separated canonical identifier.")
+    name: str = Field(..., description="Human-readable name.")
+    kind: str | None = Field(None, description="Discriminator for the entity kind (concept, technique, pattern, drill).")
+    count: int = Field(0, description="Number of items in this response.")
+    detail: str = Field("", description="Free-text detail about the gap finding.")

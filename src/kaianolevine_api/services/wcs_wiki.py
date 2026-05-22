@@ -124,6 +124,7 @@ async def list_entities(
     limit: int,
     offset: int,
 ) -> tuple[list[WcsEntityItem], int]:
+    """Return a paginated list of entities of the given kind plus the total count."""
     base = select(WcsEntity).where(
         WcsEntity.kind == kind,
         WcsEntity.merged_into_id.is_(None),
@@ -158,6 +159,7 @@ async def get_entity_view(
     slug: str,
     kind: str,
 ) -> WcsEntityViewItem | None:
+    """Build the full wiki view for one entity (slug + kind), or None if not found."""
     row = await session.execute(
         select(WcsEntity).where(
             WcsEntity.slug == slug,
@@ -281,6 +283,7 @@ async def list_instructors(
     limit: int,
     offset: int,
 ) -> tuple[list[WcsInstructorItem], int]:
+    """Return a paginated list of instructors plus the total instructor count."""
     base = select(WcsInstructor).where(WcsInstructor.merged_into_id.is_(None))
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
@@ -306,6 +309,7 @@ async def get_instructor_view(
     *,
     slug: str,
 ) -> WcsInstructorViewItem | None:
+    """Build the full wiki view for one instructor (slug), or None if not found."""
     row = await session.execute(
         select(WcsInstructor).where(
             WcsInstructor.slug == slug,
@@ -377,6 +381,7 @@ async def list_sources(
     limit: int,
     offset: int,
 ) -> tuple[list[WcsSourceItem], int]:
+    """Return a paginated list of sources visible to the user plus the total count."""
     visible_ids = await visible_source_ids_for_user(session, user_id)
     base = select(WcsSource).where(WcsSource.id.in_(visible_ids))
     total = (
@@ -405,6 +410,7 @@ async def get_source_view(
     *,
     source_id: uuid.UUID,
 ) -> WcsSourceViewItem | None:
+    """Build the full wiki view for one source, gated by visibility for the user."""
     source = await session.get(WcsSource, source_id)
     if source is None:
         return None
@@ -501,6 +507,7 @@ async def export_wiki_corpus(
     session: AsyncSession,
     user_id: str,
 ) -> WcsWikiExportItem:
+    """Return the full corpus snapshot (entities, instructors, sources, etc.) visible to the user."""
     visible_ids = await visible_source_ids_for_user(session, user_id)
     if not visible_ids:
         return WcsWikiExportItem(

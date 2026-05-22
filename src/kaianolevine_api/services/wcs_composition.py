@@ -50,6 +50,7 @@ class CompositionResult:
 
     @classmethod
     def from_counts(cls, counts: dict[str, int]) -> CompositionResult:
+        """Build a CompositionResult from a counts dict keyed by canonical-row category."""
         return cls(
             attributions_written=counts.get("attributions", 0),
             definitions_written=counts.get("definitions", 0),
