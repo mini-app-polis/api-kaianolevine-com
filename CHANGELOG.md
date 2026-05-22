@@ -1,3 +1,10 @@
+## [1.37.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.37.0...v1.37.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* testing and doc chnage only to address pipeline findings for DOC-010, DOC-007, DOC-006, and TEST-010 ([a54523d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a54523d6118cb84fd057f0223d7d6e22d3bc8340))
+
 # [1.37.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.36.0...v1.37.0) (2026-05-20)
 
 
