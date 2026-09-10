@@ -1,3 +1,17 @@
+# [1.56.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.55.1...v1.56.0) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 2 updates ([e40f263](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e40f263072084dcec46e943664baacf704205e79))
+* moving to common 5.7.1 ([304a036](https://github.com/mini-app-polis/api-kaianolevine-com/commit/304a0362c81060bd3c77d44efc417fb93e0666e7))
+* test setup ([57dbdc8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/57dbdc837395aa100d3b3eaa3a4a22167bf1b5b4))
+
+
+### Features
+
+* **environment:** mark non-production Discord messages built by the API ([78afbe9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/78afbe93df0ab87b00f0578868df39262542e7c7))
+
 ## [1.55.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.55.0...v1.55.1) (2026-09-09)
 
 
