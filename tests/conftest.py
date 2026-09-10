@@ -29,6 +29,14 @@ os.environ.setdefault(
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
 os.environ.setdefault("PREFECT_WEBHOOK_SECRET", "test-prefect-token")
+# Discord embed titles stay unmarked unless a test opts into non-production.
+# Unset would resolve to local via the shared environment resolver.
+# Deterministic, not setdefault: Settings is constructed at import time
+# here, and setdefault would defer to whatever ENVIRONMENT the launching
+# shell carries — which is how three Discord-title assertions passed in
+# CI and failed locally. The autouse fixture below covers per-test
+# overrides; this covers import time.
+os.environ["ENVIRONMENT"] = "production"
 
 from identity.store import (  # noqa: E402
     IdentityBase,
@@ -228,3 +236,19 @@ async def seed_identity(session: AsyncSession) -> None:
                 )
             )
     await session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _production_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the environment so assertions do not depend on the host shell.
+
+    Effect gates and the Discord title prefix both resolve from the
+    environment, and an unset one resolves to local. Left to inherit
+    whatever ENVIRONMENT the launching shell carries, this suite asserts
+    different rendered titles on a laptop than in CI — and the lenient
+    run is the one that hides the regression. Tests that want the
+    non-production path set ENVIRONMENT themselves.
+    """
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("PREFECT_TRIGGER_ENABLED", raising=False)
+    monkeypatch.delenv("HEALTHCHECKS_ENABLED", raising=False)

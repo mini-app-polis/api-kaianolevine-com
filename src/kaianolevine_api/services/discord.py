@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 import sentry_sdk
+from mini_app_polis.environment import Environment, current_environment
 from mini_app_polis.logger import (
     LOG_FAILURE,
     LOG_SUCCESS,
@@ -35,6 +36,19 @@ logger = get_logger()
 
 #: Suffix Discord exposes for GitHub-shaped payloads.
 GITHUB_SUFFIX = "/github"
+
+
+def environment_prefix() -> str:
+    """``"[DEVELOPMENT] "`` outside production, empty string inside it.
+
+    Matches the prefix ``mini_app_polis.pipeline_status`` puts on cog run
+    reports, so every labeled message in the channel is labeled the same
+    way regardless of which side of the API it was built on.
+    """
+    env = current_environment()
+    if env is Environment.PRODUCTION:
+        return ""
+    return f"[{env.value.upper()}] "
 
 
 def discord_base_url(settings: Settings) -> str | None:
