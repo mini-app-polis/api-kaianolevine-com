@@ -112,7 +112,7 @@ def build_message(payload: PrefectWebhookPayload, repo: str) -> dict[str, Any]:
         description_parts.append(f"run `{payload.flow_run_id}`")
 
     embed: dict[str, Any] = {
-        "title": f"{repo} · {flow_name}",
+        "title": f"{discord.environment_prefix()}{repo} · {flow_name}",
         "description": " · ".join(description_parts),
         "color": _STATE_COLORS.get(state_type, _DEFAULT_COLOR),
         "footer": {"text": f"{state_type or 'UNKNOWN'} · prefect_webhook"},

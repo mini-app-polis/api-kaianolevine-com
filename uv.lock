@@ -911,8 +911,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
@@ -1198,7 +1198,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44.0.1,<51.0" },
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
-    { name = "miniapppolis-common-utils", specifier = ">=5.0,<6" },
+    { name = "miniapppolis-common-utils", specifier = ">=5.6.0,<6" },
     { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.0,<3" },
     { name = "openai", specifier = ">=1.40,<4.0" },
     { name = "pgvector", specifier = ">=0.3,<1.0" },
@@ -1222,7 +1222,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "miniapppolis-common-utils"
-version = "5.0.2"
+version = "5.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1239,9 +1239,9 @@ dependencies = [
     { name = "spotipy" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/61/534e2848064a521d4edb9a8a8aba5863a2c7a5bfe9e3c9f07132ae008280/miniapppolis_common_utils-5.0.2.tar.gz", hash = "sha256:6dccf666fd9370cf8dcad54cc1b5ef022ee4ff8dfc5c727fd55f12cc6b9f2bd2", size = 233801, upload-time = "2026-09-06T16:51:43.831Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/ef/2fc76dccb4e8b6d48744d142ea2c7c877635433aea61abf1c434b987c45c/miniapppolis_common_utils-5.6.0.tar.gz", hash = "sha256:917375c157bb455cbf313bd81eb792bb235162bafafc4bf2597caaf1b0502525", size = 263239, upload-time = "2026-09-10T20:39:10.86Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/8a/36bf1b3635f72001b26d77c87a624f46841d115e8fa224276568a91594ca/miniapppolis_common_utils-5.0.2-py3-none-any.whl", hash = "sha256:a8b3d5ed7358a5482c25c7d9fd0f4ceed122dd1ea21fdde3ee7d0d7009013561", size = 79151, upload-time = "2026-09-06T16:51:42.61Z" },
+    { url = "https://files.pythonhosted.org/packages/04/a0/b2c86f703028cfa7cd2be446a5ad6c4e8be42419ab8b5f3239d97fc9e834/miniapppolis_common_utils-5.6.0-py3-none-any.whl", hash = "sha256:42ca3ebc1b36e91f5431eefecdd558fe113d36b97d54ae87716612d125a1f2b0", size = 100926, upload-time = "2026-09-10T20:39:09.736Z" },
 ]
 
 [[package]]
@@ -2164,8 +2164,8 @@ name = "standard-aifc"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "audioop-lts" },
-    { name = "standard-chunk" },
+    { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "standard-chunk", marker = "python_full_version >= '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/53/6050dc3dde1671eb3db592c13b55a8005e5040131f7509cef0215212cb84/standard_aifc-3.13.0.tar.gz", hash = "sha256:64e249c7cb4b3daf2fdba4e95721f811bde8bdfc43ad9f936589b7bb2fae2e43", size = 15240, upload-time = "2024-10-30T16:01:31.772Z" }
 wheels = [
@@ -2186,7 +2186,7 @@ name = "standard-sunau"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "audioop-lts" },
+    { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/e3/ce8d38cb2d70e05ffeddc28bb09bad77cfef979eb0a299c9117f7ed4e6a9/standard_sunau-3.13.0.tar.gz", hash = "sha256:b319a1ac95a09a2378a8442f403c66f4fd4b36616d6df6ae82b8e536ee790908", size = 9368, upload-time = "2024-10-30T16:01:41.626Z" }
 wheels = [

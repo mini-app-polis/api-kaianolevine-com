@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from mini_app_polis.environment import current_environment
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +25,10 @@ class Settings(BaseSettings):
     # both happen at once.
     DATABASE_URL_MIGRATIONS: str | None = None
 
-    ENVIRONMENT: str = "development"
+    # Defaults from the shared fleet resolver so an unset ENVIRONMENT on
+    # Railway still picks up RAILWAY_ENVIRONMENT_NAME rather than the old
+    # literal "development" that mistagged every production Sentry event.
+    ENVIRONMENT: str = Field(default_factory=lambda: current_environment().value)
     API_VERSION: str = "1.0"
     STANDARDS_VERSION: str = "3.4.2"
     SENTRY_DSN_API: str | None = None

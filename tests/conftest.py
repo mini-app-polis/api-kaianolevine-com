@@ -29,6 +29,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
 os.environ.setdefault("PREFECT_WEBHOOK_SECRET", "test-prefect-token")
+# Discord embed titles stay unmarked unless a test opts into non-production.
+# Unset would resolve to local via the shared environment resolver.
+os.environ.setdefault("ENVIRONMENT", "production")
 
 from identity.store import (  # noqa: E402
     IdentityBase,

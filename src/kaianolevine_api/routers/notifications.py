@@ -168,7 +168,10 @@ def build_workflow_message(payload: dict[str, Any]) -> dict[str, Any]:
         description_parts.append(f"`{sha[:7]}`")
 
     embed: dict[str, Any] = {
-        "title": f"{run.get('name') or 'Workflow'} · {conclusion}",
+        "title": (
+            f"{discord.environment_prefix()}"
+            f"{run.get('name') or 'Workflow'} · {conclusion}"
+        ),
         "color": _CONCLUSION_COLORS.get(conclusion, _DEFAULT_COLOR),
     }
     if run.get("html_url"):
