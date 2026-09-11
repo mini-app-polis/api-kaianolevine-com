@@ -1,3 +1,10 @@
+# [1.57.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.56.0...v1.57.0) (2026-09-11)
+
+
+### Features
+
+* route discord notifications to separate channels ([ef4ca3e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ef4ca3ebe5c35b35571d00c7ffb4b7105ea107fa))
+
 # [1.56.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.55.1...v1.56.0) (2026-09-10)
 
 
