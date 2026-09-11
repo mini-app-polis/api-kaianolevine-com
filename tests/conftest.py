@@ -179,6 +179,7 @@ _DEV_ROLES = {
         "wcs.transcripts.write",
     ],
     "notifier": ["notify.messages.send"],
+    "standards-publisher": ["standards.catalog.publish"],
 }
 
 

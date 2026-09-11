@@ -1424,3 +1424,42 @@ class WcsEntityRelationAddition(Base):
     created_by: Mapped[str] = mapped_column(
         Text, nullable=False, default="", server_default=""
     )
+
+
+class StandardsCatalog(Base):
+    """One published version of the compiled standards catalog.
+
+    The row is the rubric as it stood at a release: every rule, the schema
+    blocks that give the rules meaning, and the version findings pin
+    themselves to. Written once by ecosystem-standards' release job and
+    never updated — see migrations/028 for why immutability is the point
+    rather than a convenience.
+    """
+
+    __tablename__ = "standards_catalogs"
+
+    version: Mapped[str] = mapped_column(String, primary_key=True)
+
+    #: Zero-padded form of ``version``, so "latest" can be a single indexed
+    #: ORDER BY rather than fetching every row to compare semver in Python.
+    version_sort: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    #: When the compiler ran. Distinct from published_at, and deliberately
+    #: excluded when comparing two payloads for equality: recompiling an
+    #: unchanged catalog produces a new timestamp and identical rules.
+    compiled_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    rule_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    #: JSONB on PostgreSQL; JSON under SQLite in tests.
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    #: The principal that published it, so the audit trail names a publisher
+    #: rather than recording that one occurred.
+    published_by: Mapped[str] = mapped_column(String, nullable=False)
+
+    published_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

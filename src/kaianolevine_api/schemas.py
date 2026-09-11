@@ -1864,3 +1864,83 @@ class GithubStatus(BaseModel):
         ),
     )
     totals: GithubTotals = Field(..., description="Fleet-wide headline numbers.")
+
+
+# ── Standards catalog schemas ─────────────────────────────────────────────────
+
+
+class StandardsCatalogPublish(BaseModel):
+    """A compiled standards catalog, as ecosystem-standards' CI posts it.
+
+    Only the fields this API reasons about are declared. Everything else the
+    compiler emits — dimensions, severities, statuses, the schema blocks —
+    rides along under ``extra="allow"`` and is stored verbatim. That is
+    deliberate: the catalog's shape is owned by the standards repo, and a
+    schema here that enumerated every block would have to be edited in step
+    with it, which is a second source of truth and the thing this route
+    exists to remove.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    version: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="The standards version this catalog is, from package.json.",
+    )
+    compiled_at: dt.datetime = Field(
+        ..., description="When the compiler ran. Not when it was published."
+    )
+    rule_count: int = Field(
+        ...,
+        ge=1,
+        description=(
+            "Rules in the catalog. Required and non-zero so that a compiler "
+            "that silently produced nothing cannot publish successfully."
+        ),
+    )
+    rules: list[dict[str, Any]] = Field(
+        ...,
+        min_length=1,
+        description="Every rule, including those with checkable: false.",
+    )
+
+    @model_validator(mode="after")
+    def rule_count_matches(self) -> StandardsCatalogPublish:
+        """The declared count and the actual rules agree.
+
+        A mismatch means the document was assembled by something other than
+        the compiler, or was truncated in transit. Either way it should not
+        become the version a year of findings pin themselves to.
+        """
+        if self.rule_count != len(self.rules):
+            raise ValueError(
+                f"rule_count is {self.rule_count} but the catalog carries "
+                f"{len(self.rules)} rules"
+            )
+        return self
+
+
+class StandardsCatalogItem(BaseModel):
+    """What a publish returns — the receipt, not the catalog.
+
+    Echoing the document back would double the bytes on the wire for a
+    caller that just sent it.
+    """
+
+    version: str = Field(..., description="The version published.")
+    rule_count: int = Field(..., description="Rules in the published catalog.")
+    compiled_at: dt.datetime = Field(..., description="When the compiler ran.")
+    published_at: dt.datetime = Field(
+        ..., description="When this version first reached the API."
+    )
+    published_by: str = Field(..., description="Principal that published it.")
+    created: bool = Field(
+        ...,
+        description=(
+            "True when this publish stored the version. False when the "
+            "version was already present with identical content — a "
+            "re-publish is idempotent, not an error."
+        ),
+    )

@@ -124,6 +124,19 @@ MACHINES: tuple[Machine, ...] = (
         roles=("notifier",),
         notes="POST /v1/notify. Ad-hoc Discord messages from scripts and one-offs.",
     ),
+    # ecosystem-standards publishes the compiled rule catalog when
+    # semantic-release cuts a version. It is the one machine whose key is a
+    # repository-level GitHub secret rather than an organisation-level one:
+    # every repo's CI holds a credential for asking that its own repo be
+    # evaluated, and a key that could also rewrite the rubric would erase the
+    # difference between those two requests. Declared as its own machine so
+    # the audit trail names which principal published a version, rather than
+    # recording that some CI job did.
+    Machine(
+        name="ecosystem-standards",
+        roles=("standards-publisher", "notifier"),
+        notes="POST /v1/standards/catalog from the release job.",
+    ),
     # watcher-cog polls Drive and calls no API endpoint but its own
     # notifications. It was declared with no roles at all until /v1/notify
     # existed; "notifier" is the first thing it has ever had a use for.

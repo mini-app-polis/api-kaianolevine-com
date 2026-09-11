@@ -33,6 +33,7 @@ from .routers import (
     resume,
     sets,
     spotify,
+    standards,
     stats,
     tracks,
     wcs_admin,
@@ -259,6 +260,7 @@ def _build_app() -> FastAPI:
     app.include_router(flags.router, prefix="/v1", tags=["flags"])
     app.include_router(github_status.router, prefix="/v1", tags=["github"])
     app.include_router(identity_debug.router, prefix="/v1", tags=["identity"])
+    app.include_router(standards.router, prefix="/v1", tags=["standards"])
     app.include_router(stats.router, prefix="/v1", tags=["stats"])
     app.include_router(spotify.router, prefix="/v1", tags=["spotify"])
     app.include_router(ingest.router, prefix="/v1", tags=["ingest"])
