@@ -1,3 +1,10 @@
+# [1.58.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.57.0...v1.58.0) (2026-09-11)
+
+
+### Features
+
+* serve the standards catalog as versioned data ([61c0b0e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/61c0b0e8e3fc48fedac11475f32c8eeb3a381f90))
+
 # [1.57.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.56.0...v1.57.0) (2026-09-11)
 
 
