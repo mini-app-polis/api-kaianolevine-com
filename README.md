@@ -222,11 +222,38 @@ Three-layer observability, aligned with the ecosystem standard:
 
 ### Notifications
 
-`/v1/webhooks/github` and `/v1/notify` both post to one Discord channel
-webhook (`DISCORD_WEBHOOK_URL`, Doppler-managed). GitHub payloads go to
-that URL's `/github` suffix so Discord renders its own embed from the
-bytes GitHub signed; everything else goes to the bare URL as an ordinary
-message. `services.discord` is the only module that calls it.
+Five producers reach Discord and `services.discord` is the only module
+that calls it. GitHub payloads go to a webhook URL's `/github` suffix so
+Discord renders its own embed from the bytes GitHub signed; everything
+else goes to the bare URL as an ordinary message.
+
+Messages are routed to one of four channels, chosen at the call site
+because that is the last place that knows what a message means:
+
+| Channel | What lands there |
+|---|---|
+| `errors` | failed CI on the default branch, every Prefect crash callback, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
+| `activity` | the running list of committed data changes, from the request middleware |
+| `runs` | cog run reports through `/v1/notify`, every severity |
+| `default` | everything else — pushes, pull requests, issues, releases, green CI |
+
+Each channel has its own webhook variable — `DISCORD_WEBHOOK_URL_DEFAULT`,
+`DISCORD_WEBHOOK_URL_ERRORS`, `DISCORD_WEBHOOK_URL_ACTIVITY`,
+`DISCORD_WEBHOOK_URL_RUNS` — and each falls back to `DISCORD_WEBHOOK_URL`
+when unset. Separate variables rather than one map so each rotates on its
+own and reads at a glance in Doppler.
+
+The fallback is the rollout strategy: channels are configured one at a
+time, and a channel that exists in code but not yet in Discord delivers to
+the original webhook instead of vanishing. The corollary is that an unset
+variable is a silent no-op that looks exactly like an unsplit channel, so
+every send logs `channel=` and the producer that chose it.
+
+Cog crashes are the one case that reaches `errors` without the cog
+choosing it. A cog's own reports all go to `runs` so that channel is a
+complete record of the fleet's runs; the crash reaches `errors` through
+Prefect's webhook instead. That is what the two overlapping crash reports
+are now for, rather than being redundant.
 
 The GitHub route exists because GitHub's webhooks filter by event type and
 nothing else. "Pushes to main", "new pull requests" and "releases, but not
@@ -241,7 +268,7 @@ points at this route; the policy is one function per event type in
 | `pull_request` | action is `opened` or `closed` |
 | `issues` | action is `opened` |
 | `release` | action is `published` |
-| `workflow_run` | run completed on the default branch — every conclusion, pass or fail |
+| `workflow_run` | run completed on the default branch — every conclusion, pass or fail; `failure`, `timed_out` and `action_required` route to `errors`, the rest to `default` |
 
 Two delivery shapes, because Discord's GitHub endpoint is not universal.
 `push`, `pull_request`, `issues` and `release` are forwarded byte-for-byte
@@ -262,8 +289,8 @@ dropped, so a pull request whose CI fails is silent until it merges. And
 rebase-and-merge cannot be told apart from a direct push, so a rebase
 merge is announced twice — once by the PR closing, once by the push.
 
-`POST /v1/prefect-webhook` notifies the same channel when Prefect Cloud
-reports a flow run in a failing state, and writes no rows: a crashed
+`POST /v1/prefect-webhook` notifies the `errors` channel when Prefect
+Cloud reports a flow run in a failing state, and writes no rows: a crashed
 flow was never graded against the standards catalog. It exists even
 though cogs report their own failures, because
 `make_failure_hook` runs *inside the cog process* — when that process is
@@ -281,8 +308,8 @@ which costs more than the nuisance it prevents.
 `PREFECT_WEBHOOK_SECRET` is honoured in `X-Prefect-Token` when set and
 skipped when not, so turning it on later needs no code change.
 
-`/v1/notify` requires `notify.messages.send`, carried by the `notifier`
-role. Every declared machine holds it: the scope posts a message and does
+`/v1/notify` posts to the `runs` channel and requires
+`notify.messages.send`, carried by the `notifier` role. Every declared machine holds it: the scope posts a message and does
 nothing else, and a cog that cannot report its own failure reports it
 later than it should. `ops-notifier` exists for notifications that belong
 to no cog — scripts, one-offs, GitHub Actions — so those never have to

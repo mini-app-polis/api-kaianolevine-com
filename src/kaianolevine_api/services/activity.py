@@ -1,7 +1,10 @@
 """The running list — what changed, and what broke.
 
-Everything this service does that is worth hearing about arrives in one
-Discord channel, in one shape, from one place. Two producers feed it.
+Everything this service does that is worth hearing about arrives in Discord
+in one shape, from one place. Two producers feed it, and they no longer share
+a channel: changes go to ``activity``, faults to ``errors`` alongside every
+other broken thing in the fleet. The split is by what the reader is doing —
+``activity`` is scrolled back through after the fact, ``errors`` is watched.
 
 **Data changes.** A SQLAlchemy listener tallies every ORM insert, update
 and delete that actually committed, and the middleware posts one message
@@ -297,6 +300,8 @@ async def emit_change(
         footer = f"{footer}\n{_LEGEND}"
     await discord.send_message(
         settings=settings,
+        channel=discord.CHANNEL_ACTIVITY,
+        context="activity/change",
         payload={
             "embeds": [
                 {
@@ -325,6 +330,8 @@ async def emit_fault(
         description = f"{description}\n{_FENCE}{detail[:1500]}{_FENCE}"
     await discord.send_message(
         settings=settings,
+        channel=discord.CHANNEL_ERRORS,
+        context="activity/fault",
         payload={
             "embeds": [
                 {

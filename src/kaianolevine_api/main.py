@@ -132,6 +132,8 @@ async def _reconcile_identity_registry() -> None:
             detail = activity._fault_detail(exc)
             await discord.send_message(
                 settings=get_settings(),
+                channel=discord.CHANNEL_ERRORS,
+                context="boot",
                 payload={
                     "embeds": [
                         {

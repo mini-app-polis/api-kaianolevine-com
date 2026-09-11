@@ -178,8 +178,14 @@ async def prefect_webhook(
         )
     )
 
+    # Every message this route sends is a failing state — PREFECT_NOTIFY_STATES
+    # gates that above — so the channel is a property of the route rather than
+    # of the payload, and there is nothing to inspect.
     forwarded = await discord.send_message(
-        settings=settings, payload=build_message(payload, repo)
+        settings=settings,
+        payload=build_message(payload, repo),
+        channel=discord.CHANNEL_ERRORS,
+        context="prefect",
     )
     return _result(
         settings,
