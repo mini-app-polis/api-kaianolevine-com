@@ -154,12 +154,21 @@ async def test_reconcile_failure_reports_and_still_boots(
     success, so the failure has to leave the process to be found at all.
     """
     sent: list[dict] = []
+    channels: list[str | None] = []
 
     async def _explode(_session) -> dict[str, int]:
         raise RuntimeError("connection reset during reconcile")
 
-    async def _capture(*, settings, payload) -> bool:
+    # The double spells out send_message's keyword-only signature rather
+    # than taking **kwargs. The boot send is wrapped in
+    # contextlib.suppress(Exception), so a stub that cannot accept an
+    # argument the real function grew raises TypeError into that suppression
+    # and the failure presents as "nothing was sent" — which is also what a
+    # genuine regression looks like. Naming the arguments keeps the two
+    # apart: a new required one fails loudly here instead.
+    async def _capture(*, settings, payload, channel=None, context=None) -> bool:
         sent.append(payload)
+        channels.append(channel)
         return True
 
     monkeypatch.setattr(reg, "reconcile", _explode)
@@ -169,6 +178,7 @@ async def test_reconcile_failure_reports_and_still_boots(
         pass
 
     assert len(sent) == 1, "a failed reconcile must reach the channel"
+    assert channels == [discord.CHANNEL_ERRORS], "and it is a broken thing"
     embed = sent[0]["embeds"][0]
     assert "RuntimeError" in embed["description"]
     assert "revocation" in embed["description"]
@@ -190,7 +200,7 @@ async def test_reconcile_failure_message_carries_no_row_data(
             Exception("UNIQUE constraint failed"),
         )
 
-    async def _capture(*, settings, payload) -> bool:
+    async def _capture(*, settings, payload, channel=None, context=None) -> bool:
         sent.append(payload)
         return True
 
@@ -216,7 +226,7 @@ async def test_reconcile_failure_survives_a_dead_discord(
     async def _explode(_session) -> dict[str, int]:
         raise RuntimeError("connection reset during reconcile")
 
-    async def _also_explode(*, settings, payload) -> bool:
+    async def _also_explode(*, settings, payload, channel=None, context=None) -> bool:
         raise RuntimeError("discord is down too")
 
     monkeypatch.setattr(reg, "reconcile", _explode)

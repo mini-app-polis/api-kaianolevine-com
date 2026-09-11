@@ -1,6 +1,8 @@
 """Discord notification routes — one for GitHub, one for the fleet.
 
-Two callers, two admission rules, one destination.
+Two callers, two admission rules, and three channels between them: failed CI
+goes to ``errors``, cog run reports to ``runs``, everything else to
+``default``. ``services.discord`` resolves a channel name to a webhook.
 
 ``POST /v1/webhooks/github`` is the org-level webhook for both GitHub orgs. It
 is public in the sense that no bearer token reaches it, and gated instead by
@@ -99,6 +101,14 @@ _CONCLUSION_COLORS: dict[str, int] = {
 }
 _DEFAULT_COLOR = 0x58A6FF
 
+#: Conclusions that send a run to the errors channel — the red and amber
+#: half of the palette above. The grey conclusions stay on the default
+#: channel: ``cancelled`` is someone pressing the button, ``skipped`` is a
+#: path condition, ``stale`` is GitHub garbage-collecting a superseded run,
+#: and ``neutral`` is a job declining to have an opinion. Routing those to
+#: errors is how a channel earns being muted.
+_ERROR_CONCLUSIONS = frozenset({"failure", "timed_out", "action_required"})
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -108,12 +118,21 @@ class Decision:
     rendered here rather than by Discord. When it is None and ``forward`` is
     true, the original payload is passed through to Discord's ``/github``
     endpoint unchanged.
+
+    ``channel`` is decided here for the same reason the rest of the policy
+    is: the per-event functions are the last place that knows what the
+    delivery means. Only ``workflow_run`` ever chooses anything but the
+    default, and it is also the only event rendered locally — the
+    pass-through events (push, pull_request, issues, release) have no
+    failure state to route on, so the fact that their bodies are forwarded
+    unparsed costs nothing here.
     """
 
     forward: bool
     reason: str
     outcome: str | None = None
     message: dict[str, Any] | None = None
+    channel: str = discord.CHANNEL_DEFAULT
 
 
 def verify_github_signature(
@@ -310,6 +329,11 @@ def _decide_workflow_run(payload: dict[str, Any], default_branch: str) -> Decisi
         "forwarded",
         outcome=outcome or "unknown",
         message=build_workflow_message(payload),
+        channel=(
+            discord.CHANNEL_ERRORS
+            if outcome in _ERROR_CONCLUSIONS
+            else discord.CHANNEL_DEFAULT
+        ),
     )
 
 
@@ -431,13 +455,17 @@ async def github_webhook(
         with_log_prefix(
             LOG_START,
             f"forwarding github event repo={repo_name} event={event} "
-            f"outcome={decision.outcome} delivery={delivery}",
+            f"outcome={decision.outcome} channel={decision.channel} "
+            f"delivery={delivery}",
         )
     )
 
     if decision.message is not None:
         forwarded = await discord.send_message(
-            settings=settings, payload=decision.message
+            settings=settings,
+            payload=decision.message,
+            channel=decision.channel,
+            context=f"github/{event}",
         )
     else:
         forwarded = await discord.forward_github_event(
@@ -445,6 +473,7 @@ async def github_webhook(
             raw_body=raw_body,
             event=event,
             delivery=delivery,
+            channel=decision.channel,
         )
 
     return _result(
@@ -462,8 +491,11 @@ async def github_webhook(
     summary="Send an ad-hoc Discord notification",
     description=(
         "First-party notification path for cogs and scripts. Takes a Discord "
-        "message body (content and/or embeds) and posts it to the "
-        "notification channel. Requires notify.messages.send."
+        "message body (content and/or embeds) and posts it to the runs "
+        "channel, whatever the severity — a cog's reports stay together so "
+        "that channel is a complete record of the fleet's runs, and crashes "
+        "reach the errors channel by way of the Prefect webhook instead. "
+        "Requires notify.messages.send."
     ),
 )
 async def notify(
@@ -485,7 +517,12 @@ async def notify(
         )
     )
 
-    sent = await discord.send_message(settings=settings, payload=payload.to_discord())
+    sent = await discord.send_message(
+        settings=settings,
+        payload=payload.to_discord(),
+        channel=discord.CHANNEL_RUNS,
+        context="notify",
+    )
     if not sent:
         raise api_error(502, "notify_failed", "Discord rejected the notification")
 

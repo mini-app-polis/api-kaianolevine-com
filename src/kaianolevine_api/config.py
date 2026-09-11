@@ -58,10 +58,28 @@ class Settings(BaseSettings):
     TURNSTILE_SECRET_KEY: str | None = None
 
     # Discord notifications (GitHub CI failures + the /notify route).
-    # One webhook URL for both: services.discord appends Discord's /github
+    # The fallback webhook, and the destination for any channel whose own
+    # variable below is unset. services.discord appends Discord's /github
     # suffix for GitHub-shaped payloads and posts to the bare URL otherwise,
     # so a value pasted with the suffix already on it still works.
     DISCORD_WEBHOOK_URL: str | None = None
+    # One webhook per channel. services.discord maps its CHANNEL_* constants
+    # to these names; nothing else reads them.
+    #
+    # All four optional, and each falls back to DISCORD_WEBHOOK_URL above
+    # when unset. That fallback is the rollout strategy: the channels can be
+    # filled in one at a time, and a channel that exists in code before it
+    # exists in Discord delivers to the original webhook instead of being
+    # dropped. The corollary is that an unset variable is indistinguishable
+    # from a channel nobody split out yet, which is why services.discord
+    # logs the resolved channel and its producer on every send.
+    #
+    # Separate variables rather than one JSON map so each can be rotated on
+    # its own and read at a glance in Doppler.
+    DISCORD_WEBHOOK_URL_DEFAULT: str | None = None
+    DISCORD_WEBHOOK_URL_ERRORS: str | None = None
+    DISCORD_WEBHOOK_URL_ACTIVITY: str | None = None
+    DISCORD_WEBHOOK_URL_RUNS: str | None = None
     # Shared secret configured on the GitHub org webhook. Unset means the
     # route rejects every delivery rather than accepting unsigned ones.
     GITHUB_WEBHOOK_SECRET: str | None = None
