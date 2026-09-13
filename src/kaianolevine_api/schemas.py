@@ -1944,3 +1944,92 @@ class StandardsCatalogItem(BaseModel):
             "re-publish is idempotent, not an error."
         ),
     )
+
+
+# ── Evaluation trigger schemas ────────────────────────────────────────────────
+
+
+class EvaluationRunRequest(BaseModel):
+    """Ask for one repository to be evaluated.
+
+    Shaped for a release job: everything here is something CI already
+    knows. Nothing is looked up in a registry, which is deliberate — the
+    repository's own `evaluator.yaml` says what it is.
+    """
+
+    repo: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Repository name, without the org.",
+    )
+    ref: str = Field(
+        "main",
+        min_length=1,
+        max_length=200,
+        description="Branch or tag to evaluate. A release job sends its tag.",
+    )
+    org: str = Field(
+        "mini-app-polis", min_length=1, max_length=200, description="Owning GitHub org."
+    )
+    mode: Literal["deterministic", "llm"] = Field(
+        "deterministic",
+        description=(
+            "Which engine to run. Deterministic is the release-path default: "
+            "no token cost, and nothing in CI is waiting on it."
+        ),
+    )
+    repo_id: str | None = Field(
+        None,
+        max_length=200,
+        description=(
+            "The id findings are filed under. Defaults to the repository name, "
+            "which differs only for a monorepo app."
+        ),
+    )
+    run_id: str | None = Field(
+        None,
+        max_length=200,
+        description="Group these findings with an existing run. Usually omitted.",
+    )
+
+
+class EvaluationRunAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has been evaluated yet."""
+
+    accepted: bool = Field(True, description="The evaluator took the job.")
+    run_id: str = Field(..., description="Run the findings will be filed under.")
+    repo: str = Field(..., description="Repository that will be evaluated.")
+    ref: str = Field(..., description="Ref that will be evaluated.")
+    mode: str = Field(..., description="Engine that will run.")
+
+
+class EvaluationSweepRequest(BaseModel):
+    """Ask for every repository to be evaluated.
+
+    The occasional pass, not the release path. Two releases invalidate every
+    repository's last result at once — a new standards catalog and a new
+    evaluator — and they are what send this. Nothing names a repository: the
+    evaluator reads the registry.
+    """
+
+    mode: Literal["deterministic", "llm"] = Field(
+        "deterministic",
+        description=(
+            "Which engine to run against every repository. Fleet-wide llm is "
+            "the expensive one and is never a release default."
+        ),
+    )
+    run_id: str | None = Field(
+        None,
+        max_length=200,
+        description="Group these findings with an existing run. Usually omitted.",
+    )
+
+
+class EvaluationSweepAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has been evaluated yet."""
+
+    accepted: bool = Field(True, description="The evaluator took the sweep.")
+    run_id: str = Field(..., description="Run the findings will be filed under.")
+    mode: str = Field(..., description="Engine that will run.")

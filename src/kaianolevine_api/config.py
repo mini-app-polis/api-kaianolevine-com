@@ -165,6 +165,16 @@ class Settings(BaseSettings):
     # posting flow states, the worst a stranger can do with the URL is put
     # noise in a channel, and a required header would be a new way for the
     # crash backstop to fail silently. See routers.webhook.
+    # Where evaluator-cog listens, and the secret it expects.
+    #
+    # Its public address rather than Railway's internal DNS: the evaluator
+    # is not expected to stay on Railway, and an internal hostname is the
+    # kind of platform affordance that has to be unpicked at the move. The
+    # hop is authenticated by the shared secret below, which the evaluator
+    # requires — it refuses every request when its own copy is unset.
+    EVALUATOR_INVOKE_URL: str | None = None
+    EVALUATOR_INVOKE_SECRET: str | None = None
+
     PREFECT_WEBHOOK_SECRET: str | None = None
     # Which Prefect state types are worth a message. The cogs' own failure
     # hooks already report what they can; this route is the backstop for
