@@ -124,6 +124,17 @@ MACHINES: tuple[Machine, ...] = (
         roles=("notifier",),
         notes="POST /v1/notify. Ad-hoc Discord messages from scripts and one-offs.",
     ),
+    # The identity a repository's CI presents when it asks for itself to be
+    # evaluated on release. Its key is an organisation-level GitHub secret,
+    # readable by every repository in the fleet — so it holds exactly one
+    # scope, evaluations.runs.create, and cannot write a finding. A leaked
+    # CI key can cause work to happen; it cannot forge the result of that
+    # work, which is the distinction worth keeping.
+    Machine(
+        name="ci-validator",
+        roles=("evaluation-trigger", "notifier"),
+        notes="POST /v1/evaluations/runs from a repository's release job.",
+    ),
     # ecosystem-standards publishes the compiled rule catalog when
     # semantic-release cuts a version. It is the one machine whose key is a
     # repository-level GitHub secret rather than an organisation-level one:

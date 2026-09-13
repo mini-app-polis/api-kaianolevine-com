@@ -180,6 +180,7 @@ _DEV_ROLES = {
     ],
     "notifier": ["notify.messages.send"],
     "standards-publisher": ["standards.catalog.publish"],
+    "evaluation-trigger": ["evaluations.runs.create"],
 }
 
 

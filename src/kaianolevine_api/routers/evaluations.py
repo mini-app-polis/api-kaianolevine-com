@@ -13,11 +13,15 @@ from ..database import get_db_session
 from ..models import PipelineEvaluation as DbEval
 from ..schemas import (
     Envelope,
+    EvaluationRunAccepted,
+    EvaluationRunRequest,
     EvaluationSummaryItem,
     PipelineEvaluationCreate,
     PipelineEvaluationItem,
+    api_error,
     success_envelope,
 )
+from ..services import evaluation_dispatch
 
 router = APIRouter()
 
@@ -315,5 +319,62 @@ async def create_evaluation(
         source=row.source,
         flow_name=row.flow_name,
         evaluated_at=row.evaluated_at,
+    )
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+@router.post(
+    "/evaluations/runs",
+    response_model=Envelope[EvaluationRunAccepted],
+    status_code=202,
+    summary="Ask for a repository to be evaluated",
+    description=(
+        "Hands one repository to the evaluator and acknowledges. The "
+        "evaluation runs afterwards; findings arrive on /v1/evaluations."
+    ),
+)
+async def create_evaluation_run(
+    payload: EvaluationRunRequest,
+    principal: Principal = Depends(require_scope("evaluations.runs.create")),
+) -> Envelope[EvaluationRunAccepted]:
+    """Accept one evaluation request and hand it to the evaluator.
+
+    The caller is a release job, and its contract is fire-and-forget: it
+    posts, reads the acknowledgement, and its runner shuts down. So the
+    interesting question is not what this returns but whether the job
+    landed — a job that never reaches the evaluator produces no findings,
+    no failures, and a repository whose conformance record stops where it
+    was while looking healthy.
+
+    The hand-off is therefore awaited rather than backgrounded. The
+    evaluator acknowledges without doing the work, so waiting for that
+    costs a round trip and makes a dropped job visible while the caller is
+    still on the line. A failure is a 502 here *and* a message in the
+    errors channel, because the caller will not read the 502.
+    """
+    settings = get_settings()
+    job = evaluation_dispatch.EvaluationJob(
+        repo=payload.repo,
+        ref=payload.ref,
+        org=payload.org,
+        mode=payload.mode,
+        repo_id=payload.repo_id,
+        run_id=payload.run_id,
+    )
+
+    try:
+        accepted = await evaluation_dispatch.dispatch_evaluation(job, settings=settings)
+    except evaluation_dispatch.DispatchError as exc:
+        raise api_error(
+            502,
+            "dispatch_failed",
+            f"The evaluation was not dispatched: {exc}",
+        ) from exc
+
+    data = EvaluationRunAccepted(
+        run_id=str(accepted.get("run_id") or payload.run_id or ""),
+        repo=payload.repo,
+        ref=payload.ref,
+        mode=payload.mode,
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
