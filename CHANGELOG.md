@@ -1,3 +1,10 @@
+## [1.60.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.0...v1.60.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* pin evaluate.yml to [@v3](https://github.com/v3) ([a594d8d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a594d8d68f7b01b8ff6faf202193ad986805611d))
+
 # [1.60.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.59.0...v1.60.0) (2026-09-13)
 
 
