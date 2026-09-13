@@ -165,3 +165,78 @@ async def test_a_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
             )
 
     assert "refused" in reported.await_args.args[0]
+
+
+# ── the sweep ────────────────────────────────────────────────────────────
+
+
+async def test_sweep_is_dispatched_and_acknowledged(client, monkeypatch) -> None:
+    """202, with the run id the evaluator minted. No repository named."""
+    _configured(monkeypatch)
+    accepted = {"accepted": True, "run_id": "deterministic-6.16.0-abc"}
+
+    with patch.object(
+        dispatch, "dispatch_sweep", AsyncMock(return_value=accepted)
+    ) as dispatched:
+        response = await client.post("/v1/evaluations/sweeps", json={})
+
+    assert response.status_code == 202, response.text
+    data = response.json()["data"]
+    assert data["run_id"] == "deterministic-6.16.0-abc"
+    assert data["mode"] == "deterministic"
+
+    job = dispatched.await_args.args[0]
+    assert job.mode == "deterministic"
+    assert job.run_id is None
+
+
+async def test_a_dropped_sweep_is_a_502(client, monkeypatch) -> None:
+    """Quieter than a dropped run and worse — every repo keeps a stale grade."""
+    _configured(monkeypatch)
+    with patch.object(
+        dispatch,
+        "dispatch_sweep",
+        AsyncMock(side_effect=dispatch.DispatchError("evaluator unreachable")),
+    ):
+        response = await client.post("/v1/evaluations/sweeps", json={})
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dispatch_failed"
+
+
+async def test_an_unknown_sweep_mode_is_rejected(client) -> None:
+    response = await client.post("/v1/evaluations/sweeps", json={"mode": "guess"})
+    assert response.status_code == 422
+
+
+async def test_dispatch_posts_the_sweep_shape(monkeypatch) -> None:
+    """/sweep, not /invoke, and no repository in the body."""
+    from kaianolevine_api.config import get_settings
+
+    _configured(monkeypatch)
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    captured: dict = {}
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, json, headers, timeout):
+            captured.update(url=url, json=json, headers=headers)
+            return httpx.Response(202, json={"run_id": "r-1"})
+
+    with patch.object(httpx, "AsyncClient", _Client):
+        result = await dispatch.dispatch_sweep(
+            dispatch.SweepJob(mode="llm"), settings=settings
+        )
+
+    assert result == {"run_id": "r-1"}
+    assert captured["url"] == "https://evaluator.test/sweep"
+    assert captured["json"] == {"mode": "llm"}
+    assert captured["headers"][dispatch.SECRET_HEADER] == "invoke-secret"
+    assert captured["headers"]["User-Agent"] == dispatch.USER_AGENT
