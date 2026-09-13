@@ -1,3 +1,10 @@
+# [1.60.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.59.0...v1.60.0) (2026-09-13)
+
+
+### Features
+
+* a shared workflow for asking that a repo be evaluated ([214ddf6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/214ddf6a2916e30a24e359db3c45a3586ed7f714))
+
 # [1.59.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.58.0...v1.59.0) (2026-09-13)
 
 
