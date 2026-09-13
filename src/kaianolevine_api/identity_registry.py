@@ -124,16 +124,25 @@ MACHINES: tuple[Machine, ...] = (
         roles=("notifier",),
         notes="POST /v1/notify. Ad-hoc Discord messages from scripts and one-offs.",
     ),
-    # The identity a repository's CI presents when it asks for itself to be
-    # evaluated on release. Its key is an organisation-level GitHub secret,
-    # readable by every repository in the fleet — so it holds exactly one
-    # scope, evaluations.runs.create, and cannot write a finding. A leaked
-    # CI key can cause work to happen; it cannot forge the result of that
-    # work, which is the distinction worth keeping.
+    # The identity a repository's CI presents when it asks for an evaluation
+    # on release. Its key is an organisation-level GitHub secret, readable by
+    # every repository in the fleet — so it holds exactly one scope,
+    # evaluations.runs.create, and cannot write a finding. A leaked CI key can
+    # cause work to happen; it cannot forge the result of that work, which is
+    # the distinction worth keeping.
+    #
+    # The same scope covers /runs and /sweeps. A separate one would suggest a
+    # boundary that does not exist: every repository holds this key, so a
+    # sweep-only scope would be held by every caller that can already ask for
+    # its own evaluation. What limits who sweeps is which workflows pass
+    # scope: fleet, in mini-app-polis/.github.
     Machine(
         name="ci-validator",
         roles=("evaluation-trigger", "notifier"),
-        notes="POST /v1/evaluations/runs from a repository's release job.",
+        notes=(
+            "POST /v1/evaluations/runs from a repository's release job, and "
+            "/v1/evaluations/sweeps from ecosystem-standards and evaluator-cog."
+        ),
     ),
     # ecosystem-standards publishes the compiled rule catalog when
     # semantic-release cuts a version. It is the one machine whose key is a
