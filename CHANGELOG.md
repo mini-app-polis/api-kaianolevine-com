@@ -1,3 +1,11 @@
+# [1.59.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.58.0...v1.59.0) (2026-09-13)
+
+
+### Features
+
+* accept evaluation requests and hand them to the evaluator ([53b7b3f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/53b7b3fd495982b47e084e910e165a5aac158eb5))
+* accept fleet sweep requests ([e7d3445](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e7d34457f1f21048b5fa576bcad7144bcdde5887))
+
 # [1.58.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.57.0...v1.58.0) (2026-09-11)
 
 
