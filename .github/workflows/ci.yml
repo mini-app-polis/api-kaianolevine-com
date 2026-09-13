@@ -106,6 +106,6 @@ jobs:
   evaluate:
     needs: release
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    uses: mini-app-polis/.github/.github/workflows/evaluate.yml@v2
+    uses: mini-app-polis/.github/.github/workflows/evaluate.yml@v3
     secrets:
       api-key: ${{ secrets.CI_VALIDATOR_API_KEY }}
