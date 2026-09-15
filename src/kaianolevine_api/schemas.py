@@ -2016,8 +2016,23 @@ class EvaluationRunRequest(BaseModel):
 class EvaluationRunAccepted(BaseModel):
     """The acknowledgement. Not a result — nothing has been evaluated yet."""
 
-    accepted: bool = Field(True, description="The evaluator took the job.")
-    run_id: str = Field(..., description="Run the findings will be filed under.")
+    accepted: bool = Field(True, description="The job is on the queue.")
+    run_id: str = Field(
+        "",
+        description=(
+            "Run the findings will be filed under, when the caller supplied "
+            "one. Empty otherwise: the evaluator mints the id from the "
+            "catalog version it actually grades against, which is resolved "
+            "when the job runs rather than when it is enqueued."
+        ),
+    )
+    message_id: str = Field(
+        "",
+        description=(
+            "The queue message this request became. What the API can "
+            "honestly say it did, and the handle for tracing the job."
+        ),
+    )
     repo: str = Field(..., description="Repository that will be evaluated.")
     ref: str = Field(..., description="Ref that will be evaluated.")
     mode: str = Field(..., description="Engine that will run.")
@@ -2049,6 +2064,9 @@ class EvaluationSweepRequest(BaseModel):
 class EvaluationSweepAccepted(BaseModel):
     """The acknowledgement. Not a result — nothing has been evaluated yet."""
 
-    accepted: bool = Field(True, description="The evaluator took the sweep.")
-    run_id: str = Field(..., description="Run the findings will be filed under.")
+    accepted: bool = Field(True, description="The sweep is on the queue.")
+    run_id: str = Field(
+        "", description="Run the findings will be filed under, when supplied."
+    )
+    message_id: str = Field("", description="The queue message this request became.")
     mode: str = Field(..., description="Engine that will run.")

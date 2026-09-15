@@ -415,15 +415,20 @@ async def create_evaluation_run(
     The caller is a release job, and its contract is fire-and-forget: it
     posts, reads the acknowledgement, and its runner shuts down. So the
     interesting question is not what this returns but whether the job
-    landed — a job that never reaches the evaluator produces no findings,
-    no failures, and a repository whose conformance record stops where it
-    was while looking healthy.
+    landed — a job that never reaches the queue produces no findings, no
+    failures, and a repository whose conformance record stops where it was
+    while looking healthy.
 
-    The hand-off is therefore awaited rather than backgrounded. The
-    evaluator acknowledges without doing the work, so waiting for that
-    costs a round trip and makes a dropped job visible while the caller is
-    still on the line. A failure is a 502 here *and* a message in the
-    errors channel, because the caller will not read the 502.
+    The enqueue is therefore awaited rather than backgrounded. SQS
+    acknowledges in milliseconds, so waiting for it makes a dropped job
+    visible while the caller is still on the line. A failure is a 502 here
+    *and* a message in the errors channel, because the caller will not read
+    the 502.
+
+    Once the message is on the queue the job is durable: retried on
+    failure, dead-lettered when it cannot be processed. That is the whole
+    point of the change — the window between "accepted" and "done" used to
+    be one process's memory, and a deploy or an OOM emptied it silently.
     """
     settings = get_settings()
     job = evaluation_dispatch.EvaluationJob(
@@ -441,11 +446,12 @@ async def create_evaluation_run(
         raise api_error(
             502,
             "dispatch_failed",
-            f"The evaluation was not dispatched: {exc}",
+            f"The evaluation was not enqueued: {exc}",
         ) from exc
 
     data = EvaluationRunAccepted(
-        run_id=str(accepted.get("run_id") or payload.run_id or ""),
+        run_id=payload.run_id or "",
+        message_id=str(accepted.get("message_id") or ""),
         repo=payload.repo,
         ref=payload.ref,
         mode=payload.mode,
@@ -486,11 +492,12 @@ async def create_evaluation_sweep(
         raise api_error(
             502,
             "dispatch_failed",
-            f"The sweep was not dispatched: {exc}",
+            f"The sweep was not enqueued: {exc}",
         ) from exc
 
     data = EvaluationSweepAccepted(
-        run_id=str(accepted.get("run_id") or payload.run_id or ""),
+        run_id=payload.run_id or "",
+        message_id=str(accepted.get("message_id") or ""),
         mode=payload.mode,
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)

@@ -1,31 +1,48 @@
 """Handing evaluation work to the evaluator.
 
-The seam. Today it is an HTTP call to evaluator-cog; the intended end state
-is an enqueue in front of several single-evaluation workers, with retries
-the caller never sees. Keeping that behind one function is what makes the
-later change a body rather than a route.
+The seam. It was a synchronous HTTP call to evaluator-cog; it is an
+enqueue onto SQS. Keeping it behind one function is what made that change
+a body rather than a route.
 
 Two shapes go through it: one repository on its own release, and the whole
 fleet on a standards-catalog or evaluator release. They differ only in the
-path and the payload, which is why they share everything below.
+message type and its payload, which is why they share everything below.
 
 **A dropped job is the failure mode worth designing for.** The calling
 repository's CI is fire-and-forget by contract: it POSTs, gets an
 acknowledgement and its runner shuts down. Nobody is waiting. If the job
-never reaches the evaluator, nothing runs, no findings fail to post, and the
-repository's conformance record simply stops at its previous state looking
-fine — the shape that cost two full conformance runs in September. So this
-call is awaited rather than fired into the background: the evaluator accepts
-in milliseconds by design, which makes a failure knowable while there is
-still someone to tell.
+never reaches the evaluator, nothing runs, no findings fail to post, and
+the repository's conformance record simply stops at its previous state
+looking fine — the shape that cost two full conformance runs in September.
+So the send is awaited rather than fired into the background: SQS
+acknowledges in milliseconds, which makes a failure knowable while there
+is still someone to tell.
+
+What the queue changes is what happens *after* the acknowledgement. An
+accepted HTTP hand-off lived in one process's memory behind a lock, and a
+deploy or an OOM discarded it silently. An accepted message is durable,
+retried, and dead-lettered if it cannot be processed — so the window
+between "accepted" and "done" stops being a place where work disappears.
+
+**This no longer learns the run id.** The evaluator mints it from the
+catalog version it actually grades against, and that version is resolved
+when the job *runs*, not when it is enqueued — a job accepted while a
+catalog release is in flight must be identified by the version it was
+graded under. Stamping a version here would put a number in the run id
+that the run itself might not have used. What this can honestly report is
+the message it enqueued, so that is what it returns.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 from dataclasses import dataclass
+from typing import Any
 
-import httpx
+import boto3
 import sentry_sdk
+from botocore.exceptions import BotoCoreError, ClientError
 from mini_app_polis.logger import LOG_FAILURE, get_logger, with_log_prefix
 
 from ..config import Settings
@@ -33,20 +50,18 @@ from . import discord
 
 logger = get_logger()
 
-#: Header evaluator-cog checks. Not a Bearer credential — this is an
-#: internal hop between two first-party services, and the evaluator has no
-#: business verifying Clerk sessions or machine keys.
-SECRET_HEADER = "X-Evaluator-Token"
+#: Schema version carried on every message.
+#:
+#: One queue serves the whole fleet (step 4 puts the other cogs' work on
+#: it), so a consumer has to be able to recognise a message shape it does
+#: not understand and dead-letter it deliberately rather than guessing.
+MESSAGE_VERSION = 1
 
-#: Identifies this caller to anything between here and the evaluator.
-#: Cloudflare's browser integrity check rejects unidentified automation,
-#: and the release path is the wrong place to discover that.
-USER_AGENT = "api-kaianolevine-com/evaluation-dispatch"
-
-#: The evaluator answers 202 without doing the work, so this only has to
-#: cover the round trip. Long enough to ride out a cold start, short enough
-#: that a dead evaluator does not hold the caller open.
-TIMEOUT_SECONDS = 15.0
+#: Message types. The discriminator, not the queue, is what separates one
+#: kind of work from another — the existing DeejayMode enum already
+#: established that shape for deejay-cog.
+TYPE_REPOSITORY = "evaluation.repository"
+TYPE_SWEEP = "evaluation.sweep"
 
 
 @dataclass(frozen=True)
@@ -60,9 +75,8 @@ class EvaluationJob:
     repo_id: str | None = None
     run_id: str | None = None
 
-    def as_payload(self) -> dict[str, str]:
-        """The evaluator's invoke shape."""
-        payload = {
+    def as_message(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "repo": self.repo,
             "ref": self.ref,
             "org": self.org,
@@ -72,7 +86,7 @@ class EvaluationJob:
             payload["repo_id"] = self.repo_id
         if self.run_id:
             payload["run_id"] = self.run_id
-        return payload
+        return {"type": TYPE_REPOSITORY, "version": MESSAGE_VERSION, "payload": payload}
 
 
 @dataclass(frozen=True)
@@ -82,89 +96,94 @@ class SweepJob:
     mode: str
     run_id: str | None = None
 
-    def as_payload(self) -> dict[str, str]:
-        """The evaluator's sweep shape."""
-        payload = {"mode": self.mode}
+    def as_message(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"mode": self.mode}
         if self.run_id:
             payload["run_id"] = self.run_id
-        return payload
+        return {"type": TYPE_SWEEP, "version": MESSAGE_VERSION, "payload": payload}
 
 
 class DispatchError(RuntimeError):
-    """The job did not reach the evaluator."""
+    """The job did not reach the queue."""
 
 
 async def dispatch_evaluation(job: EvaluationJob, *, settings: Settings) -> dict:
-    """Hand one repository over. Raises DispatchError when it did not land."""
-    return await _dispatch(
-        "/invoke", job.as_payload(), f"{job.repo}@{job.ref}", settings=settings
-    )
+    """Enqueue one repository. Raises DispatchError when it did not land."""
+    return await _enqueue(job.as_message(), f"{job.repo}@{job.ref}", settings=settings)
 
 
 async def dispatch_sweep(job: SweepJob, *, settings: Settings) -> dict:
-    """Ask for a whole-fleet pass. Raises DispatchError when it did not land.
+    """Enqueue a whole-fleet pass. Raises DispatchError when it did not land.
 
-    Called on a standards-catalog or evaluator release — the two events that
+    Sent on a standards-catalog or evaluator release — the two events that
     invalidate every repository's last result at once. A dropped sweep is
     quieter than a dropped evaluation and worse: every repository keeps a
     result graded against rules that have since changed, and nothing in the
     record says so.
     """
-    return await _dispatch(
-        "/sweep", job.as_payload(), f"a fleet sweep ({job.mode})", settings=settings
+    return await _enqueue(
+        job.as_message(), f"a fleet sweep ({job.mode})", settings=settings
     )
 
 
-async def _dispatch(path: str, payload: dict, what: str, *, settings: Settings) -> dict:
-    """POST one job to the evaluator and insist that it landed.
+def _send(message: dict[str, Any], *, settings: Settings) -> dict[str, Any]:
+    """The blocking SQS call, kept in one place so the caller can offload it.
+
+    boto3 is synchronous and this runs inside an async route, so calling it
+    directly would block the event loop for the round trip.
+    """
+    client = boto3.client("sqs", region_name=settings.AWS_REGION)
+    return client.send_message(
+        QueueUrl=settings.EVALUATION_QUEUE_URL,
+        MessageBody=json.dumps(message),
+        # Duplicated from the body on purpose: a message attribute can be
+        # read without parsing the payload, which is what lets a future
+        # consumer or a CloudWatch metric filter on type cheaply.
+        MessageAttributes={
+            "type": {"DataType": "String", "StringValue": message["type"]}
+        },
+    )
+
+
+async def _enqueue(message: dict[str, Any], what: str, *, settings: Settings) -> dict:
+    """Put one job on the queue and insist that it landed.
 
     Reports to the errors channel on the way out rather than leaving the
     caller to decide whether a dropped job is worth mentioning: it always
     is, and the caller is a route that is about to answer a CI runner which
     will not read the answer.
     """
-    base = (settings.EVALUATOR_INVOKE_URL or "").strip().rstrip("/")
-    secret = (settings.EVALUATOR_INVOKE_SECRET or "").strip()
-    if not base or not secret:
-        # Named rather than left to surface as a connection error: an
-        # unconfigured dispatcher and an unreachable evaluator are
-        # different problems and the message should say which.
-        missing = ", ".join(
-            name
-            for name, value in (
-                ("EVALUATOR_INVOKE_URL", base),
-                ("EVALUATOR_INVOKE_SECRET", secret),
-            )
-            if not value
-        )
-        await _report(f"evaluation dispatch is not configured: {missing}", settings)
-        raise DispatchError(f"dispatch is not configured: {missing}")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{base}{path}",
-                json=payload,
-                headers={SECRET_HEADER: secret, "User-Agent": USER_AGENT},
-                timeout=TIMEOUT_SECONDS,
-            )
-    except httpx.HTTPError as exc:
-        sentry_sdk.capture_exception(exc)
-        await _report(f"could not reach the evaluator for {what}: {exc!r}", settings)
-        raise DispatchError(f"could not reach the evaluator: {exc}") from exc
-
-    if not response.is_success:
-        detail = response.text[:300]
+    queue_url = (settings.EVALUATION_QUEUE_URL or "").strip()
+    if not queue_url:
+        # Named rather than left to surface as a boto error: an
+        # unconfigured dispatcher and an unreachable queue are different
+        # problems and the message should say which.
         await _report(
-            f"the evaluator refused {what} ({response.status_code}): {detail}",
-            settings,
+            "evaluation dispatch is not configured: EVALUATION_QUEUE_URL", settings
         )
-        raise DispatchError(f"the evaluator refused the job ({response.status_code})")
+        raise DispatchError("dispatch is not configured: EVALUATION_QUEUE_URL")
 
     try:
-        return response.json()
-    except ValueError:
-        return {}
+        response = await asyncio.to_thread(_send, message, settings=settings)
+    except (ClientError, BotoCoreError) as exc:
+        # BotoCoreError covers the credential cases too — the producer's
+        # access key is the one long-lived credential in this system, so
+        # "no credentials" and "queue unreachable" both land here and both
+        # mean the job did not land.
+        sentry_sdk.capture_exception(exc)
+        await _report(f"could not enqueue {what}: {exc!r}", settings)
+        raise DispatchError(f"could not reach the queue: {exc}") from exc
+
+    message_id = str(response.get("MessageId") or "")
+    if not message_id:
+        # SQS returning 200 without a MessageId should be impossible. If it
+        # ever happens, the job is in an unknown state and saying so beats
+        # reporting an acknowledgement nobody can trace.
+        await _report(f"enqueued {what} but SQS returned no MessageId", settings)
+        raise DispatchError("the queue acknowledged without a message id")
+
+    logger.info("evaluation dispatch: enqueued %s as %s", what, message_id)
+    return {"message_id": message_id}
 
 
 async def _report(message: str, settings: Settings) -> None:
