@@ -289,3 +289,41 @@ async def test_a_dropped_sweep_is_a_502(client, monkeypatch) -> None:
 async def test_an_unknown_sweep_mode_is_rejected(client) -> None:
     response = await client.post("/v1/evaluations/sweeps", json={"mode": "guess"})
     assert response.status_code == 422
+
+
+async def test_the_producer_uses_its_own_named_credentials(monkeypatch) -> None:
+    """Not boto3's AWS_ACCESS_KEY_ID.
+
+    The consumer holds a receive-only key and this holds a send-only one,
+    and the fleet keeps its secrets in one store. Under the conventional
+    names the two collide and one service ends up holding a credential
+    that cannot do its job.
+    """
+    monkeypatch.setenv("EVALUATION_QUEUE_PRODUCER_KEY_ID", "AKIAPRODUCER")
+    monkeypatch.setenv("EVALUATION_QUEUE_PRODUCER_SECRET", "producer-secret")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIACONSUMER")  # wrong for this side
+    settings = _settings(monkeypatch)
+
+    with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
+        await dispatch.dispatch_sweep(
+            dispatch.SweepJob(mode="deterministic"), settings=settings
+        )
+
+    assert factory.call_args.kwargs["aws_access_key_id"] == "AKIAPRODUCER"
+    assert factory.call_args.kwargs["aws_secret_access_key"] == "producer-secret"
+
+
+async def test_absent_credentials_fall_through_to_the_default_chain(
+    monkeypatch,
+) -> None:
+    """For any runtime that supplies a role instead of a key."""
+    monkeypatch.delenv("EVALUATION_QUEUE_PRODUCER_KEY_ID", raising=False)
+    monkeypatch.delenv("EVALUATION_QUEUE_PRODUCER_SECRET", raising=False)
+    settings = _settings(monkeypatch)
+
+    with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
+        await dispatch.dispatch_sweep(
+            dispatch.SweepJob(mode="deterministic"), settings=settings
+        )
+
+    assert "aws_access_key_id" not in factory.call_args.kwargs
