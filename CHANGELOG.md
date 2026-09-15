@@ -1,3 +1,15 @@
+# [1.61.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.1...v1.61.0) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 3 updates ([5bfcae2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5bfcae2ec3ee2c6209021844fa0c83e36c31fbf5))
+
+
+### Features
+
+* **evaluations:** server-side idempotency for findings (PIPE-002) ([a49c062](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a49c062de197fd68ac99ead28f5713abde71ae62))
+
 ## [1.60.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.0...v1.60.1) (2026-09-13)
 
 
