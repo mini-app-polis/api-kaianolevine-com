@@ -167,13 +167,17 @@ class Settings(BaseSettings):
     # crash backstop to fail silently. See routers.webhook.
     # Where evaluator-cog listens, and the secret it expects.
     #
-    # Its public address rather than Railway's internal DNS: the evaluator
-    # is not expected to stay on Railway, and an internal hostname is the
-    # kind of platform affordance that has to be unpicked at the move. The
-    # hop is authenticated by the shared secret below, which the evaluator
-    # requires — it refuses every request when its own copy is unset.
-    EVALUATOR_INVOKE_URL: str | None = None
-    EVALUATOR_INVOKE_SECRET: str | None = None
+    # Where evaluation work is handed over.
+    #
+    # This replaced an authenticated HTTP call to the evaluator's public
+    # address. Two things went with it: the shared secret that hop needed,
+    # and the Cloudflare round trip between two first-party services. What
+    # it costs instead is a long-lived AWS credential on this service —
+    # boto3 resolves AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the
+    # environment — because there is no OIDC path from Railway. That key
+    # can call sqs:SendMessage on this one queue and nothing else.
+    EVALUATION_QUEUE_URL: str | None = None
+    AWS_REGION: str = "us-east-1"
 
     PREFECT_WEBHOOK_SECRET: str | None = None
     # Which Prefect state types are worth a message. The cogs' own failure

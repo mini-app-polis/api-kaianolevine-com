@@ -1,29 +1,51 @@
-"""Tests for POST /v1/evaluations/runs and the dispatch seam."""
+"""Tests for POST /v1/evaluations/runs, /sweeps, and the enqueue seam."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from kaianolevine_api.services import evaluation_dispatch as dispatch
 
 pytestmark = pytest.mark.asyncio
 
+QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
+
 
 def _configured(monkeypatch) -> None:
-    monkeypatch.setenv("EVALUATOR_INVOKE_URL", "https://evaluator.test")
-    monkeypatch.setenv("EVALUATOR_INVOKE_SECRET", "invoke-secret")
+    monkeypatch.setenv("EVALUATION_QUEUE_URL", QUEUE_URL)
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 
-async def test_run_is_dispatched_and_acknowledged(client, monkeypatch) -> None:
-    """202, with the run id the evaluator minted."""
+def _settings(monkeypatch):
+    from kaianolevine_api.config import get_settings
+
     _configured(monkeypatch)
-    accepted = {"accepted": True, "run_id": "deterministic-6.15.2-abc", "repo": "x"}
+    get_settings.cache_clear()
+    return get_settings()
+
+
+def _sqs(message_id: str = "m-1", side_effect=None) -> MagicMock:
+    client = MagicMock()
+    if side_effect is not None:
+        client.send_message.side_effect = side_effect
+    else:
+        client.send_message.return_value = {"MessageId": message_id}
+    return client
+
+
+# ── the routes ───────────────────────────────────────────────────────────
+
+
+async def test_run_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
+    """202, naming the message rather than a run id it cannot know."""
+    _configured(monkeypatch)
 
     with patch.object(
-        dispatch, "dispatch_evaluation", AsyncMock(return_value=accepted)
+        dispatch, "dispatch_evaluation", AsyncMock(return_value={"message_id": "m-9"})
     ) as dispatched:
         response = await client.post(
             "/v1/evaluations/runs",
@@ -32,21 +54,38 @@ async def test_run_is_dispatched_and_acknowledged(client, monkeypatch) -> None:
 
     assert response.status_code == 202, response.text
     data = response.json()["data"]
-    assert data["run_id"] == "deterministic-6.15.2-abc"
+    assert data["message_id"] == "m-9"
+    # The evaluator mints the run id from the catalog version it actually
+    # grades against, which is resolved when the job runs. Stamping one
+    # here would be a number the run might not have used.
+    assert data["run_id"] == ""
     assert data["repo"] == "watcher-cog"
     assert data["ref"] == "v1.2.3"
     assert data["mode"] == "deterministic"
 
     job = dispatched.await_args.args[0]
-    assert job.repo == "watcher-cog"
-    assert job.ref == "v1.2.3"
-    assert job.org == "mini-app-polis"
+    assert (job.repo, job.ref, job.org) == ("watcher-cog", "v1.2.3", "mini-app-polis")
+
+
+async def test_a_caller_supplied_run_id_is_echoed_back(client, monkeypatch) -> None:
+    """A fleet pass keeps one run id across every repository."""
+    _configured(monkeypatch)
+
+    with patch.object(
+        dispatch, "dispatch_evaluation", AsyncMock(return_value={"message_id": "m-9"})
+    ):
+        response = await client.post(
+            "/v1/evaluations/runs",
+            json={"repo": "watcher-cog", "run_id": "deterministic-7.0.0-abc"},
+        )
+
+    assert response.json()["data"]["run_id"] == "deterministic-7.0.0-abc"
 
 
 async def test_a_dropped_job_is_a_502_not_a_202(client, monkeypatch) -> None:
     """The caller will not read this, which is exactly why it must not be 202.
 
-    A job that never reaches the evaluator produces no findings and no
+    A job that never reaches the queue produces no findings and no
     failures, and leaves the repository's record looking healthy where it
     stopped. That is the September shape.
     """
@@ -54,7 +93,7 @@ async def test_a_dropped_job_is_a_502_not_a_202(client, monkeypatch) -> None:
     with patch.object(
         dispatch,
         "dispatch_evaluation",
-        AsyncMock(side_effect=dispatch.DispatchError("evaluator unreachable")),
+        AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
     ):
         response = await client.post(
             "/v1/evaluations/runs", json={"repo": "watcher-cog"}
@@ -74,53 +113,60 @@ async def test_an_unknown_mode_is_rejected(client) -> None:
 # ── the seam itself ──────────────────────────────────────────────────────
 
 
-async def test_dispatch_posts_the_invoke_shape(monkeypatch) -> None:
-    from kaianolevine_api.config import get_settings
-
-    _configured(monkeypatch)
-    get_settings.cache_clear()
-    settings = get_settings()
-
-    captured: dict = {}
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def post(self, url, json, headers, timeout):
-            captured.update(url=url, json=json, headers=headers)
-            return httpx.Response(202, json={"run_id": "r-1"})
+async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
+    settings = _settings(monkeypatch)
+    sqs = _sqs("m-1")
 
     job = dispatch.EvaluationJob(
         repo="mono", ref="v2", org="other", mode="llm", repo_id="app-a"
     )
-    with patch.object(httpx, "AsyncClient", _Client):
+    with patch.object(dispatch.boto3, "client", return_value=sqs) as factory:
         result = await dispatch.dispatch_evaluation(job, settings=settings)
 
-    assert result == {"run_id": "r-1"}
-    assert captured["url"] == "https://evaluator.test/invoke"
-    assert captured["json"] == {
-        "repo": "mono",
-        "ref": "v2",
-        "org": "other",
-        "mode": "llm",
-        "repo_id": "app-a",
+    assert result == {"message_id": "m-1"}
+    assert factory.call_args.kwargs["region_name"] == "us-east-1"
+
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["QueueUrl"] == QUEUE_URL
+    assert json.loads(sent["MessageBody"]) == {
+        "type": dispatch.TYPE_REPOSITORY,
+        "version": dispatch.MESSAGE_VERSION,
+        "payload": {
+            "repo": "mono",
+            "ref": "v2",
+            "org": "other",
+            "mode": "llm",
+            "repo_id": "app-a",
+        },
     }
-    assert captured["headers"][dispatch.SECRET_HEADER] == "invoke-secret"
-    # Cloudflare's integrity check rejects unidentified automation, and the
-    # release path is the wrong place to find that out.
-    assert captured["headers"]["User-Agent"] == dispatch.USER_AGENT
+    # Readable without parsing the body — one queue serves the whole fleet,
+    # so a consumer has to recognise a shape it does not handle.
+    assert sent["MessageAttributes"]["type"]["StringValue"] == (
+        dispatch.TYPE_REPOSITORY
+    )
 
 
-async def test_dispatch_names_missing_configuration(monkeypatch) -> None:
-    """An unconfigured dispatcher and a dead evaluator are different problems."""
+async def test_enqueue_sends_the_sweep_message_shape(monkeypatch) -> None:
+    """A different type on the same queue, and no repository named."""
+    settings = _settings(monkeypatch)
+    sqs = _sqs("m-2")
+
+    with patch.object(dispatch.boto3, "client", return_value=sqs):
+        result = await dispatch.dispatch_sweep(
+            dispatch.SweepJob(mode="llm"), settings=settings
+        )
+
+    assert result == {"message_id": "m-2"}
+    body = json.loads(sqs.send_message.call_args.kwargs["MessageBody"])
+    assert body["type"] == dispatch.TYPE_SWEEP
+    assert body["payload"] == {"mode": "llm"}
+
+
+async def test_missing_configuration_is_named(monkeypatch) -> None:
+    """An unconfigured dispatcher and an unreachable queue differ."""
     from kaianolevine_api.config import get_settings
 
-    monkeypatch.delenv("EVALUATOR_INVOKE_URL", raising=False)
-    monkeypatch.delenv("EVALUATOR_INVOKE_SECRET", raising=False)
+    monkeypatch.delenv("EVALUATION_QUEUE_URL", raising=False)
     get_settings.cache_clear()
 
     with patch.object(dispatch, "_report", AsyncMock()) as reported:
@@ -132,28 +178,19 @@ async def test_dispatch_names_missing_configuration(monkeypatch) -> None:
                 settings=get_settings(),
             )
 
-    assert "EVALUATOR_INVOKE_URL" in reported.await_args.args[0]
+    assert "EVALUATION_QUEUE_URL" in reported.await_args.args[0]
 
 
-async def test_a_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
+async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
     """Nobody is waiting on the CI side, so the channel is the witness."""
-    from kaianolevine_api.config import get_settings
-
-    _configured(monkeypatch)
-    get_settings.cache_clear()
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def post(self, *args, **kwargs):
-            return httpx.Response(401, text="nope")
+    settings = _settings(monkeypatch)
+    refusal = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "SendMessage"
+    )
+    sqs = _sqs(side_effect=refusal)
 
     with (
-        patch.object(httpx, "AsyncClient", _Client),
+        patch.object(dispatch.boto3, "client", return_value=sqs),
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
         with pytest.raises(dispatch.DispatchError):
@@ -161,28 +198,73 @@ async def test_a_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
                 dispatch.EvaluationJob(
                     repo="x", ref="main", org="o", mode="deterministic"
                 ),
-                settings=get_settings(),
+                settings=settings,
             )
 
-    assert "refused" in reported.await_args.args[0]
+    assert "could not enqueue" in reported.await_args.args[0]
 
 
-# ── the sweep ────────────────────────────────────────────────────────────
+async def test_absent_credentials_are_a_dropped_job_like_any_other(
+    monkeypatch,
+) -> None:
+    """The producer's key is the one long-lived credential in this system.
+
+    A rotation that misses this service must not look like a quiet success:
+    NoCredentialsError is a BotoCoreError, not a ClientError, and both have
+    to land on the same path or an expired key becomes a silent outage.
+    """
+    settings = _settings(monkeypatch)
+    sqs = _sqs(side_effect=NoCredentialsError())
+
+    with (
+        patch.object(dispatch.boto3, "client", return_value=sqs),
+        patch.object(dispatch, "_report", AsyncMock()) as reported,
+    ):
+        with pytest.raises(dispatch.DispatchError):
+            await dispatch.dispatch_sweep(
+                dispatch.SweepJob(mode="deterministic"), settings=settings
+            )
+
+    assert "could not enqueue" in reported.await_args.args[0]
 
 
-async def test_sweep_is_dispatched_and_acknowledged(client, monkeypatch) -> None:
-    """202, with the run id the evaluator minted. No repository named."""
+async def test_an_acknowledgement_without_a_message_id_is_a_failure(
+    monkeypatch,
+) -> None:
+    """Should be impossible. If it happens the job is in an unknown state."""
+    settings = _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {}
+
+    with (
+        patch.object(dispatch.boto3, "client", return_value=sqs),
+        patch.object(dispatch, "_report", AsyncMock()) as reported,
+    ):
+        with pytest.raises(dispatch.DispatchError, match="message id"):
+            await dispatch.dispatch_evaluation(
+                dispatch.EvaluationJob(
+                    repo="x", ref="main", org="o", mode="deterministic"
+                ),
+                settings=settings,
+            )
+
+    assert "no MessageId" in reported.await_args.args[0]
+
+
+# ── the sweep routes ─────────────────────────────────────────────────────
+
+
+async def test_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
     _configured(monkeypatch)
-    accepted = {"accepted": True, "run_id": "deterministic-6.16.0-abc"}
 
     with patch.object(
-        dispatch, "dispatch_sweep", AsyncMock(return_value=accepted)
+        dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-3"})
     ) as dispatched:
         response = await client.post("/v1/evaluations/sweeps", json={})
 
     assert response.status_code == 202, response.text
     data = response.json()["data"]
-    assert data["run_id"] == "deterministic-6.16.0-abc"
+    assert data["message_id"] == "m-3"
     assert data["mode"] == "deterministic"
 
     job = dispatched.await_args.args[0]
@@ -196,7 +278,7 @@ async def test_a_dropped_sweep_is_a_502(client, monkeypatch) -> None:
     with patch.object(
         dispatch,
         "dispatch_sweep",
-        AsyncMock(side_effect=dispatch.DispatchError("evaluator unreachable")),
+        AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
     ):
         response = await client.post("/v1/evaluations/sweeps", json={})
 
@@ -207,36 +289,3 @@ async def test_a_dropped_sweep_is_a_502(client, monkeypatch) -> None:
 async def test_an_unknown_sweep_mode_is_rejected(client) -> None:
     response = await client.post("/v1/evaluations/sweeps", json={"mode": "guess"})
     assert response.status_code == 422
-
-
-async def test_dispatch_posts_the_sweep_shape(monkeypatch) -> None:
-    """/sweep, not /invoke, and no repository in the body."""
-    from kaianolevine_api.config import get_settings
-
-    _configured(monkeypatch)
-    get_settings.cache_clear()
-    settings = get_settings()
-
-    captured: dict = {}
-
-    class _Client:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def post(self, url, json, headers, timeout):
-            captured.update(url=url, json=json, headers=headers)
-            return httpx.Response(202, json={"run_id": "r-1"})
-
-    with patch.object(httpx, "AsyncClient", _Client):
-        result = await dispatch.dispatch_sweep(
-            dispatch.SweepJob(mode="llm"), settings=settings
-        )
-
-    assert result == {"run_id": "r-1"}
-    assert captured["url"] == "https://evaluator.test/sweep"
-    assert captured["json"] == {"mode": "llm"}
-    assert captured["headers"][dispatch.SECRET_HEADER] == "invoke-secret"
-    assert captured["headers"]["User-Agent"] == dispatch.USER_AGENT
