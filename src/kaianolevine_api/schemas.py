@@ -290,6 +290,25 @@ class PipelineEvaluationItem(BaseModel):
     )
 
 
+class PipelineEvaluationWriteResult(PipelineEvaluationItem):
+    """What one write did, which is not the same as what is stored.
+
+    A write that matched a finding already held under this run returns the
+    stored row with ``deduplicated`` set, rather than a second copy of it.
+    """
+
+    deduplicated: bool = Field(
+        default=False,
+        description=(
+            "True when this finding was already stored under this run and "
+            "nothing new was written; the row returned is the one that was "
+            "already there. Callers that count a write as a delivered "
+            "finding must read this — a 200 alone no longer means a row "
+            "was created."
+        ),
+    )
+
+
 class EvaluationSummaryItem(BaseModel):
     """Aggregate evaluation counts for one dimension."""
 
