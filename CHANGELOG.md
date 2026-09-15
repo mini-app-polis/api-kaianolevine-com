@@ -1,3 +1,10 @@
+# [1.62.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.61.0...v1.62.0) (2026-09-15)
+
+
+### Features
+
+* **evaluations:** enqueue evaluation jobs on SQS ([739a119](https://github.com/mini-app-polis/api-kaianolevine-com/commit/739a119a76b5204cc0bf04e69289ade77daf2b2f))
+
 # [1.61.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.1...v1.61.0) (2026-09-15)
 
 
