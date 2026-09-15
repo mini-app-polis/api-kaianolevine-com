@@ -132,7 +132,19 @@ def _send(message: dict[str, Any], *, settings: Settings) -> dict[str, Any]:
     boto3 is synchronous and this runs inside an async route, so calling it
     directly would block the event loop for the round trip.
     """
-    client = boto3.client("sqs", region_name=settings.AWS_REGION)
+    # Explicit when configured, boto3's default chain when not. The
+    # explicit path is for Railway, where the fleet's one secrets store
+    # would otherwise make the producer's and the consumer's keys collide
+    # on AWS_ACCESS_KEY_ID. The default path is for any runtime that
+    # supplies a role instead.
+    credentials: dict[str, str] = {}
+    if settings.EVALUATION_QUEUE_PRODUCER_KEY_ID:
+        credentials = {
+            "aws_access_key_id": settings.EVALUATION_QUEUE_PRODUCER_KEY_ID,
+            "aws_secret_access_key": settings.EVALUATION_QUEUE_PRODUCER_SECRET or "",
+        }
+
+    client = boto3.client("sqs", region_name=settings.AWS_REGION, **credentials)
     return client.send_message(
         QueueUrl=settings.EVALUATION_QUEUE_URL,
         MessageBody=json.dumps(message),

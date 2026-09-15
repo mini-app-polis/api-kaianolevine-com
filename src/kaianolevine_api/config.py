@@ -179,6 +179,21 @@ class Settings(BaseSettings):
     EVALUATION_QUEUE_URL: str | None = None
     AWS_REGION: str = "us-east-1"
 
+    # Named for this caller rather than using boto3's conventional
+    # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+    #
+    # The producer and the consumer hold deliberately different keys — one
+    # may only SendMessage, the other may only receive and delete — and the
+    # fleet keeps its secrets in one store. Under the conventional names
+    # those two keys collide, and whichever wins leaves the other service
+    # holding a credential that cannot do its job. That failure is quiet on
+    # the consumer side, which is the worst place for it.
+    #
+    # Left unset, boto3's default chain applies, which is what a runtime
+    # with an instance or execution role wants.
+    EVALUATION_QUEUE_PRODUCER_KEY_ID: str | None = None
+    EVALUATION_QUEUE_PRODUCER_SECRET: str | None = None
+
     PREFECT_WEBHOOK_SECRET: str | None = None
     # Which Prefect state types are worth a message. The cogs' own failure
     # hooks already report what they can; this route is the backstop for
