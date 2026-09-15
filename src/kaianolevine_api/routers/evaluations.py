@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
 from sqlalchemy import case, func, select, union
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
@@ -20,10 +21,12 @@ from ..schemas import (
     EvaluationSweepRequest,
     PipelineEvaluationCreate,
     PipelineEvaluationItem,
+    PipelineEvaluationWriteResult,
     api_error,
     success_envelope,
 )
 from ..services import evaluation_dispatch
+from ..services.evaluation_fingerprint import evaluation_fingerprint
 
 router = APIRouter()
 
@@ -269,9 +272,35 @@ async def evaluations_summary(
     )
 
 
+def _write_result(
+    row: DbEval, *, deduplicated: bool, version: str
+) -> Envelope[PipelineEvaluationWriteResult]:
+    """One stored finding, and whether this request is what stored it."""
+    return success_envelope(
+        PipelineEvaluationWriteResult(
+            id=row.id,
+            run_id=row.run_id,
+            violation_id=row.violation_id,
+            repo=row.repo,
+            dimension=row.dimension,
+            severity=row.severity,
+            finding=row.finding or "",
+            suggestion=row.suggestion,
+            standards_version=row.standards_version,
+            source=row.source,
+            flow_name=row.flow_name,
+            evaluated_at=row.evaluated_at,
+            deduplicated=deduplicated,
+        ),
+        count=1,
+        total=1,
+        version=version,
+    )
+
+
 @router.post(
     "/evaluations",
-    response_model=Envelope[PipelineEvaluationItem],
+    response_model=Envelope[PipelineEvaluationWriteResult],
     summary="Write evaluation findings",
     description="Write pipeline evaluation findings. Protected (owner-based placeholder auth).",
 )
@@ -281,10 +310,52 @@ async def create_evaluation(
         require_scope("pipeline.evaluations.write")
     ),
     session: AsyncSession = Depends(get_db_session),
-) -> Envelope[PipelineEvaluationItem]:
-    """TODO: describe this function."""
+) -> Envelope[PipelineEvaluationWriteResult]:
+    """Store one finding, or recognise one this run already holds (PIPE-002).
+
+    Idempotent on ``(run_id, repo, fingerprint)``. A redelivered queue
+    message, a retried POST from the shared release workflow and a rerun of
+    a job that already finished all offer a finding the run already has, and
+    storing it twice puts two identical rows in Pipeline Health — which
+    EVAL-003 then grades as a data-quality fault against the evaluator.
+
+    **A suppressed write answers 200 with ``deduplicated: true``, and the
+    caller is expected to read it.** A bare 200 would be the more obvious
+    thing and would be wrong: the evaluator counts a 2xx as a delivered
+    finding, so dropping the row silently would have it report findings as
+    posted that were never stored — the same shape as the September runs
+    that reported 162 posted and stored none, arrived at by a new route.
+
+    Rows with no ``run_id`` are outside the index and are always stored.
+    They belong to no run, so there is nothing for them to be idempotent
+    with respect to.
+    """
     owner_id = owner_id_principal.subject
     settings = get_settings()
+
+    fingerprint = evaluation_fingerprint(
+        violation_id=payload.violation_id,
+        dimension=payload.dimension,
+        severity=payload.severity,
+        finding=payload.finding,
+        suggestion=payload.suggestion,
+    )
+
+    async def already_stored() -> DbEval | None:
+        if payload.run_id is None:
+            return None
+        result = await session.execute(
+            select(DbEval).where(
+                DbEval.run_id == payload.run_id,
+                DbEval.repo == payload.repo,
+                DbEval.fingerprint == fingerprint,
+            )
+        )
+        return result.scalars().first()
+
+    existing = await already_stored()
+    if existing is not None:
+        return _write_result(existing, deduplicated=True, version=settings.API_VERSION)
 
     # Legacy catch-all field intentionally left empty.
     details = None
@@ -302,27 +373,27 @@ async def create_evaluation(
         standards_version=payload.standards_version,
         source=payload.source,
         flow_name=payload.flow_name,
+        fingerprint=fingerprint,
     )
     session.add(row)
-    await session.flush()
-    await session.commit()
-    await session.refresh(row)
+    try:
+        await session.flush()
+        await session.commit()
+    except IntegrityError:
+        # The read above is the fast path, not the guarantee. Two workers
+        # draining the same queue can both miss and both insert; the unique
+        # index is what makes only one of them land, and this is the other
+        # one finding out. Re-raise if the conflict was something else —
+        # a severity outside the 015 constraint, say — because that is a
+        # bad write and not a duplicate.
+        await session.rollback()
+        existing = await already_stored()
+        if existing is None:
+            raise
+        return _write_result(existing, deduplicated=True, version=settings.API_VERSION)
 
-    data = PipelineEvaluationItem(
-        id=row.id,
-        run_id=row.run_id,
-        violation_id=row.violation_id,
-        repo=row.repo,
-        dimension=row.dimension,
-        severity=row.severity,
-        finding=row.finding or "",
-        suggestion=row.suggestion,
-        standards_version=row.standards_version,
-        source=row.source,
-        flow_name=row.flow_name,
-        evaluated_at=row.evaluated_at,
-    )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    await session.refresh(row)
+    return _write_result(row, deduplicated=False, version=settings.API_VERSION)
 
 
 @router.post(

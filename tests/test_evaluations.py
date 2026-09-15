@@ -598,3 +598,125 @@ async def test_evaluations_summary_severity_breakdown_per_dimension(client) -> N
     assert row["error_count"] == 1
     assert row["warn_count"] == 1
     assert row["info_count"] == 1
+
+
+# ── PIPE-002: one finding lands once per run, however often it is offered ────
+#
+# SQS is at-least-once and the shared release workflow already retries the
+# evaluation POST five times, so the same finding will be offered twice. The
+# unique index on (run_id, repo, fingerprint) is what makes the second one a
+# no-op, and the `deduplicated` flag is what stops the evaluator counting it
+# as a delivered finding.
+
+
+def _finding(**overrides) -> dict:
+    """One finding payload, with the fields the fingerprint is taken over."""
+    payload = {
+        "repo": "watcher-cog",
+        "run_id": "deterministic-7.0.0-abc123",
+        "violation_id": "CD-026",
+        "dimension": "cd_readiness",
+        "severity": "ERROR",
+        "finding": 'the canonical job "evaluate" is missing',
+        "suggestion": "add it to the release workflow",
+        "standards_version": "7.0.0",
+        "source": "conformance_deterministic",
+        "flow_name": "deterministic-conformance",
+    }
+    payload.update(overrides)
+    return payload
+
+
+async def _stored_rows(db_session) -> int:
+    result = await db_session.execute(text("SELECT count(*) FROM pipeline_evaluations"))
+    return result.scalar_one()
+
+
+async def test_the_same_finding_twice_in_one_run_stores_one_row(
+    client, db_session
+) -> None:
+    """The done-when condition for PIPE-002."""
+    first = await client.post("/v1/evaluations", json=_finding())
+    second = await client.post("/v1/evaluations", json=_finding())
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert await _stored_rows(db_session) == 1
+
+    # The second answers with the row that was already there, and says so.
+    assert first.json()["data"]["deduplicated"] is False
+    assert second.json()["data"]["deduplicated"] is True
+    assert second.json()["data"]["id"] == first.json()["data"]["id"]
+
+
+async def test_a_suppressed_write_is_not_reported_as_a_new_row(client) -> None:
+    """The flag is the whole point of answering 200 rather than dropping it.
+
+    The evaluator counts a 2xx as a delivered finding. Without something in
+    the body to read, a suppressed write would be counted as posted, and a
+    run would report findings as stored that were never stored — which is
+    the September failure shape reached by a new route.
+    """
+    await client.post("/v1/evaluations", json=_finding())
+    again = await client.post("/v1/evaluations", json=_finding())
+
+    body = again.json()["data"]
+    assert body["deduplicated"] is True
+    # Everything else is the stored row, so a caller that ignores the flag
+    # still gets something coherent rather than a half-populated object.
+    assert body["repo"] == "watcher-cog"
+    assert body["violation_id"] == "CD-026"
+    assert body["finding"] == 'the canonical job "evaluate" is missing'
+
+
+async def test_one_rule_may_legitimately_emit_several_findings_in_a_run(
+    client, db_session
+) -> None:
+    """The rule id is not the key — CD-026 emits one finding per bad job.
+
+    Keying on (run_id, repo, violation_id) would have silently dropped every
+    finding after the first for exactly this rule.
+    """
+    await client.post("/v1/evaluations", json=_finding())
+    await client.post(
+        "/v1/evaluations",
+        json=_finding(finding='the canonical job "security" is missing'),
+    )
+
+    assert await _stored_rows(db_session) == 2
+
+
+async def test_the_same_finding_under_a_new_run_is_stored(client, db_session) -> None:
+    """A later run reporting the same thing is a new fact, not a duplicate."""
+    await client.post("/v1/evaluations", json=_finding())
+    later = await client.post(
+        "/v1/evaluations", json=_finding(run_id="deterministic-7.0.1-def456")
+    )
+
+    assert later.json()["data"]["deduplicated"] is False
+    assert await _stored_rows(db_session) == 2
+
+
+async def test_the_same_finding_for_a_different_repo_is_stored(
+    client, db_session
+) -> None:
+    """Two repos failing the same rule the same way are two findings."""
+    await client.post("/v1/evaluations", json=_finding())
+    other = await client.post("/v1/evaluations", json=_finding(repo="deejay-cog"))
+
+    assert other.json()["data"]["deduplicated"] is False
+    assert await _stored_rows(db_session) == 2
+
+
+async def test_findings_with_no_run_id_are_always_stored(client, db_session) -> None:
+    """They belong to no run, so there is nothing to be idempotent against.
+
+    The index is partial for this reason. Keying these on (repo,
+    fingerprint) alone would reject a repository legitimately reporting the
+    same thing on two separate occasions.
+    """
+    await client.post("/v1/evaluations", json=_finding(run_id=None))
+    second = await client.post("/v1/evaluations", json=_finding(run_id=None))
+
+    assert second.json()["data"]["deduplicated"] is False
+    assert await _stored_rows(db_session) == 2
