@@ -1,3 +1,10 @@
+## [1.62.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.0...v1.62.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **evaluations:** name the queue credentials for their caller ([9434aa5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9434aa5be3dfb9484a8709a2f0f8a1772f589436))
+
 # [1.62.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.61.0...v1.62.0) (2026-09-15)
 
 
