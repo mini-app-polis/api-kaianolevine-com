@@ -1,3 +1,10 @@
+# [1.65.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.64.0...v1.65.0) (2026-09-16)
+
+
+### Features
+
+* **evaluations:** dispatch the fleet-scoped checks with the pass ([48f1d6b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/48f1d6ba95f7e67863ae7f46be6d656e708a54ec))
+
 # [1.64.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.63.0...v1.64.0) (2026-09-16)
 
 
