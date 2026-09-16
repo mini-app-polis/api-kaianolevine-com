@@ -2038,29 +2038,6 @@ class EvaluationRunAccepted(BaseModel):
     mode: str = Field(..., description="Engine that will run.")
 
 
-class EvaluationSweepRequest(BaseModel):
-    """Ask for every repository to be evaluated.
-
-    The occasional pass, not the release path. Two releases invalidate every
-    repository's last result at once — a new standards catalog and a new
-    evaluator — and they are what send this. Nothing names a repository: the
-    evaluator reads the registry.
-    """
-
-    mode: Literal["deterministic", "llm"] = Field(
-        "deterministic",
-        description=(
-            "Which engine to run against every repository. Fleet-wide llm is "
-            "the expensive one and is never a release default."
-        ),
-    )
-    run_id: str | None = Field(
-        None,
-        max_length=200,
-        description="Group these findings with an existing run. Usually omitted.",
-    )
-
-
 class EvaluationIntrospectionRequest(BaseModel):
     """Ask for the checks that are scoped to no repository.
 
@@ -2106,10 +2083,10 @@ class EvaluationIntrospectionAccepted(BaseModel):
 class EvaluationFleetRequest(BaseModel):
     """Ask for every repository to be evaluated, one job each.
 
-    The same intent as :class:`EvaluationSweepRequest` and a different
-    mechanism: this fans out to one queue message per repository rather
-    than handing the evaluator a single pass to work through. Both exist
-    while the fan-out is being proven against the sweep it replaces.
+    Fans out to one queue message per repository rather than handing the
+    evaluator a single pass to work through, so a failure retries one
+    repository instead of redelivering a pass that re-evaluates everything
+    that already succeeded.
     """
 
     mode: Literal["deterministic", "llm"] = Field(
@@ -2165,14 +2142,3 @@ class EvaluationFleetAccepted(BaseModel):
     failed: list[str] = Field(
         default_factory=list, description="Repositories that did not."
     )
-
-
-class EvaluationSweepAccepted(BaseModel):
-    """The acknowledgement. Not a result — nothing has been evaluated yet."""
-
-    accepted: bool = Field(True, description="The sweep is on the queue.")
-    run_id: str = Field(
-        "", description="Run the findings will be filed under, when supplied."
-    )
-    message_id: str = Field("", description="The queue message this request became.")
-    mode: str = Field(..., description="Engine that will run.")

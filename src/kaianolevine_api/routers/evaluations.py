@@ -25,8 +25,6 @@ from ..schemas import (
     EvaluationRunAccepted,
     EvaluationRunRequest,
     EvaluationSummaryItem,
-    EvaluationSweepAccepted,
-    EvaluationSweepRequest,
     PipelineEvaluationCreate,
     PipelineEvaluationItem,
     PipelineEvaluationWriteResult,
@@ -575,7 +573,7 @@ async def create_evaluation_introspection(
 ) -> Envelope[EvaluationIntrospectionAccepted]:
     """Enqueue the fleet-scoped checks and acknowledge.
 
-    Same scope as every other evaluation request, for the reason the sweep
+    Same scope as every other evaluation request, for the reason the runs
     route already gives: every repository's CI authenticates with the one
     machine key, so a scope only this could use would be held by every
     caller that can already ask for its own evaluation.
@@ -621,7 +619,7 @@ async def create_evaluation_introspection(
     summary="Ask for every repository to be evaluated, one job each",
     description=(
         "Fans the fleet out to one queue message per repository. Same intent "
-        "as a sweep and a different mechanism: a failure retries one "
+        "as the retired sweep and a different mechanism: a failure retries one "
         "repository rather than the whole pass, and the work runs as wide as "
         "the consumers allow rather than serially inside one message."
     ),
@@ -633,8 +631,8 @@ async def create_evaluation_fleet(
 ) -> Envelope[EvaluationFleetAccepted]:
     """Fan out a whole-fleet pass and acknowledge what landed.
 
-    Same scope as a single run, matching the sweep route above and for the
-    same reason: every repository's CI authenticates with the one machine
+    Same scope as a single run, matching every other evaluation request
+    and for the same reason: every repository's CI authenticates with the one machine
     key, so a scope only a fleet pass could use would be held by every
     caller that can already ask for its own evaluation.
     """
@@ -700,49 +698,5 @@ async def create_evaluation_fleet(
             for row in accepted.get("enqueued", [])
         ],
         failed=list(accepted.get("failed", [])),
-    )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
-
-
-@router.post(
-    "/evaluations/sweeps",
-    response_model=Envelope[EvaluationSweepAccepted],
-    status_code=202,
-    summary="Ask for every repository to be evaluated",
-    description=(
-        "Hands a whole-fleet pass to the evaluator and acknowledges. Sent on "
-        "a standards-catalog or evaluator release — the two events that "
-        "invalidate every repository's last result at once."
-    ),
-)
-async def create_evaluation_sweep(
-    payload: EvaluationSweepRequest,
-    principal: Principal = Depends(require_scope("evaluations.runs.create")),
-) -> Envelope[EvaluationSweepAccepted]:
-    """Accept a sweep request and hand it to the evaluator.
-
-    Same scope as a single run, deliberately. A separate one would suggest a
-    boundary that does not exist: every repository's CI authenticates with
-    the same machine key, so a scope only a sweep could use would be held by
-    every caller that can already ask for its own evaluation. The thing that
-    actually limits who sweeps is which workflows send this, and that is a
-    property of the reusable workflow rather than of a credential.
-    """
-    settings = get_settings()
-    job = evaluation_dispatch.SweepJob(mode=payload.mode, run_id=payload.run_id)
-
-    try:
-        accepted = await evaluation_dispatch.dispatch_sweep(job, settings=settings)
-    except evaluation_dispatch.DispatchError as exc:
-        raise api_error(
-            502,
-            "dispatch_failed",
-            f"The sweep was not enqueued: {exc}",
-        ) from exc
-
-    data = EvaluationSweepAccepted(
-        run_id=payload.run_id or "",
-        message_id=str(accepted.get("message_id") or ""),
-        mode=payload.mode,
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
