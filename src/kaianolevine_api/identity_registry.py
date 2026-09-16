@@ -131,7 +131,8 @@ MACHINES: tuple[Machine, ...] = (
     # cause work to happen; it cannot forge the result of that work, which is
     # the distinction worth keeping.
     #
-    # The same scope covers /runs and /sweeps. A separate one would suggest a
+    # The same scope covers /runs, /fleet and /introspection. A separate
+    # one would suggest a
     # boundary that does not exist: every repository holds this key, so a
     # sweep-only scope would be held by every caller that can already ask for
     # its own evaluation. What limits who sweeps is which workflows pass
@@ -141,7 +142,7 @@ MACHINES: tuple[Machine, ...] = (
         roles=("evaluation-trigger", "notifier"),
         notes=(
             "POST /v1/evaluations/runs from a repository's release job, and "
-            "/v1/evaluations/sweeps from ecosystem-standards and evaluator-cog."
+            "/v1/evaluations/fleet from ecosystem-standards and evaluator-cog."
         ),
     ),
     # ecosystem-standards publishes the compiled rule catalog when

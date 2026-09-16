@@ -146,22 +146,6 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     )
 
 
-async def test_enqueue_sends_the_sweep_message_shape(monkeypatch) -> None:
-    """A different type on the same queue, and no repository named."""
-    settings = _settings(monkeypatch)
-    sqs = _sqs("m-2")
-
-    with patch.object(dispatch.boto3, "client", return_value=sqs):
-        result = await dispatch.dispatch_sweep(
-            dispatch.SweepJob(mode="llm"), settings=settings
-        )
-
-    assert result == {"message_id": "m-2"}
-    body = json.loads(sqs.send_message.call_args.kwargs["MessageBody"])
-    assert body["type"] == dispatch.TYPE_SWEEP
-    assert body["payload"] == {"mode": "llm"}
-
-
 async def test_missing_configuration_is_named(monkeypatch) -> None:
     """An unconfigured dispatcher and an unreachable queue differ."""
     from kaianolevine_api.config import get_settings
@@ -221,8 +205,14 @@ async def test_absent_credentials_are_a_dropped_job_like_any_other(
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
         with pytest.raises(dispatch.DispatchError):
-            await dispatch.dispatch_sweep(
-                dispatch.SweepJob(mode="deterministic"), settings=settings
+            await dispatch.dispatch_evaluation(
+                dispatch.EvaluationJob(
+                    repo="watcher-cog",
+                    ref="main",
+                    org="mini-app-polis",
+                    mode="deterministic",
+                ),
+                settings=settings,
             )
 
     assert "could not enqueue" in reported.await_args.args[0]
@@ -254,43 +244,6 @@ async def test_an_acknowledgement_without_a_message_id_is_a_failure(
 # ── the sweep routes ─────────────────────────────────────────────────────
 
 
-async def test_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
-    _configured(monkeypatch)
-
-    with patch.object(
-        dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-3"})
-    ) as dispatched:
-        response = await client.post("/v1/evaluations/sweeps", json={})
-
-    assert response.status_code == 202, response.text
-    data = response.json()["data"]
-    assert data["message_id"] == "m-3"
-    assert data["mode"] == "deterministic"
-
-    job = dispatched.await_args.args[0]
-    assert job.mode == "deterministic"
-    assert job.run_id is None
-
-
-async def test_a_dropped_sweep_is_a_502(client, monkeypatch) -> None:
-    """Quieter than a dropped run and worse — every repo keeps a stale grade."""
-    _configured(monkeypatch)
-    with patch.object(
-        dispatch,
-        "dispatch_sweep",
-        AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
-    ):
-        response = await client.post("/v1/evaluations/sweeps", json={})
-
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "dispatch_failed"
-
-
-async def test_an_unknown_sweep_mode_is_rejected(client) -> None:
-    response = await client.post("/v1/evaluations/sweeps", json={"mode": "guess"})
-    assert response.status_code == 422
-
-
 async def test_the_producer_uses_its_own_named_credentials(monkeypatch) -> None:
     """Not boto3's AWS_ACCESS_KEY_ID.
 
@@ -305,8 +258,14 @@ async def test_the_producer_uses_its_own_named_credentials(monkeypatch) -> None:
     settings = _settings(monkeypatch)
 
     with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
-        await dispatch.dispatch_sweep(
-            dispatch.SweepJob(mode="deterministic"), settings=settings
+        await dispatch.dispatch_evaluation(
+            dispatch.EvaluationJob(
+                repo="watcher-cog",
+                ref="main",
+                org="mini-app-polis",
+                mode="deterministic",
+            ),
+            settings=settings,
         )
 
     assert factory.call_args.kwargs["aws_access_key_id"] == "AKIAPRODUCER"
@@ -322,8 +281,14 @@ async def test_absent_credentials_fall_through_to_the_default_chain(
     settings = _settings(monkeypatch)
 
     with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
-        await dispatch.dispatch_sweep(
-            dispatch.SweepJob(mode="deterministic"), settings=settings
+        await dispatch.dispatch_evaluation(
+            dispatch.EvaluationJob(
+                repo="watcher-cog",
+                ref="main",
+                org="mini-app-polis",
+                mode="deterministic",
+            ),
+            settings=settings,
         )
 
     assert "aws_access_key_id" not in factory.call_args.kwargs

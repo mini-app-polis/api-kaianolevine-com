@@ -4,9 +4,10 @@ The seam. It was a synchronous HTTP call to evaluator-cog; it is an
 enqueue onto SQS. Keeping it behind one function is what made that change
 a body rather than a route.
 
-Two shapes go through it: one repository on its own release, and the whole
-fleet on a standards-catalog or evaluator release. They differ only in the
-message type and its payload, which is why they share everything below.
+Three shapes go through it: one repository on its own release, a whole
+fleet as N of those, and the checks that belong to no repository. They
+differ only in the message and its payload, which is why they share
+everything below.
 
 **A dropped job is the failure mode worth designing for.** The calling
 repository's CI is fire-and-forget by contract: it POSTs, gets an
@@ -71,7 +72,6 @@ MESSAGE_VERSION = 1
 #: unrecognised type there means a producer bug, and dead-lettering it
 #: deliberately beats guessing at it.
 TYPE_REPOSITORY = "evaluation.repository"
-TYPE_SWEEP = "evaluation.sweep"
 TYPE_INTROSPECTION = "evaluation.introspection"
 
 
@@ -101,24 +101,11 @@ class EvaluationJob:
 
 
 @dataclass(frozen=True)
-class SweepJob:
-    """The whole fleet. Nothing to name — the evaluator reads the registry."""
-
-    mode: str
-    run_id: str | None = None
-
-    def as_message(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"mode": self.mode}
-        if self.run_id:
-            payload["run_id"] = self.run_id
-        return {"type": TYPE_SWEEP, "version": MESSAGE_VERSION, "payload": payload}
-
-
-@dataclass(frozen=True)
 class FleetJob:
     """Every repository, as N repository jobs rather than one fleet job.
 
-    The difference from :class:`SweepJob` is the whole point. A sweep is
+    A sweep — one message the evaluator expanded into a serial loop —
+    is what this replaced, and the difference is the whole point. That
     one message the evaluator expands and works through serially: one
     failure redelivers the entire pass, one slow repository holds up the
     rest, and the whole thing has to finish inside a single visibility
@@ -213,20 +200,6 @@ class DispatchError(RuntimeError):
 async def dispatch_evaluation(job: EvaluationJob, *, settings: Settings) -> dict:
     """Enqueue one repository. Raises DispatchError when it did not land."""
     return await _enqueue(job.as_message(), f"{job.repo}@{job.ref}", settings=settings)
-
-
-async def dispatch_sweep(job: SweepJob, *, settings: Settings) -> dict:
-    """Enqueue a whole-fleet pass. Raises DispatchError when it did not land.
-
-    Sent on a standards-catalog or evaluator release — the two events that
-    invalidate every repository's last result at once. A dropped sweep is
-    quieter than a dropped evaluation and worse: every repository keeps a
-    result graded against rules that have since changed, and nothing in the
-    record says so.
-    """
-    return await _enqueue(
-        job.as_message(), f"a fleet sweep ({job.mode})", settings=settings
-    )
 
 
 async def dispatch_introspection(job: IntrospectionJob, *, settings: Settings) -> dict:
