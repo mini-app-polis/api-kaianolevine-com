@@ -1,3 +1,10 @@
+# [1.64.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.63.0...v1.64.0) (2026-09-16)
+
+
+### Features
+
+* **evaluations:** add POST /v1/evaluations/introspection ([1911403](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1911403f37d9367466954e158ef8db3598edfdeb))
+
 # [1.63.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.1...v1.63.0) (2026-09-16)
 
 
