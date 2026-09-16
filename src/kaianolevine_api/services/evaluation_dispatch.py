@@ -52,14 +52,24 @@ logger = get_logger()
 
 #: Schema version carried on every message.
 #:
-#: One queue serves the whole fleet (step 4 puts the other cogs' work on
-#: it), so a consumer has to be able to recognise a message shape it does
-#: not understand and dead-letter it deliberately rather than guessing.
+#: A consumer that speaks a different version refuses the message rather
+#: than misreading it. That matters most on a redeploy, where a producer
+#: and a consumer are briefly on different builds.
 MESSAGE_VERSION = 1
 
-#: Message types. The discriminator, not the queue, is what separates one
-#: kind of work from another — the existing DeejayMode enum already
-#: established that shape for deejay-cog.
+#: Message types.
+#:
+#: One queue per cog, not one queue for the fleet. An earlier draft said
+#: the opposite and it cannot work: SQS has no selective receive, so a
+#: consumer takes whatever it is handed. On a shared queue this cog's
+#: consumer would receive another cog's message, fail to recognise the
+#: type, and its redrive policy would put that cog's job in *this* cog's
+#: dead-letter queue — every consumer doing it to every other, with the
+#: winner decided by a race.
+#:
+#: The discriminator still earns its place on a cog's own queue: an
+#: unrecognised type there means a producer bug, and dead-lettering it
+#: deliberately beats guessing at it.
 TYPE_REPOSITORY = "evaluation.repository"
 TYPE_SWEEP = "evaluation.sweep"
 
