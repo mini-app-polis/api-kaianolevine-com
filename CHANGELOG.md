@@ -1,3 +1,11 @@
+# [1.63.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.1...v1.63.0) (2026-09-16)
+
+
+### Features
+
+* **evaluate:** route fleet scope to the fan-out endpoint ([7af606f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7af606fbdda7183e40611bbdc554ce5d629ea8f2))
+* **evaluations:** fan the fleet out to one job per repository ([59462d7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/59462d72e3c9834b2aef170564fa5df1384c0e53))
+
 ## [1.62.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.0...v1.62.1) (2026-09-15)
 
 
