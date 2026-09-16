@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
+from mini_app_polis.logger import get_logger
 from sqlalchemy import case, func, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,8 @@ from ..schemas import (
 )
 from ..services import evaluation_dispatch
 from ..services.evaluation_fingerprint import evaluation_fingerprint
+
+logger = get_logger()
 
 router = APIRouter()
 
@@ -466,6 +469,16 @@ async def create_evaluation_run(
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 
 
+def _mint_introspection_run_id(standards_version: str) -> str:
+    """Its own prefix, not a fleet pass's id.
+
+    These findings are filed against ecosystem-standards rather than any
+    repository, and sharing a pass's run would put them inside a run whose
+    subject is every repository but this one.
+    """
+    return f"introspection-{standards_version or 'unpinned'}-{uuid.uuid4().hex[:12]}"
+
+
 def _mint_fleet_run_id(mode: str, standards_version: str) -> str:
     """One run id for the whole pass, in the evaluator's own format.
 
@@ -487,6 +500,41 @@ def _mint_fleet_run_id(mode: str, standards_version: str) -> str:
     prefix = "conformance" if mode == "llm" else "deterministic"
     suffix = uuid.uuid4().hex[:12]
     return f"{prefix}-{standards_version or 'unpinned'}-{suffix}"
+
+
+async def _previous_fleet_run(session: AsyncSession) -> str:
+    """The most recent fleet pass that has already been graded.
+
+    XSTACK-008 reports which registered repositories did not resolve, and
+    it reads that from the rows a pass wrote. Handing it the pass being
+    dispatched right now would be a race it always loses: the
+    introspection job is small and the repository jobs each clone a
+    repository, so under a Lambda consumer it finishes long before the
+    rows it is meant to read exist. It would report nothing, and "no
+    registry entry failed to resolve" is precisely the false clean the
+    check exists to prevent.
+
+    So it grades the previous pass. A registry entry that broke today is
+    flagged on tomorrow's release rather than this one — a day of latency
+    on a rule about registry drift, which is the cheap half of the trade.
+    The expensive half would be a completion barrier: distributed state in
+    the API, and a single stuck message meaning the checks never run.
+
+    "A fleet pass" is a run that covered more than one repository. There
+    is no marker distinguishing one from a release-triggered evaluation —
+    both mint ``<prefix>-<version>-<hex>`` — but only a pass spans the
+    fleet, and that is visible in the rows themselves.
+    """
+    stmt = (
+        select(DbEval.run_id)
+        .where(DbEval.run_id.is_not(None))
+        .group_by(DbEval.run_id)
+        .having(func.count(func.distinct(DbEval.repo)) > 1)
+        .order_by(func.max(DbEval.evaluated_at).desc())
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).scalars().first()
+    return str(row) if row else ""
 
 
 async def _pinned_standards_version(session: AsyncSession) -> str:
@@ -538,9 +586,7 @@ async def create_evaluation_introspection(
     # Its own prefix. These findings are filed against ecosystem-standards
     # rather than any repository, and sharing a fleet pass's id would put
     # them inside a run whose subject is every repository but this.
-    run_id = payload.run_id or (
-        f"introspection-{standards_version or 'unpinned'}-{uuid.uuid4().hex[:12]}"
-    )
+    run_id = payload.run_id or _mint_introspection_run_id(standards_version)
 
     job = evaluation_dispatch.IntrospectionJob(
         run_id=run_id,
@@ -612,12 +658,41 @@ async def create_evaluation_fleet(
             f"The fleet pass was not enqueued: {exc}",
         ) from exc
 
+    # The checks that belong to no repository, asked for as part of the
+    # pass rather than by the caller. EVAL-003, MONO-003, XSTACK-006,
+    # XSTACK-007, XSTACK-008 and EVAL-007 grade the inventory, the stored
+    # findings and the catalog itself, so no repository job carries them —
+    # and a caller that has to remember a second request is a caller that
+    # eventually forgets, leaving six checks silently not running.
+    #
+    # Its own run id, and the previous pass to grade. See
+    # _previous_fleet_run for why not this one.
+    introspection_run_id = _mint_introspection_run_id(standards_version)
+    try:
+        await evaluation_dispatch.dispatch_introspection(
+            evaluation_dispatch.IntrospectionJob(
+                run_id=introspection_run_id,
+                pass_run_id=await _previous_fleet_run(session),
+                standards_version=standards_version,
+            ),
+            settings=settings,
+        )
+    except evaluation_dispatch.DispatchError as exc:
+        # Not fatal to the pass. Fifteen repositories are already being
+        # evaluated and saying the whole request failed would be false.
+        # _enqueue has already reported it to the errors channel; this
+        # puts it in the answer too, so the caller is not told a pass is
+        # whole when part of it is missing.
+        logger.warning("fleet pass %s: introspection not enqueued: %s", run_id, exc)
+        introspection_run_id = ""
+
     data = EvaluationFleetAccepted(
         # The id minted above, not one read back out of the dispatcher.
         # It is the same value — the job carried it down — and asking for
         # it again only creates a way for the acknowledgement and the
         # messages to disagree about what the pass is called.
         run_id=run_id,
+        introspection_run_id=introspection_run_id,
         mode=payload.mode,
         standards_version=standards_version,
         enqueued=[

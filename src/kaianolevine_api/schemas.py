@@ -2151,6 +2151,14 @@ class EvaluationFleetAccepted(BaseModel):
     standards_version: str = Field(
         "", description="Catalog version pinned for the whole pass."
     )
+    introspection_run_id: str = Field(
+        "",
+        description=(
+            "Run the fleet-scoped checks file under. Empty when that job "
+            "did not reach the queue — the pass still ran, but EVAL-003, "
+            "MONO-003, XSTACK-006/007/008 and EVAL-007 did not."
+        ),
+    )
     enqueued: list[EvaluationFleetRepo] = Field(
         default_factory=list, description="Repositories that reached the queue."
     )
