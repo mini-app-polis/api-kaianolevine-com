@@ -2061,6 +2061,48 @@ class EvaluationSweepRequest(BaseModel):
     )
 
 
+class EvaluationIntrospectionRequest(BaseModel):
+    """Ask for the checks that are scoped to no repository.
+
+    EVAL-003, MONO-003, XSTACK-006, XSTACK-007, XSTACK-008 and EVAL-007
+    grade the inventory, the stored findings and the catalog itself. They
+    ran at the tail of a fleet sweep because that was the one place that
+    happened once per pass; fan-out removed it, so they are asked for
+    directly.
+    """
+
+    pass_run_id: str | None = Field(
+        None,
+        max_length=200,
+        description=(
+            "A fan-out pass for XSTACK-008 to grade — it reports which "
+            "registered repositories did not resolve in that run. The other "
+            "five checks need nothing from any run, so this may be omitted; "
+            "omitting it means XSTACK-008 reports nothing, which is "
+            "indistinguishable from every repository resolving."
+        ),
+    )
+    run_id: str | None = Field(
+        None,
+        max_length=200,
+        description="File these findings under an existing run. Usually omitted.",
+    )
+
+
+class EvaluationIntrospectionAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has been checked yet."""
+
+    accepted: bool = Field(True, description="The job is on the queue.")
+    run_id: str = Field(..., description="Run the findings will be filed under.")
+    pass_run_id: str = Field(
+        "", description="The fan-out pass XSTACK-008 will grade, if one was named."
+    )
+    message_id: str = Field(..., description="The queue message this request became.")
+    standards_version: str = Field(
+        "", description="Catalog version the checks grade against."
+    )
+
+
 class EvaluationFleetRequest(BaseModel):
     """Ask for every repository to be evaluated, one job each.
 

@@ -19,6 +19,8 @@ from ..schemas import (
     EvaluationFleetAccepted,
     EvaluationFleetRepo,
     EvaluationFleetRequest,
+    EvaluationIntrospectionAccepted,
+    EvaluationIntrospectionRequest,
     EvaluationRunAccepted,
     EvaluationRunRequest,
     EvaluationSummaryItem,
@@ -504,6 +506,66 @@ async def _pinned_standards_version(session: AsyncSession) -> str:
     stmt = select(DbCatalog).order_by(DbCatalog.version_sort.desc()).limit(1)
     row = (await session.execute(stmt)).scalars().first()
     return str(row.version) if row is not None else ""
+
+
+@router.post(
+    "/evaluations/introspection",
+    response_model=Envelope[EvaluationIntrospectionAccepted],
+    status_code=202,
+    summary="Run the checks that are scoped to no repository",
+    description=(
+        "EVAL-003, MONO-003, XSTACK-006, XSTACK-007, XSTACK-008 and EVAL-007 "
+        "grade the inventory, the stored findings and the catalog itself. "
+        "Name a fan-out pass in `pass_run_id` and XSTACK-008 reports which of "
+        "its registered repositories did not resolve."
+    ),
+)
+async def create_evaluation_introspection(
+    payload: EvaluationIntrospectionRequest,
+    principal: Principal = Depends(require_scope("evaluations.runs.create")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[EvaluationIntrospectionAccepted]:
+    """Enqueue the fleet-scoped checks and acknowledge.
+
+    Same scope as every other evaluation request, for the reason the sweep
+    route already gives: every repository's CI authenticates with the one
+    machine key, so a scope only this could use would be held by every
+    caller that can already ask for its own evaluation.
+    """
+    settings = get_settings()
+
+    standards_version = await _pinned_standards_version(session)
+    # Its own prefix. These findings are filed against ecosystem-standards
+    # rather than any repository, and sharing a fleet pass's id would put
+    # them inside a run whose subject is every repository but this.
+    run_id = payload.run_id or (
+        f"introspection-{standards_version or 'unpinned'}-{uuid.uuid4().hex[:12]}"
+    )
+
+    job = evaluation_dispatch.IntrospectionJob(
+        run_id=run_id,
+        pass_run_id=payload.pass_run_id or "",
+        standards_version=standards_version,
+    )
+
+    try:
+        accepted = await evaluation_dispatch.dispatch_introspection(
+            job, settings=settings
+        )
+    except evaluation_dispatch.DispatchError as exc:
+        raise api_error(
+            502,
+            "dispatch_failed",
+            f"The introspection pass was not enqueued: {exc}",
+        ) from exc
+
+    data = EvaluationIntrospectionAccepted(
+        run_id=run_id,
+        pass_run_id=payload.pass_run_id or "",
+        message_id=str(accepted.get("message_id") or ""),
+        standards_version=standards_version,
+    )
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 
 
 @router.post(

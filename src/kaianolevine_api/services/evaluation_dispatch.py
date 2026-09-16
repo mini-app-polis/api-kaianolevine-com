@@ -72,6 +72,7 @@ MESSAGE_VERSION = 1
 #: deliberately beats guessing at it.
 TYPE_REPOSITORY = "evaluation.repository"
 TYPE_SWEEP = "evaluation.sweep"
+TYPE_INTROSPECTION = "evaluation.introspection"
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,42 @@ class FleetJob:
         return out
 
 
+@dataclass(frozen=True)
+class IntrospectionJob:
+    """The checks that are scoped to no repository at all.
+
+    EVAL-003, MONO-003, XSTACK-006, XSTACK-007, XSTACK-008 and EVAL-007
+    grade the inventory, the stored findings and the catalog itself. They
+    used to run at the tail of a fleet sweep because that was the one
+    place in the old design that happened once per pass. Fan-out removed
+    that place, so they get their own job.
+
+    Called, not scheduled. What invalidates these is a standards release
+    or a fleet pass, and both are events something already knows about —
+    a cron would only guess at when they happened.
+
+    ``pass_run_id`` names a fan-out pass for XSTACK-008 to grade; the
+    other five need nothing from any run. Omitting it is valid and means
+    XSTACK-008 reports nothing.
+    """
+
+    run_id: str
+    pass_run_id: str = ""
+    standards_version: str = ""
+
+    def as_message(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"run_id": self.run_id}
+        if self.pass_run_id:
+            payload["pass_run_id"] = self.pass_run_id
+        if self.standards_version:
+            payload["standards_version"] = self.standards_version
+        return {
+            "type": TYPE_INTROSPECTION,
+            "version": MESSAGE_VERSION,
+            "payload": payload,
+        }
+
+
 class DispatchError(RuntimeError):
     """The job did not reach the queue."""
 
@@ -189,6 +226,19 @@ async def dispatch_sweep(job: SweepJob, *, settings: Settings) -> dict:
     """
     return await _enqueue(
         job.as_message(), f"a fleet sweep ({job.mode})", settings=settings
+    )
+
+
+async def dispatch_introspection(job: IntrospectionJob, *, settings: Settings) -> dict:
+    """Enqueue the fleet-scoped checks. Raises DispatchError if it did not land.
+
+    A dropped one of these is the quietest failure in the system. Nothing
+    goes red, no repository's record changes, and six checks that grade
+    whether the registry and the catalog still agree simply do not run —
+    which looks exactly like all six passing.
+    """
+    return await _enqueue(
+        job.as_message(), f"introspection {job.run_id}", settings=settings
     )
 
 
