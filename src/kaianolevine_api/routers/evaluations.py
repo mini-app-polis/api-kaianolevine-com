@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -12,8 +13,12 @@ from ..auth import require_scope
 from ..config import get_settings
 from ..database import get_db_session
 from ..models import PipelineEvaluation as DbEval
+from ..models import StandardsCatalog as DbCatalog
 from ..schemas import (
     Envelope,
+    EvaluationFleetAccepted,
+    EvaluationFleetRepo,
+    EvaluationFleetRequest,
     EvaluationRunAccepted,
     EvaluationRunRequest,
     EvaluationSummaryItem,
@@ -455,6 +460,109 @@ async def create_evaluation_run(
         repo=payload.repo,
         ref=payload.ref,
         mode=payload.mode,
+    )
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+def _mint_fleet_run_id(mode: str, standards_version: str) -> str:
+    """One run id for the whole pass, in the evaluator's own format.
+
+    Deliberately identical to ``_build_deterministic_run_id`` and
+    ``_build_conformance_run_id`` in evaluator-cog: ``<prefix>-<catalog
+    version>-<12 hex>``. The website filters findings by run, so a fleet
+    pass whose repositories carried different ids would show as a dozen
+    unrelated runs rather than one pass.
+
+    The suffix is random rather than a timestamp, and that is not a
+    stylistic choice — a timestamp resolved to the second is not unique
+    between two releases that land together, which the release trigger
+    makes ordinary, and two passes sharing a run id merge their findings.
+
+    Minted here rather than in the evaluator because the evaluator no
+    longer sees the pass — it sees N independent repositories, and none of
+    them is in a position to name the thing they belong to.
+    """
+    prefix = "conformance" if mode == "llm" else "deterministic"
+    suffix = uuid.uuid4().hex[:12]
+    return f"{prefix}-{standards_version or 'unpinned'}-{suffix}"
+
+
+async def _pinned_standards_version(session: AsyncSession) -> str:
+    """The catalog version the whole pass grades against.
+
+    Read once, here, rather than left to each repository's job. N jobs
+    each resolving their own version means a catalog release landing
+    mid-pass grades some repositories against the old rules and some
+    against the new, filed under one run id that claims a single version
+    for all of them — a pass that is internally inconsistent and says
+    nothing about it.
+
+    An empty string when nothing is published yet, which leaves each job
+    to resolve its own as it does today. That is the honest fallback: a
+    pin invented from no catalog would be worse than no pin.
+    """
+    stmt = select(DbCatalog).order_by(DbCatalog.version_sort.desc()).limit(1)
+    row = (await session.execute(stmt)).scalars().first()
+    return str(row.version) if row is not None else ""
+
+
+@router.post(
+    "/evaluations/fleet",
+    response_model=Envelope[EvaluationFleetAccepted],
+    status_code=202,
+    summary="Ask for every repository to be evaluated, one job each",
+    description=(
+        "Fans the fleet out to one queue message per repository. Same intent "
+        "as a sweep and a different mechanism: a failure retries one "
+        "repository rather than the whole pass, and the work runs as wide as "
+        "the consumers allow rather than serially inside one message."
+    ),
+)
+async def create_evaluation_fleet(
+    payload: EvaluationFleetRequest,
+    principal: Principal = Depends(require_scope("evaluations.runs.create")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[EvaluationFleetAccepted]:
+    """Fan out a whole-fleet pass and acknowledge what landed.
+
+    Same scope as a single run, matching the sweep route above and for the
+    same reason: every repository's CI authenticates with the one machine
+    key, so a scope only a fleet pass could use would be held by every
+    caller that can already ask for its own evaluation.
+    """
+    settings = get_settings()
+
+    standards_version = await _pinned_standards_version(session)
+    run_id = payload.run_id or _mint_fleet_run_id(payload.mode, standards_version)
+
+    job = evaluation_dispatch.FleetJob(
+        mode=payload.mode,
+        run_id=run_id,
+        standards_version=standards_version,
+    )
+
+    try:
+        accepted = await evaluation_dispatch.dispatch_fleet(job, settings=settings)
+    except evaluation_dispatch.DispatchError as exc:
+        raise api_error(
+            502,
+            "dispatch_failed",
+            f"The fleet pass was not enqueued: {exc}",
+        ) from exc
+
+    data = EvaluationFleetAccepted(
+        # The id minted above, not one read back out of the dispatcher.
+        # It is the same value — the job carried it down — and asking for
+        # it again only creates a way for the acknowledgement and the
+        # messages to disagree about what the pass is called.
+        run_id=run_id,
+        mode=payload.mode,
+        standards_version=standards_version,
+        enqueued=[
+            EvaluationFleetRepo(repo=row["repo"], message_id=row["message_id"])
+            for row in accepted.get("enqueued", [])
+        ],
+        failed=list(accepted.get("failed", [])),
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 

@@ -46,7 +46,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from mini_app_polis.logger import LOG_FAILURE, get_logger, with_log_prefix
 
 from ..config import Settings
-from . import discord
+from . import discord, fleet_registry
 
 logger = get_logger()
 
@@ -103,6 +103,62 @@ class SweepJob:
         return {"type": TYPE_SWEEP, "version": MESSAGE_VERSION, "payload": payload}
 
 
+@dataclass(frozen=True)
+class FleetJob:
+    """Every repository, as N repository jobs rather than one fleet job.
+
+    The difference from :class:`SweepJob` is the whole point. A sweep is
+    one message the evaluator expands and works through serially: one
+    failure redelivers the entire pass, one slow repository holds up the
+    rest, and the whole thing has to finish inside a single visibility
+    timeout — which becomes Lambda's fifteen-minute ceiling at step 5.
+    Fanning out here makes the unit of work one repository, so a failure
+    retries alone and the pass runs as wide as the consumers allow.
+
+    What a sweep got for free and this has to arrange deliberately:
+
+    ``run_id`` is minted once and carried by every message, because the
+    website's latest-run filter relies on a pass's findings sharing one.
+
+    ``standards_version`` is resolved once and pinned, because N messages
+    each resolving their own would let a catalog release landing mid-pass
+    grade some repositories against the old rules and some against the
+    new — inside a run id that claims one version for all of them.
+
+    The grouping travels in the message. A monorepo is one job carrying
+    every app in it; see :mod:`.fleet_registry` for why that is not
+    cosmetic.
+    """
+
+    mode: str
+    run_id: str
+    standards_version: str = ""
+
+    def messages(self, units: list[fleet_registry.EvaluationUnit]) -> list[dict]:
+        out: list[dict[str, Any]] = []
+        for unit in units:
+            payload: dict[str, Any] = {
+                "repo": unit.repo,
+                "ref": unit.ref,
+                "org": unit.org,
+                "mode": self.mode,
+                "run_id": self.run_id,
+                "services": list(unit.services),
+            }
+            if unit.monorepo is not None:
+                payload["monorepo"] = unit.monorepo
+            if self.standards_version:
+                payload["standards_version"] = self.standards_version
+            out.append(
+                {
+                    "type": TYPE_REPOSITORY,
+                    "version": MESSAGE_VERSION,
+                    "payload": payload,
+                }
+            )
+        return out
+
+
 class DispatchError(RuntimeError):
     """The job did not reach the queue."""
 
@@ -124,6 +180,71 @@ async def dispatch_sweep(job: SweepJob, *, settings: Settings) -> dict:
     return await _enqueue(
         job.as_message(), f"a fleet sweep ({job.mode})", settings=settings
     )
+
+
+async def dispatch_fleet(job: FleetJob, *, settings: Settings) -> dict:
+    """Fan the fleet out as one message per repository.
+
+    Partial failure is reported, not swallowed, and not raised either
+    unless nothing landed at all. Eleven of twelve repositories enqueued
+    is a materially different situation from none of them: the first is a
+    pass with a known gap that the errors channel can name, the second is
+    a pass that did not happen. Raising on the first would tell CI the
+    whole thing failed while eleven evaluations were already running.
+    """
+    try:
+        units = fleet_registry.fleet()
+    except fleet_registry.RegistryError as exc:
+        await _report(f"could not read the fleet registry: {exc}", settings)
+        raise DispatchError(str(exc)) from exc
+
+    if not units:
+        # An empty roster is not an empty fleet; it is a registry that
+        # parsed to nothing useful. Dispatching zero messages and
+        # returning 202 would report a successful pass over no
+        # repositories, which is the silent-success shape again.
+        await _report("the fleet registry lists no active repositories", settings)
+        raise DispatchError("the fleet registry lists no active repositories")
+
+    messages = job.messages(units)
+    enqueued: list[dict[str, str]] = []
+    failed: list[str] = []
+
+    for message, unit in zip(messages, units, strict=True):
+        what = f"{unit.org}/{unit.repo}@{unit.ref}"
+        try:
+            result = await _enqueue(message, what, settings=settings)
+        except DispatchError:
+            # _enqueue has already reported this one. Keep going: the
+            # remaining repositories are independent jobs and there is no
+            # reason one unreachable send should cancel them.
+            failed.append(unit.repo)
+            continue
+        enqueued.append({"repo": unit.repo, "message_id": result["message_id"]})
+
+    if not enqueued:
+        raise DispatchError(
+            f"none of the {len(messages)} fleet messages reached the queue"
+        )
+
+    if failed:
+        await _report(
+            f"fleet pass {job.run_id} enqueued {len(enqueued)} of "
+            f"{len(messages)} repositories; missing: {', '.join(sorted(failed))}",
+            settings,
+        )
+
+    logger.info(
+        "evaluation dispatch: fan-out %s enqueued %d/%d repositories",
+        job.run_id,
+        len(enqueued),
+        len(messages),
+    )
+    return {
+        "run_id": job.run_id,
+        "enqueued": enqueued,
+        "failed": sorted(failed),
+    }
 
 
 def _send(message: dict[str, Any], *, settings: Settings) -> dict[str, Any]:

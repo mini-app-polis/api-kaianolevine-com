@@ -2061,6 +2061,62 @@ class EvaluationSweepRequest(BaseModel):
     )
 
 
+class EvaluationFleetRequest(BaseModel):
+    """Ask for every repository to be evaluated, one job each.
+
+    The same intent as :class:`EvaluationSweepRequest` and a different
+    mechanism: this fans out to one queue message per repository rather
+    than handing the evaluator a single pass to work through. Both exist
+    while the fan-out is being proven against the sweep it replaces.
+    """
+
+    mode: Literal["deterministic", "llm"] = Field(
+        "deterministic",
+        description=(
+            "Which engine to run against every repository. Fleet-wide llm is "
+            "the expensive one and is never a release default."
+        ),
+    )
+    run_id: str | None = Field(
+        None,
+        max_length=200,
+        description=(
+            "Group these findings with an existing run. Usually omitted — one "
+            "is minted here so every repository in the pass shares it."
+        ),
+    )
+
+
+class EvaluationFleetRepo(BaseModel):
+    """One repository that reached the queue, and the message it became."""
+
+    repo: str = Field(..., description="Repository the job names.")
+    message_id: str = Field(..., description="The queue message it became.")
+
+
+class EvaluationFleetAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has been evaluated yet.
+
+    ``failed`` is the field worth reading. A fan-out can partially land,
+    and a caller that only checks the status code would see 202 over a
+    pass that is missing repositories. Anything listed here was reported
+    to the errors channel as well; this is so the answer says it too.
+    """
+
+    accepted: bool = Field(True, description="At least one job is on the queue.")
+    run_id: str = Field(..., description="Run every repository files under.")
+    mode: str = Field(..., description="Engine that will run.")
+    standards_version: str = Field(
+        "", description="Catalog version pinned for the whole pass."
+    )
+    enqueued: list[EvaluationFleetRepo] = Field(
+        default_factory=list, description="Repositories that reached the queue."
+    )
+    failed: list[str] = Field(
+        default_factory=list, description="Repositories that did not."
+    )
+
+
 class EvaluationSweepAccepted(BaseModel):
     """The acknowledgement. Not a result — nothing has been evaluated yet."""
 
