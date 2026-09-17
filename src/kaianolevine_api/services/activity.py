@@ -350,6 +350,21 @@ async def emit_fault(
 # ---------------------------------------------------------------------------
 
 
+def record_fault_detail(request: Request, detail: str) -> None:
+    """Attach operator-facing context to this request's fault notification.
+
+    The response body belongs to the caller; this belongs to whoever is on
+    call. A handler that answers 5xx because a named upstream refused it
+    records *why* here, and the alert carries the reason without the
+    response having to leak it to an anonymous caller.
+
+    Same rule as ``_fault_detail``: what a handler records is a string it
+    chose deliberately -- never an exception's ``str()``, and never
+    anything derived from row data.
+    """
+    request.state.fault_detail = str(detail)
+
+
 def _fault_detail(exc: BaseException) -> str:
     """The exception's identity, and deliberately not its message.
 
@@ -418,7 +433,7 @@ async def activity_middleware(request: Request, call_next: Any) -> Any:
                     path=path,
                     actor=actor,
                     status_code=response.status_code,
-                    detail=None,
+                    detail=getattr(request.state, "fault_detail", None),
                 )
             )
         return response

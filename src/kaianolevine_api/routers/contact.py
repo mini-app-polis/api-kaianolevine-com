@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from ..config import get_settings
 from ..schemas import ErrorDetail, ErrorEnvelope
+from ..services.activity import record_fault_detail
 
 router = APIRouter()
 
@@ -139,20 +140,37 @@ async def _read_fields(
     return fields, redirect_raw
 
 
-async def _verify_turnstile(token: str, secret: str, remote_ip: str | None) -> bool:
+async def _verify_turnstile(
+    token: str, secret: str, remote_ip: str | None
+) -> tuple[bool, str | None]:
+    """Verify a Turnstile token.
+
+    Returns ``(verified, transport_error)``. ``transport_error`` is set only
+    when the check could not be performed at all -- an unreachable siteverify
+    is this service's problem, not a failed challenge, and the caller must not
+    report it to the visitor as a failed CAPTCHA.
+    """
     settings = get_settings()
     data = {"secret": secret, "response": token}
     if remote_ip:
         data["remoteip"] = remote_ip
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data=data,
-            timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data=data,
+                timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
+            )
+    except httpx.HTTPError as exc:
+        return False, type(exc).__name__
+
+    try:
         result = resp.json()
-        return bool(result.get("success"))
+    except ValueError:
+        return False, "malformed siteverify response"
+
+    return bool(result.get("success")), None
 
 
 async def _send_brevo_email(
@@ -176,13 +194,16 @@ async def _send_brevo_email(
     if reply_to_name:
         payload["replyTo"]["name"] = reply_to_name
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://api.brevo.com/v3/smtp/email",
-            json=payload,
-            headers={"api-key": api_key, "content-type": "application/json"},
-            timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                json=payload,
+                headers={"api-key": api_key, "content-type": "application/json"},
+                timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
+            )
+    except httpx.HTTPError as exc:
+        return False, f"transport error: {type(exc).__name__}"
 
     if resp.is_success:
         return True, None
@@ -268,11 +289,24 @@ async def submit_contact(request: Request) -> Response:
 
     # --- Turnstile verification ---
     remote_ip = request.client.host if request.client else None
-    turnstile_ok = await _verify_turnstile(
+    turnstile_ok, turnstile_error = await _verify_turnstile(
         token=token,  # type: ignore[arg-type]
         secret=settings.TURNSTILE_SECRET_KEY,
         remote_ip=remote_ip,
     )
+    if turnstile_error:
+        logger.error(
+            with_log_prefix(
+                LOG_FAILURE,
+                f"Turnstile siteverify unreachable (origin={origin_site}): {turnstile_error}",
+            )
+        )
+        record_fault_detail(request, f"turnstile siteverify: {turnstile_error}")
+        return _error_response(
+            502,
+            "upstream_error",
+            "Could not verify the CAPTCHA right now — please try again shortly",
+        )
     if not turnstile_ok:
         return _error_response(
             400,
@@ -300,6 +334,7 @@ async def submit_contact(request: Request) -> Response:
     if not all(
         [settings.BREVO_API_KEY, settings.CONTACT_TO_EMAIL, settings.CONTACT_FROM_EMAIL]
     ):
+        record_fault_detail(request, "email configuration missing")
         return _error_response(500, "config_error", "Email configuration missing")
 
     sent, error_detail = await _send_brevo_email(
@@ -319,9 +354,11 @@ async def submit_contact(request: Request) -> Response:
                 f"Brevo email send failed (origin={origin_site}, type={submission_type}): {error_detail}",
             )
         )
-        return _error_response(
-            502, "email_failed", "Failed to send email", details=error_detail
-        )
+        # The upstream body is a log line, not a response: Brevo's errors
+        # carry this service's egress IP and a link to its own admin console,
+        # and this endpoint is public and unauthenticated by design.
+        record_fault_detail(request, f"brevo: {error_detail}")
+        return _error_response(502, "email_failed", "Failed to send email")
 
     # --- Redirect or plain OK ---
     if redirect and origin:

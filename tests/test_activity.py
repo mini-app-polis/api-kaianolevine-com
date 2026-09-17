@@ -233,6 +233,48 @@ async def test_machine_4xx_is_reported(client, monkeypatch):
 
 
 @respx.mock
+async def test_returned_fault_carries_the_handlers_reason(client):
+    """A 5xx the handler *returned* must reach the channel with its reason.
+
+    The exception path always had ``_fault_detail(exc)``. The response path
+    passed ``detail=None``, so a handler that answered 502 because a named
+    upstream refused it produced an alert saying only "fault · 502" -- the
+    reason sat in the logs and the on-call had nothing to act on.
+    """
+    respx.post("https://challenges.cloudflare.com/turnstile/v0/siteverify").mock(
+        return_value=Response(200, json={"success": True})
+    )
+    respx.post("https://api.brevo.com/v3/smtp/email").mock(
+        return_value=Response(
+            401, json={"code": "unauthorized", "message": "unrecognised IP address"}
+        )
+    )
+    route = respx.post(DISCORD_URL).mock(return_value=Response(204))
+
+    resp = await client.post(
+        "/v1/contact",
+        json={
+            "type": "contact",
+            "originSite": "wcs.kaianolevine.com",
+            "email": "someone@example.com",
+            "turnstileToken": "valid-token",
+        },
+        headers={"origin": "https://kaianolevine.com"},
+    )
+    assert resp.status_code == 502
+
+    # The caller still learns nothing about the upstream.
+    assert resp.json()["error"]["details"] is None
+    assert "unrecognised IP" not in resp.text
+
+    await _drain()
+    assert route.call_count == 1
+    body = route.calls[0].request.content.decode()
+    assert "fault · 502" in body
+    assert "unauthorized" in body
+
+
+@respx.mock
 async def test_fault_detail_carries_no_row_data():
     """A DBAPI error's message must never reach the channel."""
     from sqlalchemy.exc import IntegrityError

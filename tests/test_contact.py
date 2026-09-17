@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 import respx
 from httpx import AsyncClient, Response
@@ -172,8 +173,32 @@ async def test_contact_brevo_failure(client: AsyncClient) -> None:
     assert resp.status_code == 502
     body = resp.json()
     assert body["error"]["code"] == "email_failed"
-    assert "details" in body["error"]
-    assert body["error"]["details"] == "upstream error"
+    # The upstream body stays in the logs. Brevo's errors carry this
+    # service's egress IP and a link to its admin console, and this
+    # endpoint is public and unauthenticated by design.
+    assert body["error"]["details"] is None
+    assert "upstream error" not in resp.text
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_contact_turnstile_unreachable(client: AsyncClient) -> None:
+    """An unreachable siteverify is this service's fault, not a failed challenge."""
+    respx.post("https://challenges.cloudflare.com/turnstile/v0/siteverify").mock(
+        side_effect=httpx.ConnectTimeout("siteverify unreachable")
+    )
+    brevo = respx.post("https://api.brevo.com/v3/smtp/email").mock(
+        return_value=Response(201, json={"messageId": "never-sent"})
+    )
+    resp = await client.post(
+        "/v1/contact",
+        json=VALID_JSON_BODY,
+        headers={"origin": "https://kaianolevine.com"},
+    )
+
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "upstream_error"
+    assert not brevo.called
 
 
 # ---------------------------------------------------------------------------
