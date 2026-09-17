@@ -1,3 +1,10 @@
+## [1.65.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.0...v1.65.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* Fixing error message found in production ([5932f34](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5932f342507c295f209026709e7bc1af16f01b8b))
+
 # [1.65.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.64.0...v1.65.0) (2026-09-16)
 
 
