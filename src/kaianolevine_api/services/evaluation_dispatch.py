@@ -87,6 +87,11 @@ class EvaluationJob:
     run_id: str | None = None
 
     def as_message(self) -> dict[str, Any]:
+        """Render this job as one ``TYPE_REPOSITORY`` queue message.
+
+        Optional fields are omitted rather than sent as null, so the
+        payload carries only what the caller actually supplied.
+        """
         payload: dict[str, Any] = {
             "repo": self.repo,
             "ref": self.ref,
@@ -133,6 +138,11 @@ class FleetJob:
     standards_version: str = ""
 
     def messages(self, units: list[fleet_registry.EvaluationUnit]) -> list[dict]:
+        """Render one queue message per unit in this pass.
+
+        Every message carries the pass's ``run_id``, so the findings from
+        one fan-out stay joinable however many units it covered.
+        """
         out: list[dict[str, Any]] = []
         for unit in units:
             payload: dict[str, Any] = {
@@ -181,6 +191,11 @@ class IntrospectionJob:
     standards_version: str = ""
 
     def as_message(self) -> dict[str, Any]:
+        """Render this job as one ``TYPE_INTROSPECTION`` queue message.
+
+        ``pass_run_id`` and ``standards_version`` are omitted when unset;
+        the class docstring says what an omitted ``pass_run_id`` means.
+        """
         payload: dict[str, Any] = {"run_id": self.run_id}
         if self.pass_run_id:
             payload["pass_run_id"] = self.pass_run_id
