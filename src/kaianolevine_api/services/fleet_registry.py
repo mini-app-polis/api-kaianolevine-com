@@ -89,6 +89,7 @@ class EvaluationUnit:
 
     @property
     def service_ids(self) -> list[str]:
+        """The declared service ids, skipping any service that has none."""
         return [str(s.get("id") or "") for s in self.services if s.get("id")]
 
 
