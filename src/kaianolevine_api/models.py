@@ -208,6 +208,9 @@ class PipelineEvaluation(Base):
     finding: Mapped[str | None] = mapped_column(Text, nullable=True)
     suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
     standards_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: The evaluator-cog release that wrote the row (migration 031). Null for
+    #: rows that predate it and for self-reports from pipeline cogs.
+    evaluator_version: Mapped[str | None] = mapped_column(String, nullable=True)
     source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     flow_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

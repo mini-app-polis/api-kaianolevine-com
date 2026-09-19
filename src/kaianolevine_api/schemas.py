@@ -255,6 +255,15 @@ class PipelineEvaluationCreate(BaseModel):
             "at all."
         ),
     )
+    evaluator_version: str | None = Field(
+        default=None,
+        description=(
+            "Release of evaluator-cog that produced this finding. Distinct "
+            "from standards_version: the catalog and the evaluator release "
+            "separately, and a finding's wording comes from the evaluator. "
+            "Null for self-reported runs from pipeline cogs."
+        ),
+    )
     source: str | None = Field(default=None, description="Semantic value for source.")
     flow_name: str | None = Field(
         default=None, description="Semantic value for flow name."
@@ -280,6 +289,9 @@ class PipelineEvaluationItem(BaseModel):
     suggestion: str | None = Field(..., description="Semantic value for suggestion.")
     standards_version: str | None = Field(
         ..., description="Semantic value for standards version."
+    )
+    evaluator_version: str | None = Field(
+        default=None, description="Release of evaluator-cog that wrote the finding."
     )
     source: str | None = Field(default=None, description="Semantic value for source.")
     flow_name: str | None = Field(
