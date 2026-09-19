@@ -1,3 +1,10 @@
+# [1.66.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.1...v1.66.0) (2026-09-19)
+
+
+### Features
+
+* **evaluations:** record the evaluator version on each finding ([d79f256](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d79f25644efa385ef54f10c294c3832095b24d66))
+
 ## [1.65.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.0...v1.65.1) (2026-09-17)
 
 
