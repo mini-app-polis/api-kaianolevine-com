@@ -118,6 +118,47 @@ async def test_evaluation_flow_name_is_none_when_omitted(client) -> None:
     assert created["flow_name"] is None
 
 
+async def test_evaluation_records_the_evaluator_version(client) -> None:
+    resp = await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "evaluator-cog",
+            "dimension": "cd_readiness",
+            "severity": "ERROR",
+            "run_id": "deterministic-6.17.1-657bd6fe36a7",
+            "finding": "uv.lock records evaluator-cog 1.0.0 for the project itself.",
+            "standards_version": "6.17.1",
+            "evaluator_version": "3.36.0",
+            "source": "conformance_deterministic",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["evaluator_version"] == "3.36.0"
+
+    listed = await client.get(
+        "/v1/evaluations",
+        params={"run_id": "deterministic-6.17.1-657bd6fe36a7"},
+    )
+    assert listed.status_code == 200
+    assert listed.json()["data"][0]["evaluator_version"] == "3.36.0"
+
+
+async def test_evaluation_evaluator_version_is_none_when_omitted(client) -> None:
+    """Self-reports from pipeline cogs are not written by the evaluator."""
+    resp = await client.post(
+        "/v1/evaluations",
+        json={
+            "repo": "deejay-cog",
+            "dimension": "pipeline_consistency",
+            "severity": "INFO",
+            "finding": "Pipeline completed normally.",
+            "source": "flow_inline",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["evaluator_version"] is None
+
+
 async def test_list_evaluations_only_returns_latest_run_per_repo_source(
     client, async_engine
 ) -> None:
