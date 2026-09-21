@@ -9,6 +9,7 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from kaianolevine_api.services import evaluation_dispatch as dispatch
+from kaianolevine_api.services import job_queue
 
 pytestmark = pytest.mark.asyncio
 
@@ -16,7 +17,6 @@ QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
 
 
 def _configured(monkeypatch) -> None:
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", QUEUE_URL)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 
@@ -120,7 +120,7 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     job = dispatch.EvaluationJob(
         repo="mono", ref="v2", org="other", mode="llm", repo_id="app-a"
     )
-    with patch.object(dispatch.boto3, "client", return_value=sqs) as factory:
+    with patch.object(job_queue.boto3, "client", return_value=sqs) as factory:
         result = await dispatch.dispatch_evaluation(job, settings=settings)
 
     assert result == {"message_id": "m-1"}
@@ -146,23 +146,23 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     )
 
 
-async def test_missing_configuration_is_named(monkeypatch) -> None:
-    """An unconfigured dispatcher and an unreachable queue differ."""
+async def test_development_cannot_reach_the_production_queue(monkeypatch) -> None:
+    """The development API held production's queue URL. Derived, it cannot."""
     from kaianolevine_api.config import get_settings
 
-    monkeypatch.delenv("EVALUATION_QUEUE_URL", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "development")
     get_settings.cache_clear()
+    sqs = _sqs()
 
-    with patch.object(dispatch, "_report", AsyncMock()) as reported:
-        with pytest.raises(dispatch.DispatchError, match="not configured"):
-            await dispatch.dispatch_evaluation(
-                dispatch.EvaluationJob(
-                    repo="x", ref="main", org="o", mode="deterministic"
-                ),
-                settings=get_settings(),
-            )
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_evaluation(
+            dispatch.EvaluationJob(repo="x", ref="main", org="o", mode="deterministic"),
+            settings=get_settings(),
+        )
 
-    assert "EVALUATION_QUEUE_URL" in reported.await_args.args[0]
+    assert sqs.send_message.call_args.kwargs["QueueUrl"] == (
+        "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-dev-jobs"
+    )
 
 
 async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
@@ -174,7 +174,7 @@ async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> Non
     sqs = _sqs(side_effect=refusal)
 
     with (
-        patch.object(dispatch.boto3, "client", return_value=sqs),
+        patch.object(job_queue.boto3, "client", return_value=sqs),
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
         with pytest.raises(dispatch.DispatchError):
@@ -201,7 +201,7 @@ async def test_absent_credentials_are_a_dropped_job_like_any_other(
     sqs = _sqs(side_effect=NoCredentialsError())
 
     with (
-        patch.object(dispatch.boto3, "client", return_value=sqs),
+        patch.object(job_queue.boto3, "client", return_value=sqs),
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
         with pytest.raises(dispatch.DispatchError):
@@ -227,7 +227,7 @@ async def test_an_acknowledgement_without_a_message_id_is_a_failure(
     sqs.send_message.return_value = {}
 
     with (
-        patch.object(dispatch.boto3, "client", return_value=sqs),
+        patch.object(job_queue.boto3, "client", return_value=sqs),
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
         with pytest.raises(dispatch.DispatchError, match="message id"):
@@ -257,7 +257,7 @@ async def test_the_producer_uses_its_own_named_credentials(monkeypatch) -> None:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIACONSUMER")  # wrong for this side
     settings = _settings(monkeypatch)
 
-    with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
+    with patch.object(job_queue.boto3, "client", return_value=_sqs()) as factory:
         await dispatch.dispatch_evaluation(
             dispatch.EvaluationJob(
                 repo="watcher-cog",
@@ -280,7 +280,7 @@ async def test_absent_credentials_fall_through_to_the_default_chain(
     monkeypatch.delenv("EVALUATION_QUEUE_PRODUCER_SECRET", raising=False)
     settings = _settings(monkeypatch)
 
-    with patch.object(dispatch.boto3, "client", return_value=_sqs()) as factory:
+    with patch.object(job_queue.boto3, "client", return_value=_sqs()) as factory:
         await dispatch.dispatch_evaluation(
             dispatch.EvaluationJob(
                 repo="watcher-cog",

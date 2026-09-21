@@ -23,9 +23,6 @@ import pytest
 from kaianolevine_api.services import evaluation_dispatch as dispatch
 from kaianolevine_api.services import fleet_registry
 
-QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
-
-
 ECOSYSTEM = {
     "services": [
         {"id": "watcher-cog", "status": "active"},
@@ -50,7 +47,6 @@ def _cold_cache():
 
 
 def _configured(monkeypatch) -> None:
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", QUEUE_URL)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 

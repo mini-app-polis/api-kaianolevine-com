@@ -19,11 +19,8 @@ from sqlalchemy import text
 
 from kaianolevine_api.services import evaluation_dispatch as dispatch
 
-QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
-
 
 def _configured(monkeypatch) -> None:
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", QUEUE_URL)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 

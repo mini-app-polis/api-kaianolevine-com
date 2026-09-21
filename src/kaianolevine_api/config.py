@@ -167,16 +167,14 @@ class Settings(BaseSettings):
     # crash backstop to fail silently. See routers.webhook.
     # Where evaluator-cog listens, and the secret it expects.
     #
-    # Where evaluation work is handed over.
+    # Where cog work is handed over.
     #
-    # This replaced an authenticated HTTP call to the evaluator's public
-    # address. Two things went with it: the shared secret that hop needed,
-    # and the Cloudflare round trip between two first-party services. What
-    # it costs instead is a long-lived AWS credential on this service —
-    # boto3 resolves AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the
-    # environment — because there is no OIDC path from Railway. That key
-    # can call sqs:SendMessage on this one queue and nothing else.
-    EVALUATION_QUEUE_URL: str | None = None
+    # Each cog's queue is derived from the cog name and this service's
+    # ENVIRONMENT — see services.job_queue.queue_url — rather than
+    # configured, so a development API cannot address a production queue.
+    # What this costs is a long-lived AWS credential on this service,
+    # because there is no OIDC path from Railway. That key can call
+    # sqs:SendMessage on `*-jobs` and nothing else.
     AWS_REGION: str = "us-east-1"
 
     # Named for this caller rather than using boto3's conventional
@@ -191,6 +189,10 @@ class Settings(BaseSettings):
     #
     # Left unset, boto3's default chain applies, which is what a runtime
     # with an instance or execution role wants.
+    #
+    # One credential for every cog's queue, despite the prefix. The API is
+    # the fleet's single producer and its IAM user may SendMessage on
+    # `*-jobs`, so deejay-jobs and every later queue use this same key.
     EVALUATION_QUEUE_PRODUCER_KEY_ID: str | None = None
     EVALUATION_QUEUE_PRODUCER_SECRET: str | None = None
 

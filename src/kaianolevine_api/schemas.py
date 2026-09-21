@@ -2154,3 +2154,36 @@ class EvaluationFleetAccepted(BaseModel):
     failed: list[str] = Field(
         default_factory=list, description="Repositories that did not."
     )
+
+
+class DeejayRunRequest(BaseModel):
+    """Ask deejay-cog to run one of its router modes.
+
+    The body is what watcher-cog used to pass to Prefect as flow-run
+    parameters, unchanged. An unknown mode is a 422 here rather than a
+    message the cog would dead-letter seventeen minutes later.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["process-new-files", "ingest-live-history"] = Field(
+        ...,
+        description=(
+            "Which deejay-cog flow to run. Mirrors DeejayMode in deejay-cog; "
+            "the cog refuses a mode it does not recognise."
+        ),
+    )
+
+
+class DeejayRunAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has run yet."""
+
+    accepted: bool = Field(True, description="The job is on the queue.")
+    message_id: str = Field(
+        "",
+        description=(
+            "The queue message this request became. What the API can "
+            "honestly say it did, and the handle for tracing the job."
+        ),
+    )
+    mode: str = Field(..., description="Flow that will run.")
