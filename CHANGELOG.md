@@ -1,3 +1,15 @@
+# [1.67.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.1...v1.67.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* **dispatch:** derive each cog's queue from its name and the environment ([ceba53b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ceba53b9d3303e8ebe4eb8664d1d8cb987b32f71))
+
+
+### Features
+
+* **deejay:** enqueue deejay-cog runs via POST /v1/deejay/runs ([779320e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/779320e4123b34b73ebe44d436d1177faa76a4ba))
+
 ## [1.66.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.0...v1.66.1) (2026-09-21)
 
 
