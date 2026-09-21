@@ -1,3 +1,10 @@
+## [1.66.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.0...v1.66.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 4 updates ([241b981](https://github.com/mini-app-polis/api-kaianolevine-com/commit/241b981ec1c44c57c7ef67094172127404db5ceb))
+
 # [1.66.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.1...v1.66.0) (2026-09-19)
 
 
