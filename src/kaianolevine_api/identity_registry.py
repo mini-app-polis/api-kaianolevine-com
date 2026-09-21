@@ -158,13 +158,15 @@ MACHINES: tuple[Machine, ...] = (
         roles=("standards-publisher", "notifier"),
         notes="POST /v1/standards/catalog from the release job.",
     ),
-    # watcher-cog polls Drive and calls no API endpoint but its own
-    # notifications. It was declared with no roles at all until /v1/notify
-    # existed; "notifier" is the first thing it has ever had a use for.
+    # watcher-cog polls Drive and turns a change in a watched folder into a
+    # run of the cog that owns it. It did that through Prefect's
+    # create_flow_run; it now asks the API, which enqueues onto that cog's
+    # queue. One trigger role per downstream cog, so a watcher key can start
+    # exactly the work watcher starts and nothing else.
     Machine(
         name="watcher-cog",
-        roles=("notifier",),
-        notes="Polls Drive. Calls no API endpoint except /v1/notify.",
+        roles=("deejay-trigger", "notifier"),
+        notes="Polls Drive. POST /v1/deejay/runs, /v1/notify.",
     ),
 )
 

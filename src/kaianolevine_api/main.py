@@ -23,6 +23,7 @@ from .config import get_settings
 from .routers import (
     catalog,
     contact,
+    deejay_runs,
     evaluations,
     flags,
     github_status,
@@ -257,6 +258,7 @@ def _build_app() -> FastAPI:
     app.include_router(tracks.router, prefix="/v1", tags=["tracks"])
     app.include_router(catalog.router, prefix="/v1", tags=["catalog"])
     app.include_router(evaluations.router, prefix="/v1", tags=["evaluations"])
+    app.include_router(deejay_runs.router, prefix="/v1", tags=["deejay"])
     app.include_router(flags.router, prefix="/v1", tags=["flags"])
     app.include_router(github_status.router, prefix="/v1", tags=["github"])
     app.include_router(identity_debug.router, prefix="/v1", tags=["identity"])

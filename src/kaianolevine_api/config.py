@@ -191,8 +191,16 @@ class Settings(BaseSettings):
     #
     # Left unset, boto3's default chain applies, which is what a runtime
     # with an instance or execution role wants.
+    #
+    # One credential for every cog's queue, despite the prefix. The API is
+    # the fleet's single producer and its IAM user may SendMessage on
+    # `*-jobs`, so deejay-jobs and every later queue use this same key.
     EVALUATION_QUEUE_PRODUCER_KEY_ID: str | None = None
     EVALUATION_QUEUE_PRODUCER_SECRET: str | None = None
+
+    # Where deejay-cog's work is handed over. Replaces watcher-cog calling
+    # Prefect's create_flow_run on the deejay-cog deployment.
+    DEEJAY_QUEUE_URL: str | None = None
 
     PREFECT_WEBHOOK_SECRET: str | None = None
     # Which Prefect state types are worth a message. The cogs' own failure
