@@ -66,8 +66,7 @@ async def dispatch_deejay(job: DeejayJob, *, settings: Settings) -> dict:
     return await job_queue.enqueue(
         job.as_message(),
         f"deejay {job.mode}",
-        queue_url=settings.DEEJAY_QUEUE_URL,
-        url_setting="DEEJAY_QUEUE_URL",
+        cog="deejay",
         label="deejay dispatch",
         report=lambda text: _report(text, settings),
         settings=settings,

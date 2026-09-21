@@ -8,7 +8,14 @@ lives here once so that the credential handling and the "did it land"
 checks cannot drift between copies.
 
 What stays with each dispatcher is what differs: the message it builds,
-which queue URL it reads, and what it calls itself when it reports a drop.
+which cog it is for, and what it calls itself when it reports a drop.
+
+**The queue is derived, not configured.** ``<cog>-jobs`` in production,
+``<cog>-dev-jobs`` everywhere else — see :func:`queue_url`. A configured
+URL made the environment boundary a matter of which value someone pasted
+into which Doppler config, and the development API was in fact holding
+production's evaluator queue. Derived, a development API cannot address a
+production queue at all.
 
 **A dropped job is the failure mode worth designing for.** Callers are
 fire-and-forget — a release job, a Drive watcher — and nobody reads the
@@ -26,6 +33,7 @@ from typing import Any
 import boto3
 import sentry_sdk
 from botocore.exceptions import BotoCoreError, ClientError
+from mini_app_polis.environment import Environment, current_environment
 from mini_app_polis.logger import LOG_FAILURE, get_logger, with_log_prefix
 
 from ..config import Settings
@@ -35,6 +43,41 @@ logger = get_logger()
 
 #: How a dispatcher says a job was dropped. Takes the message, reports it.
 Reporter = Callable[[str], Awaitable[None]]
+
+#: The fleet's AWS account. Not a secret, and the same in every
+#: environment — the environment split is in the queue name.
+AWS_ACCOUNT_ID = "400200465748"
+
+
+def queue_name(cog: str) -> str:
+    """``<cog>-jobs`` in production, ``<cog>-dev-jobs`` anywhere else.
+
+    ``cog`` is the Terraform ``name_prefix`` for that cog's queue, so this
+    and ``infra/`` share one naming rule instead of a copied URL.
+
+    Production is unsuffixed because SQS names are immutable and
+    ``evaluator-jobs`` is live; renaming it would be a new queue and a
+    second cutover for symmetry alone. Development and local both resolve
+    to ``-dev``: a local API has no queue of its own, and the one thing it
+    must never reach is production's. No ``-dev-jobs`` queue exists until a
+    development stack is applied, so until then a development enqueue fails
+    with ``NonExistentQueue`` and is reported like any other drop.
+
+    Resolved through ``current_environment()``, not ``settings.ENVIRONMENT``:
+    the setting holds whatever string ``ENVIRONMENT`` was set to, so an
+    alias like ``prod`` would fail the comparison and send production's
+    work to the development queue.
+    """
+    suffix = "" if current_environment() is Environment.PRODUCTION else "-dev"
+    return f"{cog}{suffix}-jobs"
+
+
+def queue_url(cog: str, *, settings: Settings) -> str:
+    """The SQS URL for ``cog``'s queue in this environment."""
+    return (
+        f"https://sqs.{settings.AWS_REGION}.amazonaws.com/"
+        f"{AWS_ACCOUNT_ID}/{queue_name(cog)}"
+    )
 
 
 class DispatchError(RuntimeError):
@@ -80,27 +123,19 @@ async def enqueue(
     message: dict[str, Any],
     what: str,
     *,
-    queue_url: str | None,
-    url_setting: str,
+    cog: str,
     label: str,
     report: Reporter,
     settings: Settings,
 ) -> dict:
-    """Put one job on a queue and insist that it landed.
+    """Put one job on ``cog``'s queue and insist that it landed.
 
-    ``url_setting`` names the setting ``queue_url`` came from, so an
-    unconfigured dispatcher says which variable is missing. ``label`` is
-    how the dispatcher appears in logs. ``report`` is called before every
-    raise: a drop is always worth mentioning, and the caller is a route
-    about to answer someone who will not read the answer.
+    ``label`` is how the dispatcher appears in logs. ``report`` is called
+    before every raise: a drop is always worth mentioning, and the caller
+    is a route about to answer someone who will not read the answer.
     """
-    url = (queue_url or "").strip()
-    if not url:
-        # Named rather than left to surface as a boto error: an
-        # unconfigured dispatcher and an unreachable queue are different
-        # problems and the message should say which.
-        await report(f"{label} is not configured: {url_setting}")
-        raise DispatchError(f"dispatch is not configured: {url_setting}")
+    url = queue_url(cog, settings=settings)
+    name = queue_name(cog)
 
     try:
         response = await asyncio.to_thread(
@@ -112,7 +147,9 @@ async def enqueue(
         # "no credentials" and "queue unreachable" both land here and both
         # mean the job did not land.
         sentry_sdk.capture_exception(exc)
-        await report(f"could not enqueue {what}: {exc!r}")
+        # The queue is named because in development the likeliest cause
+        # is that no -dev-jobs queue has been created, and the name says so.
+        await report(f"could not enqueue {what} onto {name}: {exc!r}")
         raise DispatchError(f"could not reach the queue: {exc}") from exc
 
     message_id = str(response.get("MessageId") or "")
@@ -123,7 +160,7 @@ async def enqueue(
         await report(f"enqueued {what} but SQS returned no MessageId")
         raise DispatchError("the queue acknowledged without a message id")
 
-    logger.info("%s: enqueued %s as %s", label, what, message_id)
+    logger.info("%s: enqueued %s onto %s as %s", label, what, name, message_id)
     return {"message_id": message_id}
 
 

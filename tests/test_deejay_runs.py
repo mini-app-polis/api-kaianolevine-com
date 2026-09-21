@@ -28,15 +28,12 @@ from kaianolevine_api.services import job_queue
 pytestmark = pytest.mark.asyncio
 
 QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/deejay-jobs"
-EVALUATOR_QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
 ISSUER = "https://clerk.kaianolevine.com"
 
 
 def _settings(monkeypatch):
     from kaianolevine_api.config import get_settings
 
-    monkeypatch.setenv("DEEJAY_QUEUE_URL", QUEUE_URL)
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", EVALUATOR_QUEUE_URL)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     get_settings.cache_clear()
     return get_settings()
@@ -179,26 +176,58 @@ async def test_enqueue_sends_the_run_message_to_deejays_queue(monkeypatch) -> No
     assert sent["MessageAttributes"]["type"]["StringValue"] == "deejay.run"
 
 
-async def test_missing_configuration_names_deejays_setting(monkeypatch) -> None:
-    """Not the evaluator's. Configured evaluator, unconfigured deejay."""
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        ("production", "deejay-jobs"),
+        # An alias must resolve like the canonical name. Compared as a raw
+        # string, "prod" would send production's work to the dev queue.
+        ("prod", "deejay-jobs"),
+        ("development", "deejay-dev-jobs"),
+        # A local API has no queue of its own; the one thing it must never
+        # reach is production's.
+        ("local", "deejay-dev-jobs"),
+    ],
+)
+async def test_the_queue_is_derived_from_cog_and_environment(
+    monkeypatch, environment, expected
+) -> None:
     from kaianolevine_api.config import get_settings
 
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", EVALUATOR_QUEUE_URL)
-    monkeypatch.delenv("DEEJAY_QUEUE_URL", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", environment)
     get_settings.cache_clear()
+    sqs = _sqs()
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_deejay(
+            dispatch.DeejayJob(mode="process-new-files"), settings=get_settings()
+        )
+
+    assert sqs.send_message.call_args.kwargs["QueueUrl"] == (
+        f"https://sqs.us-east-1.amazonaws.com/400200465748/{expected}"
+    )
+
+
+async def test_a_missing_dev_queue_is_reported_by_name(monkeypatch) -> None:
+    """Until a dev stack exists, a dev enqueue fails — and says which queue."""
+    from kaianolevine_api.config import get_settings
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    get_settings.cache_clear()
+    missing = ClientError(
+        {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue"}}, "SendMessage"
+    )
 
     with (
-        patch.object(job_queue.boto3, "client") as factory,
+        patch.object(job_queue.boto3, "client", return_value=_sqs(side_effect=missing)),
         patch.object(dispatch, "_report", AsyncMock()) as reported,
     ):
-        with pytest.raises(dispatch.DispatchError, match="DEEJAY_QUEUE_URL"):
+        with pytest.raises(dispatch.DispatchError):
             await dispatch.dispatch_deejay(
-                dispatch.DeejayJob(mode="process-new-files"),
-                settings=get_settings(),
+                dispatch.DeejayJob(mode="process-new-files"), settings=get_settings()
             )
 
-    factory.assert_not_called()
-    assert "DEEJAY_QUEUE_URL" in reported.await_args.args[0]
+    assert "onto deejay-dev-jobs" in reported.await_args.args[0]
 
 
 async def test_a_queue_refusal_reports_as_deejay(monkeypatch) -> None:

@@ -291,14 +291,13 @@ async def _enqueue(message: dict[str, Any], what: str, *, settings: Settings) ->
     """Put one job on the evaluator's queue and insist that it landed.
 
     The mechanics are shared with every other dispatcher — see
-    :mod:`.job_queue`. What is evaluator-specific is which queue and what
-    a drop is called.
+    :mod:`.job_queue`. What is evaluator-specific is which cog's queue and
+    what a drop is called.
     """
     return await job_queue.enqueue(
         message,
         what,
-        queue_url=settings.EVALUATION_QUEUE_URL,
-        url_setting="EVALUATION_QUEUE_URL",
+        cog="evaluator",
         label="evaluation dispatch",
         report=lambda text: _report(text, settings),
         settings=settings,

@@ -17,7 +17,6 @@ QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-jobs"
 
 
 def _configured(monkeypatch) -> None:
-    monkeypatch.setenv("EVALUATION_QUEUE_URL", QUEUE_URL)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 
@@ -147,23 +146,23 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     )
 
 
-async def test_missing_configuration_is_named(monkeypatch) -> None:
-    """An unconfigured dispatcher and an unreachable queue differ."""
+async def test_development_cannot_reach_the_production_queue(monkeypatch) -> None:
+    """The development API held production's queue URL. Derived, it cannot."""
     from kaianolevine_api.config import get_settings
 
-    monkeypatch.delenv("EVALUATION_QUEUE_URL", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "development")
     get_settings.cache_clear()
+    sqs = _sqs()
 
-    with patch.object(dispatch, "_report", AsyncMock()) as reported:
-        with pytest.raises(dispatch.DispatchError, match="not configured"):
-            await dispatch.dispatch_evaluation(
-                dispatch.EvaluationJob(
-                    repo="x", ref="main", org="o", mode="deterministic"
-                ),
-                settings=get_settings(),
-            )
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_evaluation(
+            dispatch.EvaluationJob(repo="x", ref="main", org="o", mode="deterministic"),
+            settings=get_settings(),
+        )
 
-    assert "EVALUATION_QUEUE_URL" in reported.await_args.args[0]
+    assert sqs.send_message.call_args.kwargs["QueueUrl"] == (
+        "https://sqs.us-east-1.amazonaws.com/400200465748/evaluator-dev-jobs"
+    )
 
 
 async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
