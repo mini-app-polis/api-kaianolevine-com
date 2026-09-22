@@ -1,3 +1,10 @@
+# [1.68.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.67.0...v1.68.0) (2026-09-22)
+
+
+### Features
+
+* adding transcription endpoint for aws trigger ([976f7d7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/976f7d7b977f4044115829e3a9ed9607b9c26a15))
+
 # [1.67.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.1...v1.67.0) (2026-09-21)
 
 
