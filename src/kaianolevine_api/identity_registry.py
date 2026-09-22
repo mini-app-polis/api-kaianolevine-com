@@ -165,8 +165,8 @@ MACHINES: tuple[Machine, ...] = (
     # exactly the work watcher starts and nothing else.
     Machine(
         name="watcher-cog",
-        roles=("deejay-trigger", "notifier"),
-        notes="Polls Drive. POST /v1/deejay/runs, /v1/notify.",
+        roles=("deejay-trigger", "transcription-trigger", "notifier"),
+        notes="Polls Drive. POST /v1/deejay/runs, /v1/transcription/runs, /v1/notify.",
     ),
 )
 

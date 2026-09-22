@@ -182,6 +182,7 @@ _DEV_ROLES = {
     "standards-publisher": ["standards.catalog.publish"],
     "evaluation-trigger": ["evaluations.runs.create"],
     "deejay-trigger": ["deejay.runs.create"],
+    "transcription-trigger": ["transcription.runs.create"],
 }
 
 
