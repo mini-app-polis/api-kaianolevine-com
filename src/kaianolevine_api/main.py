@@ -37,6 +37,7 @@ from .routers import (
     standards,
     stats,
     tracks,
+    transcription_runs,
     wcs_admin,
     wcs_auth,
     wcs_notes,
@@ -259,6 +260,7 @@ def _build_app() -> FastAPI:
     app.include_router(catalog.router, prefix="/v1", tags=["catalog"])
     app.include_router(evaluations.router, prefix="/v1", tags=["evaluations"])
     app.include_router(deejay_runs.router, prefix="/v1", tags=["deejay"])
+    app.include_router(transcription_runs.router, prefix="/v1", tags=["transcription"])
     app.include_router(flags.router, prefix="/v1", tags=["flags"])
     app.include_router(github_status.router, prefix="/v1", tags=["github"])
     app.include_router(identity_debug.router, prefix="/v1", tags=["identity"])

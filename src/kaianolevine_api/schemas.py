@@ -2187,3 +2187,64 @@ class DeejayRunAccepted(BaseModel):
         ),
     )
     mode: str = Field(..., description="Flow that will run.")
+
+
+class TranscriptionRunRequest(BaseModel):
+    """Ask transcription-cog to process one Drive file.
+
+    ``mode`` is what watcher-cog used to pass to Prefect as a flow-run
+    parameter, unchanged. ``drive_file_id`` is new: watcher names each file
+    it saw change, because one file is what fits in one Lambda invocation.
+    The retention sweep, ``voicenotes-cleanup``, works on the archive and
+    names no file. Either mistake is a 422 here rather than a message the
+    cog would dead-letter an hour later.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["wcs-transcripts", "voicenotes", "voicenotes-cleanup"] = Field(
+        ...,
+        description=(
+            "Which transcription-cog pipeline to run. Mirrors MODES in "
+            "transcription-cog's worker; the cog refuses a mode it does not "
+            "recognise."
+        ),
+    )
+    drive_file_id: str | None = Field(
+        None,
+        min_length=1,
+        max_length=256,
+        description=(
+            "The Drive file to process. Required for wcs-transcripts and "
+            "voicenotes; refused for voicenotes-cleanup."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _file_matches_mode(self) -> TranscriptionRunRequest:
+        if self.mode == "voicenotes-cleanup":
+            # A file id here would be silently ignored, and a caller that
+            # believes it said something it did not is the thing
+            # extra="forbid" exists for.
+            if self.drive_file_id:
+                raise ValueError("voicenotes-cleanup takes no drive_file_id")
+        elif not self.drive_file_id:
+            raise ValueError(f"{self.mode} needs a drive_file_id")
+        return self
+
+
+class TranscriptionRunAccepted(BaseModel):
+    """The acknowledgement. Not a result — nothing has run yet."""
+
+    accepted: bool = Field(True, description="The job is on the queue.")
+    message_id: str = Field(
+        "",
+        description=(
+            "The queue message this request became. What the API can "
+            "honestly say it did, and the handle for tracing the job."
+        ),
+    )
+    mode: str = Field(..., description="Pipeline that will run.")
+    drive_file_id: str | None = Field(
+        None, description="The file; absent for the retention sweep."
+    )
