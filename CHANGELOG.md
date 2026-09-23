@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.0...v2.0.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **config:** drop env keys for settings that no longer exist ([9a37b8c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a37b8c6f02cec2c13e6aef67d1bde71384f07c6))
+
 # [2.0.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.68.0...v2.0.0) (2026-09-23)
 
 
