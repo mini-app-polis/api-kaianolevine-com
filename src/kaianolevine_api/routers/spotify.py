@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Body, Depends
 from identity.types import Principal
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
@@ -80,7 +83,7 @@ async def ingest_spotify_playlists(
     unchanged = 0
 
     for pl in payload.playlists:
-        insert_stmt = pg_insert(tbl).values(
+        insert_stmt = pg_insert(DbSpotifyPlaylist).values(
             id=pl.id,
             name=pl.name,
             url=pl.url,
@@ -111,7 +114,9 @@ async def ingest_spotify_playlists(
             },
             where=tbl.c.snapshot_id.is_distinct_from(excluded.snapshot_id),
         )
-        result = await session.execute(stmt)
+        # An INSERT's result is a CursorResult; execute() is typed as the
+        # base Result, which has no rowcount.
+        result = cast(CursorResult[Any], await session.execute(stmt))
         if result.rowcount == 1:
             upserted += 1
         else:

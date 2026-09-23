@@ -279,7 +279,9 @@ async def submit_contact(request: Request) -> Response:
         for f in ["type", "originSite", "email", "turnstileToken"]
         if not _pick(fields, _field_keys[f])
     ]
-    if missing:
+    # The second half is the same test as `missing`, spelled so the type
+    # checker can see these four are str from here on.
+    if missing or not (submission_type and origin_site and email and token):
         return _error_response(
             400,
             "validation_error",
@@ -288,10 +290,17 @@ async def submit_contact(request: Request) -> Response:
         )
 
     # --- Turnstile verification ---
+    # Without a secret, siteverify rejects every token, and the visitor was
+    # told their CAPTCHA failed for what is this service's misconfiguration.
+    turnstile_secret = settings.TURNSTILE_SECRET_KEY
+    if not turnstile_secret:
+        record_fault_detail(request, "turnstile secret missing")
+        return _error_response(500, "config_error", "CAPTCHA configuration missing")
+
     remote_ip = request.client.host if request.client else None
     turnstile_ok, turnstile_error = await _verify_turnstile(
-        token=token,  # type: ignore[arg-type]
-        secret=settings.TURNSTILE_SECRET_KEY,
+        token=token,
+        secret=turnstile_secret,
         remote_ip=remote_ip,
     )
     if turnstile_error:
@@ -323,27 +332,28 @@ async def submit_contact(request: Request) -> Response:
         if k not in _RESERVED_FIELDS
     )
     html_content = (
-        f"<p><strong>Origin Site:</strong> {html.escape(origin_site)}</p>\n"  # type: ignore[arg-type]
-        f"<p><strong>Submission Type:</strong> {html.escape(submission_type)}</p>\n"  # type: ignore[arg-type]
-        f"<p><strong>Reply-To:</strong> {html.escape(email)}</p>\n"  # type: ignore[arg-type]
+        f"<p><strong>Origin Site:</strong> {html.escape(origin_site)}</p>\n"
+        f"<p><strong>Submission Type:</strong> {html.escape(submission_type)}</p>\n"
+        f"<p><strong>Reply-To:</strong> {html.escape(email)}</p>\n"
         f"<hr/>\n"
         f"{fields_html or '<p><em>No additional fields captured.</em></p>'}"
     )
 
     # --- Send via Brevo ---
-    if not all(
-        [settings.BREVO_API_KEY, settings.CONTACT_TO_EMAIL, settings.CONTACT_FROM_EMAIL]
-    ):
+    brevo_api_key = settings.BREVO_API_KEY
+    to_address = settings.CONTACT_TO_EMAIL
+    from_address = settings.CONTACT_FROM_EMAIL
+    if not (brevo_api_key and to_address and from_address):
         record_fault_detail(request, "email configuration missing")
         return _error_response(500, "config_error", "Email configuration missing")
 
     sent, error_detail = await _send_brevo_email(
-        api_key=settings.BREVO_API_KEY,  # type: ignore[arg-type]
-        from_email=settings.CONTACT_FROM_EMAIL,  # type: ignore[arg-type]
-        to_email=settings.CONTACT_TO_EMAIL,  # type: ignore[arg-type]
+        api_key=brevo_api_key,
+        from_email=from_address,
+        to_email=to_address,
         subject=f"New {submission_type} Submission from {origin_site}",
         html_content=html_content,
-        reply_to_email=email,  # type: ignore[arg-type]
+        reply_to_email=email,
         reply_to_name=reply_name,
     )
 

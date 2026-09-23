@@ -53,6 +53,11 @@ jobs:
       - name: Lint
         run: uv run ruff check src/ tests/
 
+      # TEST-012. This repo holds the database, every cog's auth and the
+      # dispatchers, and had never been typechecked.
+      - name: Type check
+        run: uv run mypy src/
+
       - name: Test
         run: uv run pytest --cov=src --cov-report=term-missing
 

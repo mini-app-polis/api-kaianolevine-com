@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -34,6 +34,10 @@ def _sign_jwt_rs256(private_key_pem: str, payload: dict[str, Any]) -> str:
         private_key_pem.encode(),
         password=None,
     )
+    # RS256 is RSA by definition. A PEM of any other key type would fail at
+    # sign() with an argument error; this says what is actually wrong.
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise ValueError(f"RS256 needs an RSA private key, got {type(key).__name__}")
     signature = key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
     return f"{signing_input.decode('utf-8')}.{_b64url(signature)}"
 

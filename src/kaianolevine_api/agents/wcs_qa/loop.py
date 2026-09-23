@@ -190,8 +190,10 @@ async def _dispatch_tool(
 ) -> dict:
     """Dispatch a tool call to the underlying retrieval function."""
     if name == "search_notes":
-        filters = NoteFilters(**inputs["filters"]) if inputs.get("filters") else None
-        hits = await search_notes(
+        note_filters = (
+            NoteFilters(**inputs["filters"]) if inputs.get("filters") else None
+        )
+        note_hits = await search_notes(
             session=session,
             embedder=embedder,
             viewer_id=viewer_id,
@@ -199,14 +201,14 @@ async def _dispatch_tool(
             flattener_version=config.flattener_version,
             query=inputs["query"],
             k=int(inputs.get("k", 10)),
-            filters=filters,
+            filters=note_filters,
         )
-        return {"hits": [h.model_dump(mode="json") for h in hits]}
+        return {"hits": [h.model_dump(mode="json") for h in note_hits]}
     if name == "search_transcripts":
-        filters = (
+        transcript_filters = (
             TranscriptFilters(**inputs["filters"]) if inputs.get("filters") else None
         )
-        hits = await search_transcripts(
+        transcript_hits = await search_transcripts(
             session=session,
             embedder=embedder,
             viewer_id=viewer_id,
@@ -215,9 +217,9 @@ async def _dispatch_tool(
             chunking_version=config.chunking_version,
             query=inputs["query"],
             k=int(inputs.get("k", 10)),
-            filters=filters,
+            filters=transcript_filters,
         )
-        return {"hits": [h.model_dump(mode="json") for h in hits]}
+        return {"hits": [h.model_dump(mode="json") for h in transcript_hits]}
     if name == "get_note":
         try:
             note_uuid = uuid.UUID(inputs["note_id"])

@@ -46,11 +46,11 @@ class Set(Base):
         default=uuid.uuid4,
     )
     owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    set_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
+    set_date: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
     venue: Mapped[str] = mapped_column(String, nullable=False, index=True)
     source_file: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
@@ -81,7 +81,7 @@ class Track(Base):
     )
 
     play_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    play_time: Mapped[Time | None] = mapped_column(Time, nullable=True)
+    play_time: Mapped[dt.time | None] = mapped_column(Time, nullable=True)
 
     # CSV column order (subset): label, title, remix, artist, comment, genre
     label: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -99,7 +99,7 @@ class Track(Base):
 
     data_quality: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
@@ -140,13 +140,13 @@ class TrackCatalog(Base):
     release_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     play_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    first_played: Mapped[Date] = mapped_column(Date, nullable=True)
-    last_played: Mapped[Date] = mapped_column(Date, nullable=True)
+    first_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    last_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
 
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[DateTime] = mapped_column(
+    updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         server_onupdate=func.now(),
@@ -224,11 +224,11 @@ class PipelineEvaluation(Base):
     #: generation expression, and the index below is the real guarantee
     #: either way.
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    evaluated_at: Mapped[DateTime] = mapped_column(
+    evaluated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
@@ -247,10 +247,10 @@ class FeatureFlag(Base):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[DateTime] = mapped_column(
+    updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         server_onupdate=func.now(),
@@ -303,7 +303,7 @@ class LivePlay(Base):
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
     artist: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[DateTime] = mapped_column(
+    created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
