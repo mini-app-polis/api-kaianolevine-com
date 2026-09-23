@@ -3,13 +3,10 @@
 Production on 2026-09-23: Cloudflare answered every webhook with error 1015,
 an HTML page applied to this service's IP, and the API kept posting — 41
 refused sends in four minutes, each one reported to Sentry. Posting through a
-1015 is what extends it. These tests pin the cooldown that stops that, and the
-filter that keeps webhook tokens out of httpx's log lines.
+1015 is what extends it. These tests pin the cooldown that stops that.
 """
 
 from __future__ import annotations
-
-import logging
 
 import pytest
 import respx
@@ -154,23 +151,3 @@ async def test_rate_limit_reported_to_sentry_once(
 
     assert len(reported) == 1
     assert "rate limit" in reported[0]
-
-
-def test_httpx_log_lines_carry_no_webhook_token(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """The line httpx writes for every request, with the token replaced."""
-    with caplog.at_level(logging.INFO, logger="httpx"):
-        logging.getLogger("httpx").info(
-            'HTTP Request: %s %s "%s %d %s"',
-            "POST",
-            "https://discord.com/api/webhooks/1546975930675765312/AbC-123_xyz/github",
-            "HTTP/1.1",
-            204,
-            "No Content",
-        )
-
-    line = caplog.records[-1].getMessage()
-    assert "AbC-123_xyz" not in line
-    assert "/api/webhooks/1546975930675765312/<redacted>/github" in line
-    assert line.startswith("HTTP Request: POST")

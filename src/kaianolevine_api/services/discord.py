@@ -27,9 +27,8 @@ that scope: posting through a 1015 is what extends it. The limit is reported
 to Sentry once, when it starts, and the dropped sends are logged as warnings.
 
 httpx logs each request's URL at INFO, and a webhook URL carries its token in
-the path. A filter on the httpx loggers replaces the token before the line is
-written; the line itself stays, since it is the only record that a request
-went out.
+the path. The shared logger (``mini_app_polis.logger``) redacts it from those
+lines; nothing here configures logging.
 
 Delivery failures are logged and reported to Sentry, never raised. The caller
 is either GitHub — which must not be handed a 5xx for a Discord outage, since
@@ -40,8 +39,6 @@ truth in Sentry and a 200 on the wire.
 
 from __future__ import annotations
 
-import logging
-import re
 import time
 from typing import Any
 
@@ -59,30 +56,6 @@ from mini_app_polis.logger import (
 from ..config import Settings
 
 logger = get_logger()
-
-#: The token segment of a Discord webhook URL, ``/api/webhooks/<id>/<token>``.
-_WEBHOOK_TOKEN = re.compile(r"(/api/webhooks/\d+/)[^/\s\"?#]+")
-
-
-class _RedactWebhookTokens(logging.Filter):
-    """Replace webhook tokens in httpx's log lines with ``<redacted>``.
-
-    Found in the production logs on 2026-09-23: every ``HTTP Request: POST``
-    line httpx wrote at INFO carried a live webhook token. Filtering keeps
-    the line and drops only the secret, where raising the logger to WARNING
-    would have dropped both.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        redacted = _WEBHOOK_TOKEN.sub(r"\1<redacted>", message)
-        if redacted != message:
-            record.msg, record.args = redacted, None
-        return True
-
-
-for _name in ("httpx", "httpcore"):
-    logging.getLogger(_name).addFilter(_RedactWebhookTokens())
 
 #: Cooldown key for a limit on every webhook at once.
 _ALL_WEBHOOKS = "*"
