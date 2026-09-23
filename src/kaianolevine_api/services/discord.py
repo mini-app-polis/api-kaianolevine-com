@@ -18,6 +18,19 @@ Callers pick a channel; nothing here decides one for them, because the
 knowledge of what a message *is* lives at the call site and gets thinner with
 every layer it is passed down through.
 
+Rate limits hold every send, not just the one that was refused. A 429 starts
+a cooldown for its scope — one webhook when Discord says the limit is that
+webhook's bucket, all of them when it is global or when Cloudflare refused the
+request before Discord saw it (error 1015, an HTML page rather than JSON,
+applied to this service's IP). Until the cooldown ends nothing is posted to
+that scope: posting through a 1015 is what extends it. The limit is reported
+to Sentry once, when it starts, and the dropped sends are logged as warnings.
+
+httpx logs each request's URL at INFO, and a webhook URL carries its token in
+the path. A filter on the httpx loggers replaces the token before the line is
+written; the line itself stays, since it is the only record that a request
+went out.
+
 Delivery failures are logged and reported to Sentry, never raised. The caller
 is either GitHub — which must not be handed a 5xx for a Discord outage, since
 enough of those make GitHub disable the webhook — or one of the fleet's own
@@ -27,6 +40,9 @@ truth in Sentry and a 200 on the wire.
 
 from __future__ import annotations
 
+import logging
+import re
+import time
 from typing import Any
 
 import httpx
@@ -43,6 +59,84 @@ from mini_app_polis.logger import (
 from ..config import Settings
 
 logger = get_logger()
+
+#: The token segment of a Discord webhook URL, ``/api/webhooks/<id>/<token>``.
+_WEBHOOK_TOKEN = re.compile(r"(/api/webhooks/\d+/)[^/\s\"?#]+")
+
+
+class _RedactWebhookTokens(logging.Filter):
+    """Replace webhook tokens in httpx's log lines with ``<redacted>``.
+
+    Found in the production logs on 2026-09-23: every ``HTTP Request: POST``
+    line httpx wrote at INFO carried a live webhook token. Filtering keeps
+    the line and drops only the secret, where raising the logger to WARNING
+    would have dropped both.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        redacted = _WEBHOOK_TOKEN.sub(r"\1<redacted>", message)
+        if redacted != message:
+            record.msg, record.args = redacted, None
+        return True
+
+
+for _name in ("httpx", "httpcore"):
+    logging.getLogger(_name).addFilter(_RedactWebhookTokens())
+
+#: Cooldown key for a limit on every webhook at once.
+_ALL_WEBHOOKS = "*"
+#: When a 429 names no wait. Cloudflare's 1015 page usually does not.
+_DEFAULT_COOLDOWN_SECS = 60.0
+#: Upper bound on a cooldown, so a malformed Retry-After cannot mute Discord
+#: for the rest of the process's life.
+_MAX_COOLDOWN_SECS = 3600.0
+#: A rejection body is logged for its reason; a 1015 is several kilobytes of
+#: HTML, and the reason is in the first few hundred characters.
+_BODY_LOG_LIMIT = 500
+
+#: Cooldown scope (a webhook URL, or ``_ALL_WEBHOOKS``) -> the
+#: ``time.monotonic()`` value before which nothing is posted to it.
+_cooldowns: dict[str, float] = {}
+
+
+def _cooldown_remaining(url: str) -> float:
+    """Seconds until ``url`` may be posted to again; zero or less means now."""
+    deadline = max(_cooldowns.get(url, 0.0), _cooldowns.get(_ALL_WEBHOOKS, 0.0))
+    return deadline - time.monotonic()
+
+
+def _start_cooldown(url: str, resp: httpx.Response) -> tuple[float, str]:
+    """Record the cooldown a 429 asks for; return its length and scope.
+
+    Discord's own 429 is JSON with ``retry_after`` in seconds and ``global``
+    saying whether it covers every route. Anything else — Cloudflare's HTML
+    1015 page among them — is treated as global, with the ``Retry-After``
+    header if there is one and the default if not.
+    """
+    secs: float | None = None
+    scope = _ALL_WEBHOOKS
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        retry_after = data.get("retry_after")
+        if isinstance(retry_after, int | float):
+            secs = float(retry_after)
+        if data.get("global") is False:
+            scope = url
+    if secs is None:
+        try:
+            secs = float(resp.headers.get("Retry-After", ""))
+        except ValueError:
+            secs = None
+    if not secs or secs <= 0:
+        secs = _DEFAULT_COOLDOWN_SECS
+    secs = min(secs, _MAX_COOLDOWN_SECS)
+    _cooldowns[scope] = time.monotonic() + secs
+    return secs, scope
+
 
 #: Suffix Discord exposes for GitHub-shaped payloads.
 GITHUB_SUFFIX = "/github"
@@ -131,6 +225,17 @@ async def _post(
     channel: str,
 ) -> bool:
     """POST to Discord, returning whether it accepted the message."""
+    remaining = _cooldown_remaining(url)
+    if remaining > 0:
+        logger.warning(
+            with_log_prefix(
+                LOG_WARNING,
+                f"discord rate-limited; not sending ({context}) channel={channel} "
+                f"for another {remaining:.0f}s",
+            )
+        )
+        return False
+
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -160,14 +265,31 @@ async def _post(
         )
         return True
 
+    if resp.status_code == 429:
+        secs, scope = _start_cooldown(url, resp)
+        held = "every webhook" if scope == _ALL_WEBHOOKS else "this webhook"
+        logger.error(
+            with_log_prefix(
+                LOG_FAILURE,
+                f"discord rate-limited ({context}) channel={channel}; "
+                f"holding {held} for {secs:.0f}s",
+            )
+        )
+        sentry_sdk.capture_message(
+            f"Discord rate limit ({context}) channel={channel}: holding {held} "
+            f"for {secs:.0f}s",
+            level="error",
+        )
+        return False
+
     # A non-2xx is Discord rejecting the message, not a transport fault: the
-    # body says why and is worth having verbatim, since the usual causes are a
-    # malformed embed or a revoked webhook.
+    # body says why, since the usual causes are a malformed embed or a revoked
+    # webhook. Its start is enough for that.
     logger.error(
         with_log_prefix(
             LOG_FAILURE,
             f"discord rejected ({context}) channel={channel} "
-            f"status={resp.status_code} body={resp.text}",
+            f"status={resp.status_code} body={resp.text[:_BODY_LOG_LIMIT]}",
         )
     )
     sentry_sdk.capture_message(
