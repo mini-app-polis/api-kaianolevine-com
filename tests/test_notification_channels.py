@@ -28,7 +28,6 @@ from kaianolevine_api.routers.notifications import decide
 from kaianolevine_api.services import activity, discord
 
 SECRET = "test-github-secret"
-PREFECT_TOKEN = "test-prefect-token"
 
 DEFAULT_URL = "https://discord.test/api/webhooks/1/token"
 DEFAULT_GITHUB_URL = f"{DEFAULT_URL}/github"
@@ -263,31 +262,6 @@ async def test_cog_reports_reach_the_runs_webhook(
     assert resp.status_code == 200
     assert runs.called
     assert not errors.called
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_prefect_callbacks_reach_the_errors_webhook(
-    client: AsyncClient, channels
-) -> None:
-    """Every message this route sends is a failing state, so the route routes."""
-    errors = respx.post(ERRORS_URL).mock(return_value=Response(204))
-    runs = respx.post(RUNS_URL).mock(return_value=Response(204))
-
-    resp = await client.post(
-        "/v1/prefect-webhook",
-        json={
-            "flow_run_id": "run-1",
-            "flow_name": "process-new-csv-files",
-            "state_name": "Crashed",
-            "state_type": "CRASHED",
-        },
-        headers={"Content-Type": "application/json", "X-Prefect-Token": PREFECT_TOKEN},
-    )
-
-    assert resp.status_code == 200
-    assert errors.called
-    assert not runs.called
 
 
 @respx.mock

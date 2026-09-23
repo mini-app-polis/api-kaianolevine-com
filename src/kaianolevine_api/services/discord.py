@@ -56,7 +56,7 @@ GITHUB_SUFFIX = "/github"
 #: above.
 CHANNEL_DEFAULT = "default"
 #: Anything that means something is broken, whatever produced it: failed CI
-#: on the default branch, Prefect's crash callbacks, this service's own 5xx
+#: on the default branch, cogs' dead-letter-queue alarms, this service's own 5xx
 #: and machine-facing 4xx, and a failed identity reconcile at boot.
 CHANNEL_ERRORS = "errors"
 #: The running list of committed data changes, from the request middleware.
@@ -65,8 +65,11 @@ CHANNEL_ERRORS = "errors"
 CHANNEL_ACTIVITY = "activity"
 #: Cog run reports arriving through ``POST /v1/notify``. Every severity,
 #: including crashes: a cog's own reports stay together so the channel is a
-#: complete record of the fleet's runs. Crashes still reach CHANNEL_ERRORS,
-#: by way of Prefect's webhook rather than the cog's own hook.
+#: complete record of the fleet's runs. A run that died too hard to report
+#: itself no longer has a fleet-wide backstop here — Prefect's webhook was
+#: that, and it is gone. Each cog carries its own instead: a dead-letter-queue
+#: alarm for the ones behind a queue, a Healthchecks grace period for
+#: wiki-curator-cog, which has none.
 CHANNEL_RUNS = "runs"
 
 #: Channel name -> the ``Settings`` field holding that channel's webhook.
