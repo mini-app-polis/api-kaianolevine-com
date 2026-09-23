@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.3...v2.0.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* **discord:** hold sends through a 429 instead of posting through it ([314686b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/314686b451eafc68ca690ca719fa1f72f5f4c00e))
+
 ## [2.0.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.2...v2.0.3) (2026-09-23)
 
 
