@@ -1,3 +1,14 @@
+# [2.0.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.68.0...v2.0.0) (2026-09-23)
+
+
+* refactor!: remove the Prefect flow-state webhook ([d88e92f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d88e92f858e5fa981893cccfc96cca820f28152f))
+
+
+### BREAKING CHANGES
+
+* POST /v1/prefect-webhook is gone, and
+PREFECT_WEBHOOK_SECRET and PREFECT_NOTIFY_STATES are no longer read.
+
 # [1.68.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.67.0...v1.68.0) (2026-09-22)
 
 
