@@ -590,51 +590,61 @@ async def compose_source(
         )
         counts["attributions"] += 1
 
-    for addition in drill_additions:
-        if addition.source_id is not None and addition.source_id != source_id:
+    for drill_addition in drill_additions:
+        if (
+            drill_addition.source_id is not None
+            and drill_addition.source_id != source_id
+        ):
             continue
-        drill = await _resolve_entity_by_slug(session, addition.drill_entity_slug)
+        drill = await _resolve_entity_by_slug(session, drill_addition.drill_entity_slug)
         session.add(
             WcsDrillPurpose(
                 drill_entity_id=drill.id,
                 source_id=source_id,
-                skill_name=addition.skill_name,
-                skill_slug=slugify(addition.skill_name),
-                prose=addition.prose,
-                focus_context=addition.focus_context,
+                skill_name=drill_addition.skill_name,
+                skill_slug=slugify(drill_addition.skill_name),
+                prose=drill_addition.prose,
+                focus_context=drill_addition.focus_context,
                 origin="manual",
             )
         )
         counts["drill_purposes"] += 1
 
-    for addition in technique_additions:
-        if addition.source_id is not None and addition.source_id != source_id:
+    for technique_addition in technique_additions:
+        if (
+            technique_addition.source_id is not None
+            and technique_addition.source_id != source_id
+        ):
             continue
         technique = await _resolve_entity_by_slug(
-            session, addition.technique_entity_slug
+            session, technique_addition.technique_entity_slug
         )
         session.add(
             WcsTechniqueRequirement(
                 technique_entity_id=technique.id,
                 source_id=source_id,
-                skill_name=addition.skill_name,
-                skill_slug=slugify(addition.skill_name),
-                prose=addition.prose,
+                skill_name=technique_addition.skill_name,
+                skill_slug=slugify(technique_addition.skill_name),
+                prose=technique_addition.prose,
                 origin="manual",
             )
         )
         counts["technique_requirements"] += 1
 
-    for addition in relation_additions:
-        from_entity = await _resolve_entity_by_slug(session, addition.from_entity_slug)
-        to_entity = await _resolve_entity_by_slug(session, addition.to_entity_slug)
+    for relation_addition in relation_additions:
+        from_entity = await _resolve_entity_by_slug(
+            session, relation_addition.from_entity_slug
+        )
+        to_entity = await _resolve_entity_by_slug(
+            session, relation_addition.to_entity_slug
+        )
         session.add(
             WcsEntityRelation(
                 from_entity_id=from_entity.id,
                 to_entity_id=to_entity.id,
-                relation_kind=addition.relation_kind,
+                relation_kind=relation_addition.relation_kind,
                 source_id=source_id,
-                prose=addition.prose,
+                prose=relation_addition.prose,
                 origin="manual",
             )
         )

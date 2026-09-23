@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from identity.types import Principal
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
@@ -61,7 +64,9 @@ async def ingest_live_plays(
                 index_elements=["owner_id", "title", "artist", "played_at"],
             )
         )
-        result = await session.execute(stmt)
+        # An INSERT's result is a CursorResult; execute() is typed as the
+        # base Result, which has no rowcount.
+        result = cast(CursorResult[Any], await session.execute(stmt))
         if result.rowcount == 1:
             inserted += 1
         else:

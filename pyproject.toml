@@ -32,6 +32,7 @@ dev = [
   "pytest-cov>=5.0,<8.0",
   "respx>=0.21,<1.0",
   "aiosqlite>=0.20,<1.0",
+  "mypy>=1.11.2",
   "pre-commit>=3.6,<5.0",
   "ruff>=0.7,<1.0",
 ]
@@ -56,6 +57,15 @@ ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+# Every schema passes its default positionally, Field(True, ...), which
+# mypy's dataclass_transform support does not read as a default. The plugin
+# does, and it treats pydantic-settings fields as optional in __init__.
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

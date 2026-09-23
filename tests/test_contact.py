@@ -201,6 +201,29 @@ async def test_contact_turnstile_unreachable(client: AsyncClient) -> None:
     assert not brevo.called
 
 
+@respx.mock
+@pytest.mark.asyncio
+async def test_contact_turnstile_secret_missing(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing secret is a config error, not the visitor's failed CAPTCHA."""
+    from kaianolevine_api.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "TURNSTILE_SECRET_KEY", None)
+    siteverify = respx.post(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    ).mock(return_value=Response(200, json={"success": False}))
+    resp = await client.post(
+        "/v1/contact",
+        json=VALID_JSON_BODY,
+        headers={"origin": "https://kaianolevine.com"},
+    )
+
+    assert resp.status_code == 500
+    assert resp.json()["error"]["code"] == "config_error"
+    assert not siteverify.called
+
+
 # ---------------------------------------------------------------------------
 # Form data
 # ---------------------------------------------------------------------------

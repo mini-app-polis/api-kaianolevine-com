@@ -14,7 +14,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeGuard
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -294,6 +294,20 @@ async def _resolve_note(
     return note
 
 
+_SessionType = Literal["private_lesson", "group_class", "other"]
+_SESSION_TYPES: frozenset[str] = frozenset({"private_lesson", "group_class", "other"})
+
+
+def _is_session_type(value: str) -> TypeGuard[_SessionType]:
+    """True when a stored session_type is one of the three the API serves.
+
+    The column is free text, so a value outside the set is possible; it is
+    dropped to None here rather than carried into a response model that
+    rejects it.
+    """
+    return value in _SESSION_TYPES
+
+
 @dataclass
 class _ChunkResolution:
     """Result of resolving a chunk citation against the DB.
@@ -357,7 +371,11 @@ async def _resolve_chunk(
             title=title,
             session_date=single_note.session_date,
             linked_note_id=single_note.id,
-            session_type=single_note.session_type,
+            session_type=(
+                single_note.session_type
+                if _is_session_type(single_note.session_type)
+                else None
+            ),
             instructors=list(single_note.instructors or []),
             students=list(single_note.students or []),
             organization=single_note.organization or None,

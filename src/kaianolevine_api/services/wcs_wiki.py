@@ -231,7 +231,7 @@ async def get_entity_view(
     drill_purposes: list[WcsDrillPurpose] = []
     technique_requirements: list[WcsTechniqueRequirement] = []
     if kind == "drill":
-        drill_purposes = (
+        drill_purposes = list(
             (
                 await session.execute(
                     select(WcsDrillPurpose).where(
@@ -247,7 +247,7 @@ async def get_entity_view(
             .all()
         )
     elif kind == "technique":
-        technique_requirements = (
+        technique_requirements = list(
             (
                 await session.execute(
                     select(WcsTechniqueRequirement).where(
