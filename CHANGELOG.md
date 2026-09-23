@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.1...v2.0.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **contact:** report a missing Turnstile secret as a config error ([f15fae8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f15fae8f18b6dd588664ad11e30c995454f7bf6d))
+
 ## [2.0.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.0...v2.0.1) (2026-09-23)
 
 
