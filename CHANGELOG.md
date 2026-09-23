@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.2...v2.0.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* **discord:** hold sends through a 429 and redact webhook tokens in httpx logs ([fdc13ea](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fdc13ea2148ac77a571fbc418de2db38331cbbef))
+
 ## [2.0.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.1...v2.0.2) (2026-09-23)
 
 
