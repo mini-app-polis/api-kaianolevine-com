@@ -493,8 +493,9 @@ async def github_webhook(
         "First-party notification path for cogs and scripts. Takes a Discord "
         "message body (content and/or embeds) and posts it to the runs "
         "channel, whatever the severity — a cog's reports stay together so "
-        "that channel is a complete record of the fleet's runs, and crashes "
-        "reach the errors channel by way of the Prefect webhook instead. "
+        "that channel is a complete record of the fleet's runs. A run that "
+        "died too hard to report itself is caught by its own cog's backstop "
+        "— a dead-letter-queue alarm, or a Healthchecks grace period. "
         "Requires notify.messages.send."
     ),
 )

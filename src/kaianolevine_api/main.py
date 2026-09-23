@@ -44,7 +44,6 @@ from .routers import (
     wcs_qa,
     wcs_sources,
     wcs_wiki,
-    webhook,
 )
 from .schemas import ErrorDetail, ErrorEnvelope
 
@@ -269,7 +268,6 @@ def _build_app() -> FastAPI:
     app.include_router(spotify.router, prefix="/v1", tags=["spotify"])
     app.include_router(ingest.router, prefix="/v1", tags=["ingest"])
     app.include_router(live_plays.router, prefix="/v1", tags=["live-plays"])
-    app.include_router(webhook.router, prefix="/v1", tags=["webhook"])
     app.include_router(notifications.router, prefix="/v1", tags=["notifications"])
     app.include_router(contact.router, prefix="/v1", tags=["contact"])
     app.include_router(resume.router, prefix="/v1", tags=["resume"])

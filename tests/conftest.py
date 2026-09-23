@@ -28,7 +28,6 @@ os.environ.setdefault(
     "DISCORD_WEBHOOK_URL", "https://discord.test/api/webhooks/1/token"
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
-os.environ.setdefault("PREFECT_WEBHOOK_SECRET", "test-prefect-token")
 # Discord embed titles stay unmarked unless a test opts into non-production.
 # Unset would resolve to local via the shared environment resolver.
 # Deterministic, not setdefault: Settings is constructed at import time
@@ -254,5 +253,4 @@ def _production_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     non-production path set ENVIRONMENT themselves.
     """
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.delenv("PREFECT_TRIGGER_ENABLED", raising=False)
     monkeypatch.delenv("HEALTHCHECKS_ENABLED", raising=False)

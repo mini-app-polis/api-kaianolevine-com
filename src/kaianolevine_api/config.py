@@ -160,13 +160,6 @@ class Settings(BaseSettings):
     # file, which is the reviewable value.
     GITHUB_DASHBOARD_CACHE_TTL_SECS: int | None = None
 
-    # Optional shared secret for the Prefect flow-state webhook, sent in
-    # X-Prefect-Token. Enforced only when set: the caller is Prefect
-    # posting flow states, the worst a stranger can do with the URL is put
-    # noise in a channel, and a required header would be a new way for the
-    # crash backstop to fail silently. See routers.webhook.
-    # Where evaluator-cog listens, and the secret it expects.
-    #
     # Where cog work is handed over.
     #
     # Each cog's queue is derived from the cog name and this service's
@@ -195,14 +188,6 @@ class Settings(BaseSettings):
     # `*-jobs`, so deejay-jobs and every later queue use this same key.
     EVALUATION_QUEUE_PRODUCER_KEY_ID: str | None = None
     EVALUATION_QUEUE_PRODUCER_SECRET: str | None = None
-
-    PREFECT_WEBHOOK_SECRET: str | None = None
-    # Which Prefect state types are worth a message. The cogs' own failure
-    # hooks already report what they can; this route is the backstop for
-    # runs whose process died too hard to report itself, so it overlaps on
-    # ordinary failures by design. Narrow to ["CRASHED"] if the duplicates
-    # outweigh the coverage.
-    PREFECT_NOTIFY_STATES: list[str] = ["CRASHED", "FAILED", "CANCELLED", "TIMEDOUT"]
 
     # Google service account (Drive resume proxy)
     GOOGLE_CLIENT_EMAIL: str | None = None

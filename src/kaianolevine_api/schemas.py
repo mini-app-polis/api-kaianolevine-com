@@ -551,31 +551,6 @@ class SpotifyPlaylistsIngestResponse(BaseModel):
     unchanged: int = Field(..., description="Semantic value for unchanged.")
 
 
-class PrefectWebhookPayload(BaseModel):
-    """Prefect flow-state payload accepted by webhook endpoint."""
-
-    flow_run_id: str | None = Field(
-        default=None, description="Semantic value for flow run id."
-    )
-    flow_name: str | None = Field(
-        default=None, description="Semantic value for flow name."
-    )
-    state_name: str | None = Field(
-        default=None, description="Semantic value for state name."
-    )
-    state_type: str | None = Field(
-        default=None, description="Semantic value for state type."
-    )
-    start_time: str | None = Field(
-        default=None, description="Semantic value for start time."
-    )
-    end_time: str | None = Field(
-        default=None, description="Semantic value for end time."
-    )
-
-    model_config = ConfigDict(extra="allow")
-
-
 def api_error(
     status_code: int,
     code: str,
