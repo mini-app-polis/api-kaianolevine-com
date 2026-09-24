@@ -1,3 +1,11 @@
+## [2.0.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.4...v2.0.5) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** require common-utils 5.12.1 for webhook token redaction ([7b09198](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7b091984c289492ae3c635358429ce044130748b))
+* **deps:** require common-utils 5.13.1 ([60fd7e0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/60fd7e0bb45cce7733ab396d40ba72c022603ec9))
+
 ## [2.0.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.3...v2.0.4) (2026-09-23)
 
 
