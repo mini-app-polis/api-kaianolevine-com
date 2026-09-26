@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.5...v2.1.0) (2026-09-26)
+
+
+### Features
+
+* **dispatch:** claim Drive files so repeated asks become one job ([56bc05f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/56bc05f49011d91f3faab596a5a535b4e8bc18c1))
+
 ## [2.0.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.4...v2.0.5) (2026-09-24)
 
 
