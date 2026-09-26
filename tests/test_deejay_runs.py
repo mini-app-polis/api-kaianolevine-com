@@ -96,7 +96,12 @@ async def test_a_run_is_enqueued_and_acknowledged(client, monkeypatch, mode) -> 
 
     assert response.status_code == 202, response.text
     data = response.json()["data"]
-    assert data == {"accepted": True, "message_id": "m-9", "mode": mode}
+    assert data == {
+        "accepted": True,
+        "message_id": "m-9",
+        "mode": mode,
+        "deduplicated": False,
+    }
     assert dispatched.await_args.args[0] == dispatch.DeejayJob(mode=mode)
 
 
