@@ -2131,6 +2131,28 @@ class EvaluationFleetAccepted(BaseModel):
     )
 
 
+class DriveFileRef(BaseModel):
+    """One Drive file a watcher saw, for the API to claim before dispatching.
+
+    ``revision`` is the file's modifiedTime, sent only for a folder whose
+    files are edited in place and never leave; it makes the claim one per
+    version rather than one per file. See services/dispatch_claims.py.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=256, description="Drive file id.")
+    revision: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description=(
+            "The file's modifiedTime, for a file edited in place. Absent for "
+            "a drained inbox, where the file being present is the work."
+        ),
+    )
+
+
 class DeejayRunRequest(BaseModel):
     """Ask deejay-cog to run one of its router modes.
 
@@ -2148,12 +2170,29 @@ class DeejayRunRequest(BaseModel):
             "the cog refuses a mode it does not recognise."
         ),
     )
+    drive_files: list[DriveFileRef] | None = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description=(
+            "The files in the watched folder. When present, each is claimed "
+            "and the sweep is enqueued only if at least one claim is new or "
+            "renewed; otherwise the request is deduplicated. When absent the "
+            "sweep is enqueued unconditionally, which is an operator's run."
+        ),
+    )
 
 
 class DeejayRunAccepted(BaseModel):
     """The acknowledgement. Not a result — nothing has run yet."""
 
-    accepted: bool = Field(True, description="The job is on the queue.")
+    accepted: bool = Field(
+        True,
+        description=(
+            "The work is on the queue — this request's message, or, when "
+            "deduplicated, an earlier one's."
+        ),
+    )
     message_id: str = Field(
         "",
         description=(
@@ -2162,6 +2201,14 @@ class DeejayRunAccepted(BaseModel):
         ),
     )
     mode: str = Field(..., description="Flow that will run.")
+    deduplicated: bool = Field(
+        False,
+        description=(
+            "Nothing was enqueued because every file named is already "
+            "claimed by an earlier request. ``message_id`` is that "
+            "request's job, when it has reached the queue."
+        ),
+    )
 
 
 class TranscriptionRunRequest(BaseModel):
@@ -2211,7 +2258,13 @@ class TranscriptionRunRequest(BaseModel):
 class TranscriptionRunAccepted(BaseModel):
     """The acknowledgement. Not a result — nothing has run yet."""
 
-    accepted: bool = Field(True, description="The job is on the queue.")
+    accepted: bool = Field(
+        True,
+        description=(
+            "The work is on the queue — this request's message, or, when "
+            "deduplicated, an earlier one's."
+        ),
+    )
     message_id: str = Field(
         "",
         description=(
@@ -2222,4 +2275,12 @@ class TranscriptionRunAccepted(BaseModel):
     mode: str = Field(..., description="Pipeline that will run.")
     drive_file_id: str | None = Field(
         None, description="The file; absent for the retention sweep."
+    )
+    deduplicated: bool = Field(
+        False,
+        description=(
+            "Nothing was enqueued because every file named is already "
+            "claimed by an earlier request. ``message_id`` is that "
+            "request's job, when it has reached the queue."
+        ),
     )

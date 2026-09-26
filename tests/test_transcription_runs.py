@@ -106,6 +106,7 @@ async def test_a_file_run_is_enqueued_and_acknowledged(
         "message_id": "m-9",
         "mode": mode,
         "drive_file_id": "f-1",
+        "deduplicated": False,
     }
     assert dispatched.await_args.args[0] == dispatch.TranscriptionJob(
         mode=mode, drive_file_id="f-1"

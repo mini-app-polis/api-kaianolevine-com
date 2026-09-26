@@ -233,6 +233,57 @@ class PipelineEvaluation(Base):
     )
 
 
+class DispatchClaim(Base):
+    """One Drive file asked for, so a watcher asking again is not a second job.
+
+    watcher-cog is stateless: every tick lists its folders and asks for
+    whatever is there. A file that is still being processed is still there,
+    so the ask repeats every minute until the cog moves it. This table is
+    what turns those repeats into one job. See services/dispatch_claims.py
+    for the rules; this is only the record.
+
+    ``revision`` is empty for a claim on a file being present (a drained
+    inbox) and holds the file's modifiedTime for a claim on one version of a
+    file that is edited in place and never leaves. The two expire
+    differently, and the empty string rather than NULL is what lets both sit
+    under one unique constraint: NULLs are distinct in a unique index.
+    """
+
+    __tablename__ = "dispatch_claims"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope", "drive_file_id", "revision", name="uq_dispatch_claims_key"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    #: ``<cog>:<mode>`` — the job the file was asked for.
+    scope: Mapped[str] = mapped_column(String(128), nullable=False)
+    drive_file_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    revision: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    #: How many times this file has been dispatched under this claim.
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    claimed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    #: The queue message the latest dispatch became. A repeat ask is
+    #: answered with it, so the caller can trace the job that has the file.
+    message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    #: When the file was given up on and said so. Set once, so the errors
+    #: channel hears about a poison file once rather than every window.
+    capped_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class FeatureFlag(Base):
     """Feature flag row controlling runtime behavior by name."""
 

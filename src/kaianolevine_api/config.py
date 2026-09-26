@@ -115,7 +115,12 @@ class Settings(BaseSettings):
     # Tables whose writes are not news. identity_audit_events is written on
     # every authorized request, reads included, so leaving it in would make
     # the feed a copy of the access log.
-    NOTIFY_SUPPRESSED_TABLES: list[str] = ["identity_audit_events"]
+    # dispatch_claims is written on every watcher tick that finds a file,
+    # including the ones that change nothing — a feed of it would be a
+    # line a minute per pending file. The dispatch it guards is already
+    # reported where it matters: a drop or a capped file in errors, the
+    # run itself in runs.
+    NOTIFY_SUPPRESSED_TABLES: list[str] = ["identity_audit_events", "dispatch_claims"]
     # Paths outside the feed entirely. Liveness and version are polled by
     # uptime monitors and their failures are already Healthchecks.io's job;
     # the two notification routes are excluded so a Discord outage cannot
