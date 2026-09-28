@@ -1,3 +1,10 @@
+## [2.1.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.1...v2.1.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils in the commons group ([8a2aa9e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8a2aa9e0dbf3dc26ca77b5c3399e6489248bebef))
+
 ## [2.1.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.0...v2.1.1) (2026-09-28)
 
 
