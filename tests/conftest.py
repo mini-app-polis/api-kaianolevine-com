@@ -36,6 +36,11 @@ os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
 # CI and failed locally. The autouse fixture below covers per-test
 # overrides; this covers import time.
 os.environ["ENVIRONMENT"] = "production"
+# Production, but never publishing: the request-metrics middleware reads
+# its gate when the app is built, and with the production environment above
+# it would start a flush thread and reach for AWS with whatever credentials
+# the launching shell has.
+os.environ["CLOUDWATCH_METRICS_ENABLED"] = "false"
 
 from identity.store import (  # noqa: E402
     IdentityBase,

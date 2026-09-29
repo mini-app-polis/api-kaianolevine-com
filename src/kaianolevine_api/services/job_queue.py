@@ -84,29 +84,37 @@ class DispatchError(RuntimeError):
     """The job did not reach the queue."""
 
 
+def producer_credentials(settings: Settings) -> dict[str, str]:
+    """boto3 client keyword arguments for the API's AWS identity.
+
+    Explicit when configured, boto3's default chain when not. The explicit
+    path is for Railway, where the fleet's one secrets store would otherwise
+    make the producer's and the consumer's keys collide on
+    AWS_ACCESS_KEY_ID. The default path is for any runtime that supplies a
+    role instead.
+
+    One credential for every queue: the API's producer user holds
+    sqs:SendMessage on `*-jobs`, so a new cog's queue is covered the moment
+    it exists. The same identity publishes the API's request metrics
+    (services.cloudwatch). The EVALUATION_ prefix is historical.
+    """
+    if not settings.EVALUATION_QUEUE_PRODUCER_KEY_ID:
+        return {}
+    return {
+        "aws_access_key_id": settings.EVALUATION_QUEUE_PRODUCER_KEY_ID,
+        "aws_secret_access_key": settings.EVALUATION_QUEUE_PRODUCER_SECRET or "",
+    }
+
+
 def send(message: dict[str, Any], *, queue_url: str, settings: Settings) -> dict:
     """The blocking SQS call, kept in one place so the caller can offload it.
 
     boto3 is synchronous and this runs inside an async route, so calling it
     directly would block the event loop for the round trip.
     """
-    # Explicit when configured, boto3's default chain when not. The
-    # explicit path is for Railway, where the fleet's one secrets store
-    # would otherwise make the producer's and the consumer's keys collide
-    # on AWS_ACCESS_KEY_ID. The default path is for any runtime that
-    # supplies a role instead.
-    #
-    # One credential for every queue: the API's producer user holds
-    # sqs:SendMessage on `*-jobs`, so a new cog's queue is covered the
-    # moment it exists. The EVALUATION_ prefix is historical.
-    credentials: dict[str, str] = {}
-    if settings.EVALUATION_QUEUE_PRODUCER_KEY_ID:
-        credentials = {
-            "aws_access_key_id": settings.EVALUATION_QUEUE_PRODUCER_KEY_ID,
-            "aws_secret_access_key": settings.EVALUATION_QUEUE_PRODUCER_SECRET or "",
-        }
-
-    client = boto3.client("sqs", region_name=settings.AWS_REGION, **credentials)
+    client = boto3.client(
+        "sqs", region_name=settings.AWS_REGION, **producer_credentials(settings)
+    )
     return client.send_message(
         QueueUrl=queue_url,
         MessageBody=json.dumps(message),
