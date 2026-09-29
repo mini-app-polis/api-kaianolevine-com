@@ -1,0 +1,75 @@
+name: deployed
+
+# Runs when Railway reports a deploy (Railway posts GitHub deployments; the
+# environments are named "<project> / dev" and "<project> / production")
+# and smoke-tests the API that just went live, in either environment
+# (CD-032).
+#
+# After a dev deploy it also asks common-python-utils to run the live
+# contract suite against it. The cogs call this API through that library's
+# client, so the suite lives there, next to the catalog it checks (TEST-016,
+# ADR-012). Triggering on the deploy rather than on the push means the suite
+# meets the new API, not the one it replaced. Production only gets the
+# read-only smoke test: the contract suite writes data and never runs there.
+#
+# GitHub cannot filter deployment_status by state or environment, so the
+# statuses Railway posts before a deploy finishes start a run that skips.
+#
+# The cross-repository trigger uses the promote GitHub App (the same org
+# secrets as promote and automerge): a repository_dispatch needs a token
+# with Contents: write on common-python-utils, which GITHUB_TOKEN never has.
+
+on: deployment_status
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      (endsWith(github.event.deployment.environment, '/ dev') ||
+       endsWith(github.event.deployment.environment, '/ production'))
+    runs-on: ubuntu-latest
+    env:
+      API: ${{ endsWith(github.event.deployment.environment, '/ dev') && 'https://dev-api.kaianolevine.com' || 'https://api.kaianolevine.com' }}
+    steps:
+      - name: Smoke-test the deployed API
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          curl -fsS -o /dev/null --retry 5 --retry-delay 5 --retry-all-errors "$API/health" \
+            || fail "$API/health did not answer after the deploy."
+          # A scoped route without a key must refuse with the error envelope
+          # — a 500 here means the app is up but broken. Authentication runs
+          # before the handler, so this touches no data.
+          code=$(curl -sS -o body.json -w '%{http_code}' "$API/v1/wcs/wiki/export")
+          [ "$code" = 401 ] || fail "$API/v1/wcs/wiki/export without a key answered $code, not 401."
+          jq -e '.error.code | type == "string"' body.json >/dev/null \
+            || fail "$API/v1/wcs/wiki/export answered 401 without the error envelope."
+          echo "API OK at $API (${{ github.event.deployment.sha }})"
+
+  contract:
+    needs: smoke
+    if: endsWith(github.event.deployment.environment, '/ dev')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint an App token for common-python-utils
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.PROMOTE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: mini-app-polis
+          repositories: common-python-utils
+          permission-contents: write
+
+      - name: Run the contract suite against the new API
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SHA: ${{ github.event.deployment.sha }}
+        run: |
+          gh api repos/mini-app-polis/common-python-utils/dispatches \
+            -f event_type=dev-api-deployed \
+            -f "client_payload[api_sha]=$SHA"
+          echo "Asked common-python-utils to run the contract suite against $SHA."
