@@ -168,6 +168,34 @@ MACHINES: tuple[Machine, ...] = (
         roles=("deejay-trigger", "transcription-trigger", "notifier"),
         notes="Polls Drive. POST /v1/deejay/runs, /v1/transcription/runs, /v1/notify.",
     ),
+    # The contract suite in common-python-utils (ADR-012, TEST-016) calls the
+    # endpoints the fleet calls, as the fleet does, against the development
+    # API. Its key is set in development configuration only (CD-033), so in
+    # production this machine is declared and cannot authenticate. That is
+    # the whole guard, and it is the right one: the declaration is the same
+    # everywhere, and the environment decides what proves it.
+    #
+    # Existing roles rather than a role of its own. Each is what a cog already
+    # holds for the same endpoints, so the suite calls them with the scopes
+    # the fleet really has, and a scope change there is a change here too.
+    # No trigger roles: development has no queues, so the run endpoints are
+    # in the suite's not-exercised list and it has no need to call them.
+    Machine(
+        name="contract-suite",
+        roles=(
+            "catalog-ingest",
+            "wcs-writer",
+            "corpus-reader",
+            "pipeline-writer",
+            "notifier",
+        ),
+        notes=(
+            "Development only. The catalog in mini_app_polis.api.contract: "
+            "POST /v1/ingest, /v1/live-plays, /v1/spotify/playlists, "
+            "/v1/wcs/transcripts, /v1/wcs/sources, /v1/evaluations, /v1/notify; "
+            "GET /v1/wcs/wiki/export, /v1/evaluations."
+        ),
+    ),
 )
 
 
