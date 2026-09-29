@@ -1,3 +1,15 @@
+# [2.2.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.2...v2.2.0) (2026-09-29)
+
+
+### Bug Fixes
+
+* **deps:** bump oauthlib to 4.0.0 and pyjwt to 2.15.1 for CVE-2026-49265 and CVE-2026-102274 ([9c4d894](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9c4d894d3d07b27029a7fa79f9b76c0ceef94423))
+
+
+### Features
+
+* **metrics:** publish request latency and error counts to CloudWatch ([ed8487e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ed8487e84c175d8ce06573b34041308b5df41642))
+
 ## [2.1.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.1...v2.1.2) (2026-09-28)
 
 
