@@ -17,6 +17,7 @@ from mini_app_polis.logger import (
     get_logger,
     with_log_prefix,
 )
+from mini_app_polis.request_metrics import RequestMetricsMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from .config import get_settings
@@ -50,7 +51,7 @@ from .schemas import ErrorDetail, ErrorEnvelope
 # activity is imported for its side effect as well as its middleware:
 # importing it is what registers the SQLAlchemy listeners that tally
 # data changes.
-from .services import activity, discord
+from .services import activity, cloudwatch, discord
 
 logger = get_logger()
 
@@ -175,6 +176,17 @@ def _build_app() -> FastAPI:
     # actually went on the wire, and to be inside the server-error handler
     # below so an unhandled exception reaches it as a raise.
     app.middleware("http")(activity.activity_middleware)
+
+    # Outermost, so its clock covers everything the client waits for, CORS
+    # and the activity middleware included. Records nothing outside
+    # production (the cloudwatch_metrics gate). Liveness and version are
+    # polled by uptime monitors and would swamp the latency percentiles.
+    app.add_middleware(
+        RequestMetricsMiddleware,
+        service="api-kaianolevine-com",
+        client_factory=lambda: cloudwatch.client_factory(settings),
+        exclude_paths=["/health", "/version"],
+    )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
