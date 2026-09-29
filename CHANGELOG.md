@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.2.0...v2.3.0) (2026-09-29)
+
+
+### Features
+
+* **metrics:** per-route latency for the standards catalog and evaluation writes ([037a163](https://github.com/mini-app-polis/api-kaianolevine-com/commit/037a163748a9a8095976904142a60e5bcb082758))
+
 # [2.2.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.2...v2.2.0) (2026-09-29)
 
 
