@@ -1,3 +1,11 @@
+## [2.3.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.3...v2.3.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** common-utils 5.17.0 for slow-request logging ([5c51a42](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5c51a42ad2d6742c224003b81c699df39cfb0160))
+* **deps:** common-utils 5.17.0 for slow-request logging ([f4e1ec6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f4e1ec613e4c69241c01b548386c78d56e643337))
+
 ## [2.3.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.2...v2.3.3) (2026-09-30)
 
 
