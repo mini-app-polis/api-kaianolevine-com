@@ -1,3 +1,10 @@
+## [2.3.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.4...v2.3.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **github-status:** serve the expired snapshot and refresh behind it ([f80ec04](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f80ec044c0862b59026801e3d7366dd567480fe3))
+
 ## [2.3.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.3...v2.3.4) (2026-09-30)
 
 
