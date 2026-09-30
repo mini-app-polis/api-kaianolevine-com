@@ -5,6 +5,8 @@
   },
   "deploy": {
     "startCommand": "python scripts/apply_migrations.py && uvicorn src.kaianolevine_api.main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "limitOverride": {
