@@ -545,11 +545,20 @@ def shape(
 _snapshot: dict[str, Any] = {"payload": None, "monotonic": 0.0}
 _refresh_lock = asyncio.Lock()
 
+#: The refresh running behind a request that was answered with the expired
+#: snapshot. Held here so it is not garbage-collected mid-flight, and so a
+#: second expired request joins it rather than starting another.
+_background: dict[str, asyncio.Task[None] | None] = {"task": None}
+
 
 def reset_cache() -> None:
     """Drop the cached snapshot. Tests call this; nothing else should."""
     _snapshot["payload"] = None
     _snapshot["monotonic"] = 0.0
+    task = _background["task"]
+    if task is not None and not task.done():
+        task.cancel()
+    _background["task"] = None
     # Defensive: tests substitute load_config with a plain callable.
     clear = getattr(load_config, "cache_clear", None)
     if clear is not None:
@@ -597,36 +606,35 @@ async def _refresh(settings: Settings, cfg: dict[str, Any], ttl: int) -> GithubS
 
 
 async def get_status(settings: Settings) -> GithubStatus:
-    """Return the dashboard payload, refreshing from GitHub past the TTL.
+    """Return the dashboard payload: stale-while-revalidate over GitHub.
 
-    Concurrent callers past the TTL take the lock one at a time and the
-    later ones find the fresh snapshot already there, so a burst of
-    visitors is still one upstream call.
+    Past the TTL the expired snapshot is returned at once and one background
+    task refreshes it. A refresh reads every configured org in turn — about
+    6.7 s measured in production — and while it ran inline that wait landed
+    on whichever visitor arrived first after each expiry, as the API's p99.
+    ``fetched_at`` still says how old the snapshot is.
+
+    Only a request with no snapshot at all, the first after a deploy, waits
+    for GitHub. Concurrent first requests take the lock one at a time and
+    the later ones find the snapshot already there, so a burst of visitors
+    is still one upstream call.
     """
     cfg = load_config()
     ttl = cache_ttl(settings)
-    now = time.monotonic()
 
     cached: GithubStatus | None = _snapshot["payload"]
-    if cached is not None and now - float(_snapshot["monotonic"]) < ttl:
+    if cached is not None:
+        if time.monotonic() - float(_snapshot["monotonic"]) >= ttl:
+            _start_background_refresh(settings, cfg, ttl)
         return cached
 
     async with _refresh_lock:
-        now = time.monotonic()
         cached = _snapshot["payload"]
-        if cached is not None and now - float(_snapshot["monotonic"]) < ttl:
+        if cached is not None:
             return cached
         try:
             payload = await _refresh(settings, cfg, ttl)
         except Exception as exc:
-            if cached is not None:
-                logger.warning(
-                    with_log_prefix(
-                        LOG_WARNING,
-                        f"GitHub refresh failed ({type(exc).__name__}); serving stale snapshot",
-                    )
-                )
-                return cached.model_copy(update={"stale": True})
             logger.error(
                 with_log_prefix(
                     LOG_FAILURE, f"GitHub refresh failed with no snapshot: {exc}"
@@ -641,3 +649,48 @@ async def get_status(settings: Settings) -> GithubStatus:
         _snapshot["payload"] = payload
         _snapshot["monotonic"] = time.monotonic()
         return payload
+
+
+def _start_background_refresh(
+    settings: Settings, cfg: dict[str, Any], ttl: int
+) -> None:
+    """Refresh behind the current request, unless a refresh is already running."""
+    task = _background["task"]
+    if task is not None and not task.done():
+        return
+    _background["task"] = asyncio.create_task(
+        _refresh_in_background(settings, cfg, ttl)
+    )
+
+
+async def _refresh_in_background(
+    settings: Settings, cfg: dict[str, Any], ttl: int
+) -> None:
+    """Replace the snapshot, or mark it stale if GitHub cannot be read.
+
+    Never raises: nothing awaits this task, so an exception here would only
+    surface as asyncio's "never retrieved" warning. The clock is left alone
+    on failure, so the next request past the TTL tries again.
+    """
+    async with _refresh_lock:
+        cached: GithubStatus | None = _snapshot["payload"]
+        if (
+            cached is not None
+            and time.monotonic() - float(_snapshot["monotonic"]) < ttl
+        ):
+            return
+        try:
+            payload = await _refresh(settings, cfg, ttl)
+        except Exception as exc:
+            logger.warning(
+                with_log_prefix(
+                    LOG_WARNING,
+                    f"GitHub refresh failed ({type(exc).__name__}); serving stale snapshot",
+                )
+            )
+            if cached is not None:
+                _snapshot["payload"] = cached.model_copy(update={"stale": True})
+            return
+
+        _snapshot["payload"] = payload
+        _snapshot["monotonic"] = time.monotonic()
