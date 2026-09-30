@@ -19,6 +19,18 @@ async def test_version_endpoint_returns_package_version(client) -> None:
     assert "." in data["version"]
 
 
+async def test_version_endpoint_reports_railway_commit(client, monkeypatch) -> None:
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abc123")
+    resp = await client.get("/version")
+    assert resp.json()["commit"] == "abc123"
+
+
+async def test_version_endpoint_commit_is_null_off_railway(client, monkeypatch) -> None:
+    monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA", raising=False)
+    resp = await client.get("/version")
+    assert resp.json()["commit"] is None
+
+
 async def test_root_redirects_to_docs(client) -> None:
     resp = await client.get("/", follow_redirects=False)
     assert resp.status_code == 307

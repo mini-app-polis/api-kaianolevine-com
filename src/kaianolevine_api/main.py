@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from contextlib import asynccontextmanager
 from importlib.metadata import version as pkg_version
 from typing import Any
@@ -320,16 +321,27 @@ async def health() -> dict:
     tags=["meta"],
     summary="API version",
     description=(
-        "Returns the currently deployed package version. Intentionally public "
-        "and unversioned: the endpoint reports which API version is running, "
-        "so it must be reachable at a stable version-independent path with "
-        "no auth."
+        "Returns the currently deployed package version and the commit it was "
+        "built from. Intentionally public and unversioned: the endpoint "
+        "reports which API version is running, so it must be reachable at a "
+        "stable version-independent path with no auth."
     ),
     response_model=dict,
 )
 async def version() -> dict:
-    """Return the currently deployed package version. Intentionally public."""
-    return {"version": app.version}
+    """Return the deployed package version and commit. Intentionally public.
+
+    ``commit`` is what lets the post-deploy smoke test prove it is talking to
+    the deploy it was triggered by rather than the one being replaced: dev
+    deploys never bump ``version`` (semantic-release only runs on main), so
+    the version alone cannot tell two dev deploys apart. Railway sets
+    RAILWAY_GIT_COMMIT_SHA for deploys built from GitHub; it is null for
+    anything else (local runs, ``railway up``).
+    """
+    return {
+        "version": app.version,
+        "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
+    }
 
 
 @app.get(

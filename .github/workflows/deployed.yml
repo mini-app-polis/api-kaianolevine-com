@@ -6,6 +6,14 @@ name: deployed
 # and smoke-tests the API that just went live, in either environment
 # (CD-032).
 #
+# "Just went live" is checked, not assumed. A deployment_status of success
+# can arrive while the public hostname still routes to the deploy being
+# replaced, and /health or a 401 answer the same from either. So the job
+# first waits until /version reports the deployment's own commit, and
+# confirms it again after the checks, so every probe in between is known to
+# have met the new deploy. Railway only switches traffic once /health
+# answers (healthcheckPath in railway.json), which keeps that wait short.
+#
 # After a dev deploy it also asks common-python-utils to run the live
 # contract suite against it. The cogs call this API through that library's
 # client, so the suite lives there, next to the catalog it checks (TEST-016,
@@ -34,12 +42,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       API: ${{ endsWith(github.event.deployment.environment, '/ development') && 'https://dev-api.kaianolevine.com' || 'https://api.kaianolevine.com' }}
+      SHA: ${{ github.event.deployment.sha }}
     steps:
       - name: Smoke-test the deployed API
         run: |
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
-          curl -fsS -o /dev/null --retry 5 --retry-delay 5 --retry-all-errors "$API/health" \
+          serving() { curl -fsS --max-time 10 "$API/version" 2>/dev/null | jq -r '.commit // empty' 2>/dev/null || true; }
+          # Wait for the new deploy to be the one answering (up to 5 min).
+          deadline=$(( $(date +%s) + 300 ))
+          until [ "$(serving)" = "$SHA" ]; do
+            [ "$(date +%s)" -lt "$deadline" ] \
+              || fail "$API is still serving '$(serving)', not $SHA, 5 minutes after the deploy reported success."
+            sleep 10
+          done
+          curl -fsS -o /dev/null "$API/health" \
             || fail "$API/health did not answer after the deploy."
           # A scoped route without a key must refuse with the error envelope
           # — a 500 here means the app is up but broken. Authentication runs
@@ -48,7 +65,10 @@ jobs:
           [ "$code" = 401 ] || fail "$API/v1/wcs/wiki/export without a key answered $code, not 401."
           jq -e '.error.code | type == "string"' body.json >/dev/null \
             || fail "$API/v1/wcs/wiki/export answered 401 without the error envelope."
-          echo "API OK at $API (${{ github.event.deployment.sha }})"
+          # Still the new deploy — the probes above did not straddle a switch.
+          [ "$(serving)" = "$SHA" ] \
+            || fail "$API switched away from $SHA during the smoke test (now '$(serving)')."
+          echo "API OK at $API ($SHA)"
 
   contract:
     needs: smoke
