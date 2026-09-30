@@ -1,3 +1,11 @@
+## [2.3.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.1...v2.3.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** bump urllib3 to 2.8.0 for CVE-2026-97687, CVE-2026-97688 and CVE-2026-97689 ([b134499](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b134499136a5b9ecee0750912e0b6d29b350757d))
+* **deps:** bump virtualenv to 21.14.1 for PYSEC-2026-4011, PYSEC-2026-4012, PYSEC-2026-4013 and PYSEC-2026-4014 ([2a7c4ef](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2a7c4ef66f00944df2f4c7a784fa113187c5178c))
+
 ## [2.3.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.0...v2.3.1) (2026-09-30)
 
 
