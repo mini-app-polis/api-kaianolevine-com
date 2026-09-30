@@ -287,12 +287,42 @@ async def test_github_failure_serves_the_previous_snapshot_marked_stale(
     monkeypatch.setattr(gh, "cache_ttl", lambda _settings: 0)
     route.mock(return_value=httpx.Response(500, json={"message": "boom"}))
 
+    # The expired request is answered at once; the refresh fails behind it.
+    await client.get("/v1/github/status")
+    await gh._background["task"]
+
     resp = await client.get("/v1/github/status")
     assert resp.status_code == 200
     stale = resp.json()["data"]
     assert stale["stale"] is True
     assert stale["fetched_at"] == good["fetched_at"]
     assert resp.headers["cache-control"] == "public, max-age=60"
+
+
+@respx.mock
+async def test_expired_snapshot_is_served_at_once_and_refreshed_behind_it(
+    client, dashboard, monkeypatch
+) -> None:
+    route = respx.post(GRAPHQL).mock(
+        return_value=httpx.Response(200, json=_page([_repo("first")]))
+    )
+    first = (await client.get("/v1/github/status")).json()["data"]
+
+    monkeypatch.setattr(gh, "cache_ttl", lambda _settings: 0)
+    route.mock(return_value=httpx.Response(200, json=_page([_repo("second")])))
+
+    # Past the TTL: the old snapshot comes back without waiting on GitHub.
+    expired = (await client.get("/v1/github/status")).json()["data"]
+    assert [r["name"] for r in expired["repositories"]] == ["first"]
+    assert expired["fetched_at"] == first["fetched_at"]
+
+    await gh._background["task"]
+    assert route.call_count == 2
+
+    monkeypatch.setattr(gh, "cache_ttl", lambda _settings: 3600)
+    fresh = (await client.get("/v1/github/status")).json()["data"]
+    assert [r["name"] for r in fresh["repositories"]] == ["second"]
+    assert fresh["stale"] is False
 
 
 @respx.mock
