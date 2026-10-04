@@ -18,7 +18,7 @@ import pytest
 
 # Make scripts/ importable. The runner script is not a package member, just
 # a standalone file under scripts/.
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import apply_migrations as runner  # noqa: E402

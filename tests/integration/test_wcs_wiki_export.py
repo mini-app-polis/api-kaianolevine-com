@@ -14,7 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api.models import WcsEntity, WcsSource, WcsTranscript
 from kaianolevine_api.services import wcs_wiki as wiki_svc
-from tests.test_wcs_sources_endpoint import _create_transcript, _source_payload
+from tests.integration.test_wcs_sources_endpoint import (
+    _create_transcript,
+    _source_payload,
+)
 
 
 def _vs(subject: str, kind: str = "human"):

@@ -117,7 +117,7 @@ Requires `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and a non-empty question set. Fo
 
 `manual_grade` / `manual_grade_notes` columns are reserved for a future admin UI; the harness leaves them NULL.
 
-Unit tests for the agent and retrieval (no live APIs) are in `tests/test_wcs_qa.py`, `tests/unit/test_loop.py`, and `tests/unit/test_retrieval.py`.
+Unit tests for the agent and retrieval (no live APIs) are in `tests/integration/test_wcs_qa.py`, `tests/integration/test_loop.py`, and `tests/integration/test_retrieval.py`.
 
 ## Embeddings
 

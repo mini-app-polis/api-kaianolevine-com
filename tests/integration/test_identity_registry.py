@@ -17,7 +17,7 @@ from sqlalchemy import select
 from kaianolevine_api import identity_registry as reg
 from kaianolevine_api import main as main_mod
 from kaianolevine_api.services import discord
-from tests.conftest import DEV_ISSUER, seed_identity
+from tests.integration.conftest import DEV_ISSUER, seed_identity
 
 
 async def _roles_of(session, subject: str, issuer: str = API_KEY_ISSUER) -> set[str]:

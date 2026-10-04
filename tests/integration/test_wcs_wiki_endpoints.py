@@ -11,7 +11,10 @@ from sqlalchemy import text
 
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api.main import app
-from tests.test_wcs_sources_endpoint import _create_transcript, _source_payload
+from tests.integration.test_wcs_sources_endpoint import (
+    _create_transcript,
+    _source_payload,
+)
 
 
 def _vs(subject: str, kind: str = "human"):

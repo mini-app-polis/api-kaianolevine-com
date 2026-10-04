@@ -42,7 +42,7 @@ class _Req:
 
 async def _seeded(session):
     """Issuer + role vocabulary, as migrations 023/024 leave them."""
-    from tests.conftest import seed_identity
+    from tests.integration.conftest import seed_identity
 
     await seed_identity(session)
 

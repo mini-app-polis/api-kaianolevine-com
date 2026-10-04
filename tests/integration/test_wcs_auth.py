@@ -155,7 +155,7 @@ async def test_wcs_admin_grant_create_and_delete(client, async_engine) -> None:
             )
         )
 
-    from tests.test_wcs_notes import (  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
         _create_note,
         _create_transcript,
     )
@@ -187,7 +187,10 @@ async def test_wcs_admin_grant_duplicate_returns_409(client, async_engine) -> No
                 "VALUES ('g2', '', '', 0)"
             )
         )
-    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
 
     tr = await _create_transcript(client)
     note = await _create_note(client, tr["id"])
@@ -205,7 +208,10 @@ async def _hidden_note(client):
     patches verification for its whole lifetime — anything created after it
     would be created as the stranger, who has no write scope.
     """
-    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
 
     tr = await _create_transcript(client)
     return await _create_note(client, tr["id"])
@@ -228,7 +234,10 @@ async def test_get_note_forbidden_for_stranger_without_grant(
 
 
 async def test_patch_default_visibility_admin(client) -> None:
-    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
 
     tr = await _create_transcript(client)
     note = await _create_note(client, tr["id"])
@@ -245,7 +254,10 @@ async def test_patch_default_visibility_admin(client) -> None:
 
 async def test_patch_admin_note_metadata(client) -> None:
     """Admin can partial-update metadata, people, and visibility in one call."""
-    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
 
     tr = await _create_transcript(client)
     note = await _create_note(client, tr["id"])
@@ -275,7 +287,10 @@ async def test_patch_admin_note_metadata(client) -> None:
 
 async def test_patch_admin_note_partial_leaves_other_fields_untouched(client) -> None:
     """Omitted fields are not modified."""
-    from tests.test_wcs_notes import _create_note, _create_transcript  # noqa: PLC0415
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
 
     tr = await _create_transcript(client)
     note = await _create_note(client, tr["id"])
