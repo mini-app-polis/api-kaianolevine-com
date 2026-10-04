@@ -1,12 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-
-@pytest.fixture(autouse=True)
-def _spotify_use_sqlite_upsert(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("kaianolevine_api.routers.spotify.pg_insert", sqlite_insert)
 
 
 def _pl(

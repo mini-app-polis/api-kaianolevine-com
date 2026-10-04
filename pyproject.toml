@@ -69,6 +69,10 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# One event loop for the whole run: the session-scoped engine's asyncpg
+# connections cannot be used from a loop other than the one that opened them.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests/unit", "tests/integration"]
 
 [tool.coverage.report]

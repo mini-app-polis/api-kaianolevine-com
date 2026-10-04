@@ -24,8 +24,27 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # Real Postgres, never SQLite (TEST-015): the integration suite builds
+    # its schema from migrations/ with the deploy's own runner. The tests
+    # refuse any database that is not local and named *_test (TEST-009).
+    # pgvector's image, not plain postgres: migration 017 creates the
+    # `vector` extension (001's pgcrypto ships with both).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kaianolevine_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kaianolevine_test
       ENVIRONMENT: test
       KAIANO_API_OWNER_ID: dev-owner
 

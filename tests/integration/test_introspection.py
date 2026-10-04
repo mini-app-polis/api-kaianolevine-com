@@ -13,6 +13,7 @@ outside is indistinguishable from all six passing.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import text
@@ -164,7 +165,10 @@ async def _seed_pass(
                     "UPDATE pipeline_evaluations SET evaluated_at = :at "
                     "WHERE run_id = :run_id"
                 ),
-                {"at": at, "run_id": run_id},
+                {
+                    "at": datetime.fromisoformat(at).replace(tzinfo=UTC),
+                    "run_id": run_id,
+                },
             )
 
 

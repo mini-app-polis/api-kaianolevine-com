@@ -37,7 +37,7 @@ async def seed_dev_owner_wcs_admin(reset_db, async_engine) -> None:
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('dev-owner', '', '', 1) "
+                "VALUES ('dev-owner', '', '', true) "
                 "ON CONFLICT (user_id) DO UPDATE SET is_admin = excluded.is_admin"
             )
         )

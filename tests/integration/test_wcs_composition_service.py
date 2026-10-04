@@ -155,7 +155,26 @@ async def test_resolve_instructor_with_name_correction(
 async def test_apply_name_corrections_source_before_global(
     db_session: AsyncSession,
 ) -> None:
-    source_id = uuid.uuid4()
+    # A source-scoped correction references a real source (the foreign key
+    # Postgres enforces and SQLite never did).
+    transcript = WcsTranscript(
+        owner_id="dev-owner",
+        raw_text="Transcript text.",
+        source_type="plaud",
+        source_filename="lesson.txt",
+        drive_file_id=f"drive-{uuid.uuid4().hex[:12]}",
+    )
+    db_session.add(transcript)
+    await db_session.flush()
+    source = WcsSource(
+        owner_id="dev-owner",
+        transcript_id=transcript.id,
+        instructors_raw=["Kaiano"],
+        students_raw=["Sarah"],
+    )
+    db_session.add(source)
+    await db_session.flush()
+    source_id = source.id
     db_session.add(
         WcsNameCorrection(
             raw_name="Kate",

@@ -1,16 +1,5 @@
 from __future__ import annotations
 
-import pytest
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-
-@pytest.fixture(autouse=True)
-def _live_plays_use_sqlite_upsert(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "kaianolevine_api.routers.live_plays.pg_insert",
-        sqlite_insert,
-    )
-
 
 async def test_live_plays_ingest_inserts_skips_duplicate_same_key(client) -> None:
     payload = {
