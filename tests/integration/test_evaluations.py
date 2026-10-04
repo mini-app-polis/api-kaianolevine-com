@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import text
 
 
@@ -188,19 +190,25 @@ async def test_list_evaluations_only_returns_latest_run_per_repo_source(
     )
     assert newer.status_code == 200
 
-    # Force deterministic ordering for SQLite tests where inserts can share a timestamp.
+    # Force deterministic ordering: rows inserted in one test can share a timestamp.
     async with async_engine.begin() as conn:
         await conn.execute(
             text(
                 "UPDATE pipeline_evaluations SET evaluated_at = :older_at WHERE run_id = :older_run_id"
             ),
-            {"older_at": "2024-01-01 00:00:00", "older_run_id": "run-older"},
+            {
+                "older_at": datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                "older_run_id": "run-older",
+            },
         )
         await conn.execute(
             text(
                 "UPDATE pipeline_evaluations SET evaluated_at = :newer_at WHERE run_id = :newer_run_id"
             ),
-            {"newer_at": "2024-01-02 00:00:00", "newer_run_id": "run-newer"},
+            {
+                "newer_at": datetime.fromisoformat("2024-01-02T00:00:00+00:00"),
+                "newer_run_id": "run-newer",
+            },
         )
 
     list_resp = await client.get(
@@ -255,14 +263,14 @@ async def test_list_evaluations_returns_all_findings_same_run_id_even_if_timesta
         await conn.execute(
             text("UPDATE pipeline_evaluations SET evaluated_at = :t1 WHERE id = :id_a"),
             {
-                "t1": "2024-06-01 10:00:00",
+                "t1": datetime.fromisoformat("2024-06-01T10:00:00+00:00"),
                 "id_a": id_a,
             },
         )
         await conn.execute(
             text("UPDATE pipeline_evaluations SET evaluated_at = :t2 WHERE id = :id_b"),
             {
-                "t2": "2024-06-01 10:00:01",
+                "t2": datetime.fromisoformat("2024-06-01T10:00:01+00:00"),
                 "id_b": id_b,
             },
         )
@@ -312,14 +320,20 @@ async def test_evaluations_summary_uses_latest_run_id_not_partial_timestamp_rows
                 "UPDATE pipeline_evaluations SET evaluated_at = :older "
                 "WHERE run_id = :rid"
             ),
-            {"older": "2023-01-01 00:00:00", "rid": "run-old-s"},
+            {
+                "older": datetime.fromisoformat("2023-01-01T00:00:00+00:00"),
+                "rid": "run-old-s",
+            },
         )
         await conn.execute(
             text(
                 "UPDATE pipeline_evaluations SET evaluated_at = :newer "
                 "WHERE run_id = :rid"
             ),
-            {"newer": "2023-06-01 00:00:00", "rid": "run-new-s"},
+            {
+                "newer": datetime.fromisoformat("2023-06-01T00:00:00+00:00"),
+                "rid": "run-new-s",
+            },
         )
 
     summary_resp = await client.get("/v1/evaluations/summary")
@@ -427,13 +441,19 @@ async def test_list_evaluations_orders_most_recent_first_with_non_null_timestamp
             text(
                 "UPDATE pipeline_evaluations SET evaluated_at = :t WHERE run_id = :rid"
             ),
-            {"t": "2024-03-01 10:00:00", "rid": "run-ts-older"},
+            {
+                "t": datetime.fromisoformat("2024-03-01T10:00:00+00:00"),
+                "rid": "run-ts-older",
+            },
         )
         await conn.execute(
             text(
                 "UPDATE pipeline_evaluations SET evaluated_at = :t WHERE run_id = :rid"
             ),
-            {"t": "2024-03-02 10:00:00", "rid": "run-ts-newer"},
+            {
+                "t": datetime.fromisoformat("2024-03-02T10:00:00+00:00"),
+                "rid": "run-ts-newer",
+            },
         )
 
     list_resp = await client.get(

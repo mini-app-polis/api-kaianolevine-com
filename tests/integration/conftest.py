@@ -1,18 +1,55 @@
+"""Integration fixtures: real Postgres, the schema the migrations build, an app client.
+
+Tests run against Postgres, never SQLite (TEST-015): the database the
+suite exercises is the one production runs, and its schema comes from
+migrations/ through the real runner — not from the models — so a
+migration that drifts from the models fails here instead of in deploy.
+
+TEST_DATABASE_URL names the database. It must be local and end in _test
+(TEST-009): the session fixture drops its public schema, and every test
+empties its tables.
+"""
+
 from __future__ import annotations
 
+import importlib.util
 import os
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
+from urllib.parse import urlparse
 
+import asyncpg
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+ROOT = Path(__file__).resolve().parents[2]
 
-# Ensure Settings() can be constructed during app import.
-os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/kaianolevine_test",
+)
+
+
+def _guard(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.hostname not in {"localhost", "127.0.0.1"} or not parsed.path.endswith(
+        "_test"
+    ):
+        raise RuntimeError(
+            f"Refusing to run tests against {parsed.hostname}{parsed.path}: "
+            "TEST_DATABASE_URL must be local and its database named *_test."
+        )
+
+
+_guard(TEST_DATABASE_URL)
+
+# Deterministic, not setdefault: the app builds its engine from
+# DATABASE_URL, and inheriting the launching shell's value is how a test run
+# would reach a real database the guard above never saw.
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 # Contact form — dummy values so Settings validates cleanly in tests.
 # Individual tests mock the actual HTTP calls to Turnstile and Brevo.
@@ -43,7 +80,6 @@ os.environ["ENVIRONMENT"] = "production"
 os.environ["CLOUDWATCH_METRICS_ENABLED"] = "false"
 
 from identity.store import (  # noqa: E402
-    IdentityBase,
     Issuer,
     Principal,
     PrincipalRole,
@@ -56,15 +92,23 @@ from kaianolevine_api import auth as auth_mod  # noqa: E402
 from kaianolevine_api.config import get_settings  # noqa: E402
 from kaianolevine_api.database import get_db_session  # noqa: E402
 from kaianolevine_api.main import app  # noqa: E402
-from kaianolevine_api.models import Base  # noqa: E402
+
+
+def _load_migration_runner() -> Any:
+    """Import scripts/apply_migrations.py — the runner the deploy uses."""
+    spec = importlib.util.spec_from_file_location(
+        "apply_migrations", ROOT / "scripts" / "apply_migrations.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture(scope="session")
 async def async_engine():
     engine = create_async_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        TEST_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1),
         echo=False,
     )
     try:
@@ -75,12 +119,18 @@ async def async_engine():
 
 @pytest.fixture(scope="session", autouse=True)
 async def create_tables(async_engine) -> AsyncIterator[None]:
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # The identity principal store has its own declarative base rather
-        # than grafting itself onto this app's. Creating it is one explicit
-        # extra line, which is the intended trade.
-        await conn.run_sync(IdentityBase.metadata.create_all)
+    """Build the schema the way production's history is built: migrations/.
+
+    The public schema is dropped first, so every run starts from nothing
+    and applies every migration — the baseline is exercised on each run.
+    """
+    conn = await asyncpg.connect(TEST_DATABASE_URL)
+    try:
+        await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    finally:
+        await conn.close()
+    runner = _load_migration_runner()
+    assert await runner._run(TEST_DATABASE_URL, False, set()) == 0
     yield
 
 
@@ -93,12 +143,29 @@ def clear_settings_cache() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 async def reset_db(async_engine) -> AsyncIterator[None]:
+    """Every test starts with empty tables, the migration ledger aside.
+
+    Including the rows the migrations seed (feature flags, the identity
+    role vocabulary): tests seed what they need through seed_identity,
+    exactly as they did when the schema came from the models.
+    """
     async with async_engine.begin() as conn:
-        # Delete in reverse dependency order to avoid FK violations.
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
-        for table in reversed(IdentityBase.metadata.sorted_tables):
-            await conn.execute(table.delete())
+        tables = (
+            (
+                await conn.exec_driver_sql(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+                    "AND tablename <> 'schema_migrations'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if tables:
+            await conn.exec_driver_sql(
+                "TRUNCATE "
+                + ", ".join(f'"{t}"' for t in tables)
+                + " RESTART IDENTITY CASCADE"
+            )
     yield
 
 

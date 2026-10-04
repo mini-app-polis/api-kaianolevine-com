@@ -69,7 +69,7 @@ async def seed_dev_owner_admin(reset_db, async_engine) -> None:
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('dev-owner', '', '', 1) "
+                "VALUES ('dev-owner', '', '', true) "
                 "ON CONFLICT (user_id) DO UPDATE SET is_admin = excluded.is_admin"
             )
         )
@@ -77,7 +77,7 @@ async def seed_dev_owner_admin(reset_db, async_engine) -> None:
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('viewer', '', '', 0) "
+                "VALUES ('viewer', '', '', false) "
                 "ON CONFLICT (user_id) DO NOTHING"
             )
         )
@@ -358,7 +358,9 @@ async def test_search_notes_visibility_default_visible_passes(
     ids = await _populate_corpus(db_session, stub_embedder)
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE _legacy_wcs_notes SET is_default_visible = 1 WHERE id = :id"),
+            text(
+                "UPDATE _legacy_wcs_notes SET is_default_visible = true WHERE id = :id"
+            ),
             {"id": ids["n_anchor"].hex},
         )
     hits = await search_notes(

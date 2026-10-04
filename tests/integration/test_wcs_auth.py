@@ -33,7 +33,7 @@ async def seed_dev_owner_wcs_admin(reset_db, async_engine) -> None:
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('dev-owner', '', '', 1) "
+                "VALUES ('dev-owner', '', '', true) "
                 "ON CONFLICT (user_id) DO UPDATE SET is_admin = excluded.is_admin"
             )
         )
@@ -151,7 +151,7 @@ async def test_wcs_admin_grant_create_and_delete(client, async_engine) -> None:
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('grantee', 'g@example.com', 'Grantee', 0)"
+                "VALUES ('grantee', 'g@example.com', 'Grantee', false)"
             )
         )
 
@@ -184,7 +184,7 @@ async def test_wcs_admin_grant_duplicate_returns_409(client, async_engine) -> No
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('g2', '', '', 0)"
+                "VALUES ('g2', '', '', false)"
             )
         )
     from tests.integration.test_wcs_notes import (  # noqa: PLC0415
@@ -338,7 +338,7 @@ async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> No
         await conn.execute(
             text(
                 "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
-                "VALUES ('promote-me', 'p@example.com', 'P', 0)"
+                "VALUES ('promote-me', 'p@example.com', 'P', false)"
             )
         )
 
