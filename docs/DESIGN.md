@@ -3,8 +3,8 @@
 ## Architecture Overview
 
 `kaianolevine-api` is a FastAPI service deployed on Railway. The production stack uses
-SQLAlchemy async ORM with `asyncpg` against PostgreSQL. Tests run against an in-memory
-SQLite database to keep CI fast and deterministic.
+SQLAlchemy async ORM with `asyncpg` against PostgreSQL. Integration tests run against a
+local PostgreSQL `*_test` database built from `migrations/`; unit tests need no database.
 
 Write traffic is intentionally constrained: Prefect cogs are the only intended write
 clients for ingest and automation pathways. User-facing read APIs expose sets, tracks,

@@ -38,7 +38,7 @@ The agent exposes exactly **four tools** to the model (`agents/wcs_qa/loop.py` �
 
 ### `search_notes(query, k?, filters?)`
 
-- Embeds `query` via OpenAI, then **pgvector cosine distance** over `wcs_note_embeddings` joined to `_legacy_wcs_notes` (Postgres). SQLite tests rank in Python.
+- Embeds `query` via OpenAI, then **pgvector cosine distance** over `wcs_note_embeddings` joined to `_legacy_wcs_notes` (Postgres).
 - Returns up to `k` hits (default 10, max 25) with title, session metadata, snippet (~200 chars of flattened note text), and similarity `score`.
 - **No `source_url` on hits** — the model must call `get_note` before citing.
 - **Visibility:** same as the rest of WCS notes — default-visible OR admin OR explicit `wcs_note_grants` grant (`user_can_see_note`).

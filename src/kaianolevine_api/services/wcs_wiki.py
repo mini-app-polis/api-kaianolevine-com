@@ -329,22 +329,19 @@ async def get_instructor_view(
     # row-level instructor_id is set.
     instructor_names = {instructor.canonical_name, *alias_map.get(instructor.id, [])}
 
-    # Fetch all visible source ids + instructors_raw, then filter in Python.
-    # We filter in Python rather than using PG array overlap to keep the
-    # query dialect-agnostic (tests run against SQLite where instructors_raw
-    # is a JSON column without array operators).
-    src_rows = (
-        await session.execute(
-            select(WcsSource.id, WcsSource.instructors_raw).where(
-                WcsSource.id.in_(visible_ids),
+    # Visible sources whose instructors_raw names this instructor (TEXT[] &&).
+    coauth_source_ids: set[uuid.UUID] = set(
+        (
+            await session.execute(
+                select(WcsSource.id).where(
+                    WcsSource.id.in_(visible_ids),
+                    WcsSource.instructors_raw.overlap(sorted(instructor_names)),
+                )
             )
         )
-    ).all()
-    coauth_source_ids: set[uuid.UUID] = {
-        sid
-        for sid, raw in src_rows
-        if any(name in instructor_names for name in (raw or []))
-    }
+        .scalars()
+        .all()
+    )
 
     attr_rows = (
         (

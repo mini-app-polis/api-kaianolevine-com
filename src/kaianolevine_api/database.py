@@ -4,7 +4,6 @@ from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
 from .config import Settings, get_settings
 
@@ -19,13 +18,6 @@ def _get_engine(database_url: str):
     if database_url.startswith("postgres://") and "+asyncpg" not in database_url:
         database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-    # SQLite in-memory DB needs a StaticPool to share the same connection across sessions.
-    connect_args = {}
-    poolclass = None
-    if database_url.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
-        poolclass = StaticPool
-
     return create_async_engine(
         database_url,
         echo=False,
@@ -34,8 +26,6 @@ def _get_engine(database_url: str):
         # form, which is what anything rendering that exception — a log
         # line, a traceback, a notification — would otherwise carry.
         hide_parameters=True,
-        connect_args=connect_args,
-        poolclass=poolclass,
     )
 
 

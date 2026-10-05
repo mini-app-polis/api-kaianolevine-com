@@ -185,7 +185,6 @@ class PipelineEvaluation(Base):
             "fingerprint",
             unique=True,
             postgresql_where=text("run_id IS NOT NULL"),
-            sqlite_where=text("run_id IS NOT NULL"),
         ),
     )
 
@@ -443,7 +442,7 @@ class LegacyWcsNote(Base):
     model: Mapped[str] = mapped_column(String, nullable=False)
     provider: Mapped[str] = mapped_column(String, nullable=False)
     notes_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    # PostgreSQL: TEXT[] (see migrations/011). SQLite tests: JSON via variant.
+    # TEXT[] (see migrations/011).
     # Use postgresql.ARRAY (not the generic sqlalchemy.ARRAY) so that
     # PG-specific operators like `.overlap()` / `&&` are available on the
     # column in queries (see retrieval/wcs/queries.py).
@@ -452,12 +451,12 @@ class LegacyWcsNote(Base):
     # scalar text/varchar are interchangeable. PgARRAY(String) would bind
     # parameters as VARCHAR[] and break overlap/contains operators.
     instructors: Mapped[list[str]] = mapped_column(
-        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text),
         nullable=False,
         default=list,
     )
     students: Mapped[list[str]] = mapped_column(
-        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text),
         nullable=False,
         default=list,
     )
@@ -573,7 +572,7 @@ class WcsNoteEmbedding(Base):
 
     owner_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(1536).with_variant(JSON(), "sqlite"),
+        Vector(1536),
         nullable=False,
     )
     content_sha: Mapped[str] = mapped_column(String, nullable=False)
@@ -610,7 +609,7 @@ class WcsTranscriptChunk(Base):
     end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(1536).with_variant(JSON(), "sqlite"),
+        Vector(1536),
         nullable=False,
     )
     content_sha: Mapped[str] = mapped_column(String, nullable=False)
@@ -756,12 +755,12 @@ class WcsSource(Base):
         Text, nullable=False, default="other", server_default="other"
     )
     instructors_raw: Mapped[list[str]] = mapped_column(
-        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text),
         nullable=False,
         default=list,
     )
     students_raw: Mapped[list[str]] = mapped_column(
-        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text),
         nullable=False,
         default=list,
     )
@@ -1154,7 +1153,7 @@ class WcsSourceAttribution(Base):
     )
     drill_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
     drill_steps: Mapped[list[str] | None] = mapped_column(
-        PgARRAY(Text).with_variant(JSON(), "sqlite"),
+        PgARRAY(Text),
         nullable=True,
     )
     mistake_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -1541,7 +1540,7 @@ class StandardsCatalog(Base):
 
     rule_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    #: JSONB on PostgreSQL; JSON under SQLite in tests.
+    #: JSONB in the database (see its migration).
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     #: The principal that published it, so the audit trail names a publisher

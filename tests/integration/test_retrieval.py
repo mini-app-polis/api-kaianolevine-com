@@ -1,7 +1,7 @@
 """Tool-level retrieval tests with fixture data.
 
 Covers the four retrieval tools (search_notes, search_transcripts, get_note,
-get_transcript_window) end-to-end against the SQLite test DB. Uses a keyword-
+get_transcript_window) end-to-end against the Postgres test DB. Uses a keyword-
 based stub embedder so cosine ranking is meaningful and deterministic.
 """
 

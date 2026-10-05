@@ -1,8 +1,8 @@
 """Unit tests for the migration runner.
 
-The runner is asyncpg-specific so we don't run real DB integration here —
-the test suite uses SQLite in-memory, which can't exercise asyncpg or
-Postgres advisory locks. Pure functions (file discovery, marker parsing,
+These are unit tests, so no database is involved. The integration suite
+does run the real runner against Postgres — it builds its schema with it —
+but advisory-lock contention is exercised here only through mocks. Pure functions (file discovery, marker parsing,
 URL normalization, bootstrap-exclude parsing) are tested directly.
 The asyncpg interaction is tested with mocks to verify the runner's
 control flow without touching a real DB.

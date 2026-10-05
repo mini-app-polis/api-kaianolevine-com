@@ -7,8 +7,8 @@ writes against what that migration wrote — so the two must agree byte for
 byte, or old rows are hashed one way and new rows another and the index
 stops recognising a redelivery as the finding it already holds.
 
-This suite runs on SQLite and cannot execute the SQL, so Postgres's answer
-is pinned here instead. To regenerate:
+This is a unit test and has no database to execute the SQL, so Postgres's
+answer is pinned here instead. To regenerate:
 
     SELECT encode(sha256(convert_to(
              coalesce(violation_id, '') || E'\\x1F' ||

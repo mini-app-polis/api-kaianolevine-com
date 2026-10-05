@@ -73,8 +73,14 @@ API docs available at http://localhost:8000/docs
 
 ### Run tests
 ```bash
-# All tests (uses SQLite in-memory — no DATABASE_URL needed)
-uv run pytest
+# Unit tests — no database needed
+uv run pytest tests/unit
+
+# All tests — integration tests need a local Postgres (with pgvector)
+# and a database whose name ends in _test; its schema is rebuilt from
+# migrations/ on every run.
+createdb kaianolevine_test
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kaianolevine_test uv run pytest
 
 # With coverage detail
 uv run pytest --cov=src --cov-report=term-missing

@@ -10,15 +10,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "aiosqlite"
-version = "0.22.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4e/8a/64761f4005f17809769d23e518d915db74e6310474e733e3593cfc854ef1/aiosqlite-0.22.1.tar.gz", hash = "sha256:043e0bd78d32888c0a9ca90fc788b38796843360c855a7262a532813133a0650", size = 14821, upload-time = "2025-12-23T19:25:43.997Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl", hash = "sha256:21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb", size = 17405, upload-time = "2025-12-23T19:25:42.139Z" },
-]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -268,16 +259,16 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.43.102"
+version = "1.43.103"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/e6/2a24a2013beecdd9a381bcf7a11981478a1f5f78e37908c0fddba3cd915f/boto3-1.43.102.tar.gz", hash = "sha256:440bdd9fbf88d57809b68839fb690f19e4db65fa5539e60cc803ebd7b9e5e8fc", size = 112696, upload-time = "2026-09-24T19:25:18.329Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/59/012898d78087105e9c20fe31605d3f1999921745e1890ee0f0d993846e2e/boto3-1.43.103.tar.gz", hash = "sha256:524821052527f6446d249bf710847b032d9b12135e346c9751777a0a2811cf04", size = 112687, upload-time = "2026-09-25T19:26:30.427Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/ea/5bb0e8a8a4b04221b054365a5904fd63b6bcc22edcf4aa75a253f946b86e/boto3-1.43.102-py3-none-any.whl", hash = "sha256:b2a06cbbcb2cb0484f126172eab0881252f01007e8f7e0607ecac131cff9f744", size = 140042, upload-time = "2026-09-24T19:25:16.822Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/66/6eb2e92c57b30e54c87fe14c8cd71de3aed9184f3cec95c39132a3fcc61f/boto3-1.43.103-py3-none-any.whl", hash = "sha256:574796187eb4e4fcaaf5c1b88c1724a1ba5a95bc27aeae5573676178666acc71", size = 140044, upload-time = "2026-09-25T19:26:29.085Z" },
 ]
 
 [[package]]
@@ -1004,8 +995,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
@@ -1284,7 +1275,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "aiosqlite" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1296,7 +1286,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.20,<1.0" },
     { name = "anthropic", specifier = ">=0.40,<2.0" },
     { name = "asyncpg", specifier = ">=0.29,<1.0" },
     { name = "boto3", specifier = ">=1.34,<2" },
@@ -1444,7 +1433,7 @@ wheels = [
 
 [[package]]
 name = "miniapppolis-common-utils"
-version = "5.17.0"
+version = "5.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1462,9 +1451,9 @@ dependencies = [
     { name = "spotipy" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/76/d0/f7c2eb0372cd5bcff62bd13d77698f13913b9deb8dc7a75aef0cf46f000b/miniapppolis_common_utils-5.17.0.tar.gz", hash = "sha256:11f3c61e69415f5dd9991341ffb5135d5258f37cf47f929cce79b3360d06c93a", size = 312364, upload-time = "2026-09-30T18:42:41.821Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/c0/a6b6ded0225a407f95814b37d3f3644fe257a1761b1c88c32dc255c228c2/miniapppolis_common_utils-5.18.0.tar.gz", hash = "sha256:f9d0f6dac36054cdfb50f2f31e9d8171fafa304abba8ab43e39b80167d2d6a8d", size = 317581, upload-time = "2026-10-02T18:34:59.037Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/c5/40bb53b1a33f94d17cf234158438b5e0d5fe6b47effef88021c8c64cd3bc/miniapppolis_common_utils-5.17.0-py3-none-any.whl", hash = "sha256:89dbc36d1ad2839c0ae220d80193c5d51d9211f4c4912ab955e1e935079e17b9", size = 132435, upload-time = "2026-09-30T18:42:40.522Z" },
+    { url = "https://files.pythonhosted.org/packages/00/67/527e9425cbaf85d2e5cebca9b88d22cb04989913fbbf9fe326ed352aaf2c/miniapppolis_common_utils-5.18.0-py3-none-any.whl", hash = "sha256:9389915eb2e9b12e5d0ba34d3fef8ca5a6a09c76828a3fad474f6d8083a56e23", size = 135603, upload-time = "2026-10-02T18:34:57.864Z" },
 ]
 
 [[package]]
@@ -2498,8 +2487,8 @@ name = "standard-aifc"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
-    { name = "standard-chunk", marker = "python_full_version >= '3.13'" },
+    { name = "audioop-lts" },
+    { name = "standard-chunk" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/53/6050dc3dde1671eb3db592c13b55a8005e5040131f7509cef0215212cb84/standard_aifc-3.13.0.tar.gz", hash = "sha256:64e249c7cb4b3daf2fdba4e95721f811bde8bdfc43ad9f936589b7bb2fae2e43", size = 15240, upload-time = "2024-10-30T16:01:31.772Z" }
 wheels = [
@@ -2520,7 +2509,7 @@ name = "standard-sunau"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "audioop-lts" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/e3/ce8d38cb2d70e05ffeddc28bb09bad77cfef979eb0a299c9117f7ed4e6a9/standard_sunau-3.13.0.tar.gz", hash = "sha256:b319a1ac95a09a2378a8442f403c66f4fd4b36616d6df6ae82b8e536ee790908", size = 9368, upload-time = "2024-10-30T16:01:41.626Z" }
 wheels = [

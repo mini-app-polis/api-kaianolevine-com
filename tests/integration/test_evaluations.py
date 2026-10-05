@@ -432,10 +432,7 @@ async def test_list_evaluations_orders_most_recent_first_with_non_null_timestamp
     newer_id = newer.json()["data"]["id"]
 
     # Pin distinct timestamps so the ordering assertion is deterministic
-    # regardless of how fast the two inserts ran. Match on run_id, not id —
-    # SQLAlchemy's UUID column stores the id as a 32-char hex without dashes
-    # on SQLite, so a text("WHERE id = :id") with the dashed JSON UUID would
-    # silently match nothing.
+    # regardless of how fast the two inserts ran.
     async with async_engine.begin() as conn:
         await conn.execute(
             text(
@@ -585,13 +582,10 @@ async def test_list_evaluations_csv_filter_works_on_severity(client) -> None:
 
     All four rows share one ``run_id`` on purpose. ``list_evaluations``
     returns only the latest run per (repo, source), and ``evaluated_at`` is
-    a ``server_default=func.now()`` — which SQLite renders as
-    ``CURRENT_TIMESTAMP``, resolved to whole seconds. Four rows under four
-    run_ids therefore tie at ``max(evaluated_at)`` and all count as latest,
-    *unless* the four inserts happen to straddle a second boundary, in
-    which case the last run wins and the WARN and ERROR rows vanish from
-    the result. That made this test pass almost always and fail with an
-    empty set otherwise. Run selection is not what is under test here.
+    a ``server_default=func.now()``. Four rows under four run_ids would each
+    get their own timestamp, the last run would win, and the WARN and ERROR
+    rows would vanish from the result. Run selection is not what is under
+    test here.
     """
     for sev in ("WARN", "ERROR", "INFO", "SUCCESS"):
         r = await client.post(
