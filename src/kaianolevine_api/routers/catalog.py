@@ -187,7 +187,6 @@ async def patch_catalog(
         catalog.release_year = patch.release_year
 
     catalog.source = "manual"
-    # SQLite doesn't reliably support server-side updated_at in tests; keeping it simple.
 
     await session.flush()
     await session.commit()

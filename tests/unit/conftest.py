@@ -14,7 +14,9 @@ from collections.abc import Iterator
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql://unit:unit@localhost:5432/never_connected_test"
+)
 os.environ.setdefault(
     "DISCORD_WEBHOOK_URL", "https://discord.test/api/webhooks/1/token"
 )

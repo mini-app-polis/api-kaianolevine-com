@@ -54,7 +54,6 @@ from enum import Enum
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import DispatchClaim
@@ -119,17 +118,6 @@ def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-def _insert(session: AsyncSession):  # noqa: ANN202 - dialect-specific Insert
-    """The dialect's INSERT, which is the one that knows ON CONFLICT.
-
-    Postgres in every deployed environment, SQLite in the test suite; both
-    spell the upsert identically once the right constructor is chosen.
-    """
-    if session.bind is not None and session.bind.dialect.name == "sqlite":
-        return sqlite_insert(DispatchClaim)
-    return pg_insert(DispatchClaim)
-
-
 async def claim(
     session: AsyncSession,
     *,
@@ -168,7 +156,7 @@ async def claim(
         & (DispatchClaim.attempts < MAX_ATTEMPTS)
     )
     statement = (
-        _insert(session)
+        pg_insert(DispatchClaim)
         .values(**key, attempts=1, claimed_at=now)
         .on_conflict_do_update(
             index_elements=["scope", "drive_file_id", "revision"],

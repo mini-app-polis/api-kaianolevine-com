@@ -14,11 +14,6 @@ from kaianolevine_api.main import app
 from kaianolevine_api.routers.wcs_qa import get_anthropic_client, get_embedder
 
 
-def _sqlite_uuid(uuid_str: str) -> str:
-    """Convert a dashed UUID string to the 32-char hex form SQLAlchemy stores in SQLite."""
-    return _uuid.UUID(uuid_str).hex
-
-
 @pytest.fixture(autouse=True)
 async def seed_dev_owner_wcs_admin(reset_db, async_engine) -> None:
     async with async_engine.begin() as conn:
@@ -189,7 +184,7 @@ async def test_refresh_re_embeds_after_note_edit(
     async with async_engine.begin() as conn:
         await conn.execute(
             text("UPDATE _legacy_wcs_notes SET title = 'New title' WHERE id = :id"),
-            {"id": _sqlite_uuid(note["id"])},
+            {"id": _uuid.UUID(note["id"])},
         )
 
     resp = await client.post("/v1/wcs/embeddings/refresh")
@@ -213,7 +208,7 @@ async def test_refresh_re_embeds_after_transcript_edit(
             text(
                 "UPDATE wcs_transcripts SET raw_text = 'totally different text now' WHERE id = :id"
             ),
-            {"id": _sqlite_uuid(t["id"])},
+            {"id": _uuid.UUID(t["id"])},
         )
 
     resp = await client.post("/v1/wcs/embeddings/refresh")
