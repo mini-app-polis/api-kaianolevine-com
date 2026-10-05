@@ -1,3 +1,11 @@
+## [2.3.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.5...v2.3.6) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** bump boto3 ([8332be7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8332be731fbf07796f1d5dbe5919c539ccc439c6))
+* **deps:** bump miniapppolis-common-utils ([180e69d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/180e69daaa238b2ec552dae25c22274c5d764c03))
+
 ## [2.3.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.4...v2.3.5) (2026-09-30)
 
 
