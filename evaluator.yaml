@@ -9,9 +9,6 @@ exemptions:
   - rule: PY-011
     reason: "Intentional project name: kaianolevine_api. The repository is named api-kaianolevine-com by infrastructure convention but the Python project name reflects the product identity. Aligning them would require a breaking rename of the installed package."
 
-  - rule: API-002
-    reason: "boto3 is the AWS SDK, used only for SQS (services/job_queue.py, enqueueing cog jobs) and CloudWatch (services/cloudwatch.py, request metrics) — no data store. The check reads any boto3 dependency as a possible DynamoDB client. PostgreSQL via asyncpg is the only data store, in production and in tests."
-
   - rule: API-004
     reason: "Effective route '/' is a RedirectResponse to /docs (Swagger UI). It is intentionally unversioned — the redirect target is itself publicly browsable documentation and the path must be reachable at the stable root. All substantive API routes are mounted under /v1/. See main.py::root for the intentional-public description."
 
