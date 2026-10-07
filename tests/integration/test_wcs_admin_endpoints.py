@@ -209,7 +209,7 @@ async def test_metadata_correction_envelope_shape(client, source_id: str) -> Non
         json={
             "source_id": source_id,
             "field": "title",
-            "corrected_value": {"title": "Anchor lesson — admin updated"},
+            "corrected_value": "Anchor lesson — admin updated",
             "reason": "Test correction.",
         },
     )
@@ -490,3 +490,174 @@ async def test_gaps_skills_unpaired_names_the_side_each_skill_is_on(
     assert pair.status_code == 200
     after = await client.get("/v1/wcs/admin/gaps/skills-unpaired")
     assert [g["slug"] for g in after.json()["data"]] == ["posture"]
+
+
+# ---------------------------------------------------------------------------
+# Metadata corrections carry the field's plain value and are applied.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "corrected_value", "source_key", "expected"),
+    [
+        ("title", "Retitled lesson", "title", "Retitled lesson"),
+        ("organization", "Twin Cities WCS", "organization", "Twin Cities WCS"),
+        ("session_date", "2024-02-20", "session_date", "2024-02-20"),
+        ("session_type", "group_class", "session_type", "group_class"),
+        ("instructors", ["Kaiano", "Amy"], "instructors_raw", ["Kaiano", "Amy"]),
+        ("students", ["Sarah", "Kate"], "students_raw", ["Sarah", "Kate"]),
+        ("visibility", "public", "visibility", "public"),
+        ("is_default_visible", True, "is_default_visible", True),
+    ],
+)
+async def test_metadata_correction_applies_every_supported_field(
+    client,
+    source_id: str,
+    field: str,
+    corrected_value: object,
+    source_key: str,
+    expected: object,
+) -> None:
+    """Every allowed field reaches the apply step and changes the source row."""
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/metadata",
+        json={
+            "source_id": source_id,
+            "field": field,
+            "corrected_value": corrected_value,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    view = await client.get(f"/v1/wcs/wiki/admin/sources/{source_id}")
+    assert view.status_code == 200
+    assert view.json()["data"]["source"][source_key] == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "corrected_value"),
+    [
+        ("filename", "x.txt"),
+        ("filename", {"filename": "x.txt"}),
+        ("title", {"title": "Dict form"}),
+        ("title", True),
+        ("organization", ["a"]),
+        ("session_date", "not-a-date"),
+        ("session_date", 20240220),
+        ("session_type", "workshop"),
+        ("visibility", "secret"),
+        ("is_default_visible", "true"),
+        ("is_default_visible", 1),
+        ("instructors", "Kaiano"),
+        ("instructors", ["Kaiano", ""]),
+        ("students", [1, 2]),
+    ],
+)
+async def test_metadata_correction_rejects_mismatched_value(
+    client, async_engine, source_id: str, field: str, corrected_value: object
+) -> None:
+    """A field the API cannot apply, or a value of the wrong shape, is a 422.
+
+    Nothing is written: the correction row would otherwise sit in the input
+    layer looking authoritative while the source never changed.
+    """
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/metadata",
+        json={
+            "source_id": source_id,
+            "field": field,
+            "corrected_value": corrected_value,
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "validation_error"
+    async with async_engine.begin() as conn:
+        count = (
+            await conn.execute(
+                text("SELECT count(*) FROM wcs_source_metadata_corrections")
+            )
+        ).scalar_one()
+    assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Writes naming a source that does not exist answer 404 before writing.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (
+            "/v1/wcs/admin/corrections/name",
+            {
+                "raw_name": "Kaiano",
+                "corrected_name": "Kaiano Levine",
+                "scope": "source",
+            },
+        ),
+        (
+            "/v1/wcs/admin/corrections/name",
+            {
+                "raw_name": "Kaiano",
+                "corrected_name": "Kaiano Levine",
+                "scope": "global",
+            },
+        ),
+        (
+            "/v1/wcs/admin/corrections/attribution",
+            {
+                "attribution_target": {"raw_term": "Settle", "position": 0},
+                "field": "prose",
+                "corrected_value": {"prose": "x"},
+            },
+        ),
+        (
+            "/v1/wcs/admin/corrections/metadata",
+            {"field": "title", "corrected_value": "x"},
+        ),
+        (
+            "/v1/wcs/admin/additions/attribution",
+            {"entity_slug": "settle", "prose": "x"},
+        ),
+        (
+            "/v1/wcs/admin/additions/drill_purpose",
+            {"drill_entity_slug": "paper-drill", "skill_name": "Balance"},
+        ),
+        (
+            "/v1/wcs/admin/additions/technique_requirement",
+            {"technique_entity_slug": "anchor-step", "skill_name": "Balance"},
+        ),
+    ],
+)
+async def test_admin_write_with_unknown_source_returns_404(
+    client, rich_source_id: str, path: str, body: dict
+) -> None:
+    """An unknown source_id is the caller's mistake, not a server failure."""
+    resp = await client.post(path, json={**body, "source_id": str(uuid.uuid4())})
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error"]["code"] == "source_not_found"
+
+
+async def test_source_scoped_name_correction_requires_source_id(
+    client, async_engine
+) -> None:
+    """scope "source" without a source_id is a 422, not a silent no-op.
+
+    Such a row matched neither the per-source nor the global lookup, so it
+    was saved, reported as a global correction, and never applied.
+    """
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={
+            "raw_name": "Kaiano",
+            "corrected_name": "Kaiano Levine",
+            "scope": "source",
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    async with async_engine.begin() as conn:
+        count = (
+            await conn.execute(text("SELECT count(*) FROM wcs_name_corrections"))
+        ).scalar_one()
+    assert count == 0

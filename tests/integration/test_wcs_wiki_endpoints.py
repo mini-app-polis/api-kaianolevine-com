@@ -463,3 +463,110 @@ async def test_get_unknown_source_returns_404(client, path: str) -> None:
     resp = await client.get(path.format(id=uuid.uuid4()))
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "source_not_found"
+
+
+# ---------------------------------------------------------------------------
+# Instructor pages follow name corrections.
+# ---------------------------------------------------------------------------
+
+
+async def _visible_source(client, drive_file_id: str) -> str:
+    """Create a default-visible source taught by raw instructor "Kaiano"."""
+    transcript = await client.post(
+        "/v1/wcs/transcripts",
+        json={
+            "raw_text": f"Lesson {drive_file_id}.",
+            "source_type": "plaud",
+            "source_filename": f"{drive_file_id}.txt",
+            "drive_file_id": drive_file_id,
+        },
+    )
+    assert transcript.status_code == 201
+    resp = await client.post(
+        "/v1/wcs/sources",
+        json=_source_payload(
+            transcript.json()["data"]["id"],
+            is_default_visible=True,
+            raw_output={
+                "entities": [{"kind": "concept", "name": "Frame", "prose": "x"}],
+                "entity_definitions": [
+                    {"entity_name": "Frame", "definition": "Upper body."}
+                ],
+            },
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]["id"]
+
+
+async def _page_source_ids(client, slug: str) -> set[str]:
+    """Source ids behind an instructor page's attributions and definitions."""
+    resp = await client.get(f"/v1/wcs/wiki/instructors/{slug}")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    attr_ids = {a["source_id"] for a in data["attributions"]}
+    def_ids = {d["source_id"] for d in data["definitions"]}
+    assert attr_ids == def_ids
+    return attr_ids
+
+
+async def test_instructor_page_follows_source_scoped_name_correction(client) -> None:
+    source_id = await _visible_source(client, "drive-scoped")
+    assert await _page_source_ids(client, "kaiano") == {source_id}
+
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={
+            "raw_name": "Kaiano",
+            "corrected_name": "Kaiano Levine",
+            "scope": "source",
+            "source_id": source_id,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    assert await _page_source_ids(client, "kaiano-levine") == {source_id}
+    assert await _page_source_ids(client, "kaiano") == set()
+
+
+async def test_instructor_page_follows_global_name_correction(client) -> None:
+    source_id = await _visible_source(client, "drive-global")
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={"raw_name": "Kaiano", "corrected_name": "Kaiano Levine"},
+    )
+    assert resp.status_code == 200, resp.text
+    # Global corrections defer recompose; recompose creates the instructor.
+    recompose = await client.post(f"/v1/wcs/admin/recompose/{source_id}")
+    assert recompose.status_code == 200
+
+    assert await _page_source_ids(client, "kaiano-levine") == {source_id}
+    assert await _page_source_ids(client, "kaiano") == set()
+
+
+async def test_instructor_page_source_scoped_correction_beats_global(client) -> None:
+    scoped_id = await _visible_source(client, "drive-a")
+    global_id = await _visible_source(client, "drive-b")
+
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={"raw_name": "Kaiano", "corrected_name": "Kaiano Global"},
+    )
+    assert resp.status_code == 200
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={
+            "raw_name": "Kaiano",
+            "corrected_name": "Kaiano Levine",
+            "scope": "source",
+            "source_id": scoped_id,
+        },
+    )
+    assert resp.status_code == 200
+    assert (await client.post(f"/v1/wcs/admin/recompose/{global_id}")).status_code == (
+        200
+    )
+
+    assert await _page_source_ids(client, "kaiano-levine") == {scoped_id}
+    assert await _page_source_ids(client, "kaiano-global") == {global_id}
+    assert await _page_source_ids(client, "kaiano") == set()

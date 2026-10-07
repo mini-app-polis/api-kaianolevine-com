@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, get_args
 
 from fastapi import HTTPException
 
@@ -57,7 +57,14 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     WcsTranscriptItem,
     WcsWikiExportItem,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictStr,
+    model_validator,
+)
 
 T = TypeVar("T")
 
@@ -619,6 +626,18 @@ class WcsNameCorrectionCreate(BaseModel):
     )
     reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
+    @model_validator(mode="after")
+    def source_scope_names_a_source(self) -> WcsNameCorrectionCreate:
+        """A source-scoped correction says which source it applies to.
+
+        Without a source_id the row matches neither the per-source lookup
+        nor the global one in apply_name_corrections, so it would be saved,
+        reported as a global correction, and never applied.
+        """
+        if self.scope == "source" and self.source_id is None:
+            raise ValueError("scope 'source' requires a source_id")
+        return self
+
 
 class WcsAttributionCorrectionCreate(BaseModel):
     """Payload for POST attribution correction admin endpoint."""
@@ -637,17 +656,70 @@ class WcsAttributionCorrectionCreate(BaseModel):
     reason: str = Field("", description="Free-text rationale supplied by the admin.")
 
 
+WcsMetadataCorrectionField = Literal[
+    "title",
+    "organization",
+    "session_date",
+    "session_type",
+    "instructors",
+    "students",
+    "visibility",
+    "is_default_visible",
+]
+
+
 class WcsSourceMetadataCorrectionCreate(BaseModel):
-    """Payload for POST source metadata correction admin endpoint."""
+    """Payload for POST source metadata correction admin endpoint.
+
+    ``corrected_value`` is the field's plain JSON value: a string for title,
+    organization, session_type and visibility; an ISO date string for
+    session_date; a boolean for is_default_visible; a list of names for
+    instructors and students. The pairing is checked here so a value the
+    apply step cannot use is a 422 before anything is written.
+    """
 
     source_id: uuid.UUID = Field(
         ..., description="Identifier of the WCS source this row belongs to."
     )
-    field: str = Field(..., description="Name of the field being corrected.")
-    corrected_value: dict = Field(
-        ..., description="New value to apply for the corrected field."
+    field: WcsMetadataCorrectionField = Field(
+        ..., description="Name of the source field being corrected."
+    )
+    # Strict, so 1 is not taken for true or 20240220 for a string: the value
+    # is stored as given and should be exactly what the field holds.
+    corrected_value: StrictStr | StrictBool | list[StrictStr] = Field(
+        ..., description="New value for the field, in the field's own JSON type."
     )
     reason: str = Field("", description="Free-text rationale supplied by the admin.")
+
+    @model_validator(mode="after")
+    def value_fits_field(self) -> WcsSourceMetadataCorrectionCreate:
+        """corrected_value has the type, and where fixed the vocabulary, of its field.
+
+        session_type and visibility are free text in the database (no CHECK
+        constraint), so the vocabularies the API serves elsewhere are the
+        constraint: WcsSessionType and WcsVisibility.
+        """
+        field, value = self.field, self.corrected_value
+        if field in ("instructors", "students"):
+            if not isinstance(value, list) or not all(n.strip() for n in value):
+                raise ValueError(f"{field} takes a list of non-blank names")
+        elif field == "is_default_visible":
+            if not isinstance(value, bool):
+                raise ValueError("is_default_visible takes a boolean")
+        elif not isinstance(value, str):
+            raise ValueError(f"{field} takes a string")
+        elif field == "session_date":
+            try:
+                self.corrected_value = dt.date.fromisoformat(value).isoformat()
+            except ValueError:
+                raise ValueError(
+                    "session_date takes an ISO date (YYYY-MM-DD)"
+                ) from None
+        elif field == "session_type" and value not in get_args(WcsSessionType):
+            raise ValueError(f"session_type must be one of {get_args(WcsSessionType)}")
+        elif field == "visibility" and value not in get_args(WcsVisibility):
+            raise ValueError(f"visibility must be one of {get_args(WcsVisibility)}")
+        return self
 
 
 class WcsAttributionAdditionCreate(BaseModel):
