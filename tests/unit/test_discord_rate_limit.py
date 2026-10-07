@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 import respx
 from httpx import Response
+from mini_app_polis import _sentry
+from mini_app_polis import discord as transport
 
 from kaianolevine_api.config import get_settings
 from kaianolevine_api.services import discord
@@ -28,9 +30,9 @@ CLOUDFLARE_1015 = (
 @pytest.fixture(autouse=True)
 def _no_cooldown_between_tests():
     """Cooldowns are process state; one test's 429 must not mute the next."""
-    discord._cooldowns.clear()
+    transport._cooldowns.clear()
     yield
-    discord._cooldowns.clear()
+    transport._cooldowns.clear()
 
 
 @pytest.fixture
@@ -89,8 +91,8 @@ async def test_cloudflare_1015_holds_every_webhook_for_the_default(
 
     assert runs.call_count == 1
     assert activity.call_count == 0
-    remaining = discord._cooldown_remaining(ACTIVITY_URL)
-    assert 50 < remaining <= discord._DEFAULT_COOLDOWN_SECS
+    remaining = transport._cooldown_remaining(ACTIVITY_URL)
+    assert 50 < remaining <= transport._DEFAULT_COOLDOWN_SECS
 
 
 @respx.mock
@@ -101,7 +103,7 @@ async def test_retry_after_header_sets_the_cooldown(settings) -> None:
 
     await _send(settings, discord.CHANNEL_RUNS)
 
-    assert 110 < discord._cooldown_remaining(RUNS_URL) <= 120
+    assert 110 < transport._cooldown_remaining(RUNS_URL) <= 120
 
 
 @respx.mock
@@ -112,7 +114,7 @@ async def test_absurd_retry_after_is_capped(settings) -> None:
 
     await _send(settings, discord.CHANNEL_RUNS)
 
-    assert discord._cooldown_remaining(RUNS_URL) <= discord._MAX_COOLDOWN_SECS
+    assert transport._cooldown_remaining(RUNS_URL) <= transport._MAX_COOLDOWN_SECS
 
 
 @respx.mock
@@ -125,11 +127,11 @@ async def test_sends_resume_after_the_cooldown(
             Response(204),
         ]
     )
-    now = discord.time.monotonic()
-    monkeypatch.setattr(discord.time, "monotonic", lambda: now)
+    now = transport.time.monotonic()
+    monkeypatch.setattr(transport.time, "monotonic", lambda: now)
     assert await _send(settings, discord.CHANNEL_RUNS) is False
 
-    monkeypatch.setattr(discord.time, "monotonic", lambda: now + 6)
+    monkeypatch.setattr(transport.time, "monotonic", lambda: now + 6)
     assert await _send(settings, discord.CHANNEL_RUNS) is True
     assert runs.call_count == 2
 
@@ -140,7 +142,7 @@ async def test_rate_limit_reported_to_sentry_once(
 ) -> None:
     reported: list[str] = []
     monkeypatch.setattr(
-        discord.sentry_sdk,
+        _sentry.sentry_sdk,
         "capture_message",
         lambda message, **_: reported.append(message),
     )
