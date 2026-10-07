@@ -1,3 +1,10 @@
+## [2.3.10](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.9...v2.3.10) (2026-10-07)
+
+
+### Bug Fixes
+
+* **wcs:** apply metadata corrections, 404 unknown sources, follow name corrections on instructor pages ([820decb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/820decb13d31fb0da4bed22f9fde8ef05a02d931))
+
 ## [2.3.9](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.8...v2.3.9) (2026-10-07)
 
 
