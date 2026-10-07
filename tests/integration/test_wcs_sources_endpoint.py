@@ -157,6 +157,34 @@ async def test_create_source_transcript_not_owned(client, async_engine) -> None:
     assert resp.json()["error"]["code"] == "transcript_not_owned"
 
 
+async def test_reingest_refuses_a_source_owned_by_another_caller(
+    client, async_engine
+) -> None:
+    """Owning the transcript is not enough to overwrite someone else's source."""
+    transcript_id = await _create_transcript(client)
+    first = await client.post("/v1/wcs/sources", json=_source_payload(transcript_id))
+    assert first.status_code == 200
+    source_id = uuid.UUID(first.json()["data"]["id"])
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE wcs_sources SET owner_id = 'someone-else' WHERE id = :id"),
+            {"id": source_id},
+        )
+
+    resp = await client.post(
+        "/v1/wcs/sources",
+        json=_source_payload(transcript_id, title="Hijacked title"),
+    )
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "source_not_owned"
+
+    sm = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with sm() as session:
+        source = await session.get(WcsSource, source_id)
+        assert source is not None
+        assert source.title == "Anchor lesson"
+
+
 async def test_composition_failure_rolls_back(client) -> None:
     transcript_id = await _create_transcript(client)
     with patch(

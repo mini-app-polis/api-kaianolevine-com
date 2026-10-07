@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import AsyncMock
 
 import httpx
@@ -420,3 +421,45 @@ async def test_visibility_filters_private_source(client, async_engine) -> None:
         export = await stranger.get("/v1/wcs/wiki/export")
         assert export.status_code == 403  # JWT callers cannot bulk-export
     auth_mod.verify_bearer = original_verify
+
+
+async def test_list_entities_status_filter_narrows_rows_and_total(
+    client, seeded_source, async_engine
+) -> None:
+    """Composed entities start as stubs; ?status selects one lifecycle state."""
+    before = await client.get("/v1/wcs/wiki/concepts")
+    all_slugs = {e["slug"] for e in before.json()["data"]}
+    assert "frame" in all_slugs
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE wcs_entities SET status = 'mature' WHERE slug = 'frame'")
+        )
+
+    mature = await client.get("/v1/wcs/wiki/concepts", params={"status": "mature"})
+    assert mature.status_code == 200
+    assert [e["slug"] for e in mature.json()["data"]] == ["frame"]
+    assert mature.json()["meta"]["total"] == 1
+
+    stubs = await client.get("/v1/wcs/wiki/concepts", params={"status": "stub"})
+    assert {e["slug"] for e in stubs.json()["data"]} == all_slugs - {"frame"}
+    assert stubs.json()["meta"]["total"] == len(all_slugs) - 1
+
+    # The filter applies within the kind: frame is a concept, not a technique.
+    none = await client.get("/v1/wcs/wiki/techniques", params={"status": "mature"})
+    assert none.json()["data"] == []
+    assert none.json()["meta"]["total"] == 0
+
+
+async def test_get_instructor_unknown_slug_returns_404(client) -> None:
+    resp = await client.get("/v1/wcs/wiki/instructors/no-such-instructor")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "instructor_not_found"
+
+
+@pytest.mark.parametrize(
+    "path", ["/v1/wcs/wiki/sources/{id}", "/v1/wcs/wiki/admin/sources/{id}"]
+)
+async def test_get_unknown_source_returns_404(client, path: str) -> None:
+    resp = await client.get(path.format(id=uuid.uuid4()))
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "source_not_found"
