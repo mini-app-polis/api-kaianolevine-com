@@ -136,6 +136,13 @@ async def test_sets_get_set_id_unknown_uuid_returns_404_not_found(client) -> Non
     assert missing.json()["error"]["code"] == "not_found"
 
 
+async def test_sets_get_set_id_tracks_unknown_set_returns_404(client) -> None:
+    """An unknown set is a 404, not an empty track list."""
+    missing = await client.get(f"/v1/sets/{uuid.uuid4()}/tracks")
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "not_found"
+
+
 async def test_sets_get_list_year_and_meta_total(client) -> None:
     """Smoke: year filter + list envelope includes total."""
     set_id = await _ingest_set(

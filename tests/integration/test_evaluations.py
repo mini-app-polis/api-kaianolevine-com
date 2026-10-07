@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import insert, text
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from kaianolevine_api.database import get_db_session
+from kaianolevine_api.main import app
+from kaianolevine_api.models import PipelineEvaluation
 
 
 async def test_evaluations_endpoints(client) -> None:
@@ -655,6 +662,60 @@ async def test_evaluations_summary_severity_breakdown_per_dimension(client) -> N
     assert row["info_count"] == 1
 
 
+async def test_evaluations_summary_run_id_narrows_within_latest_runs(
+    client, async_engine
+) -> None:
+    """run_id picks one run out of the latest runs; it never revives a superseded one."""
+    for repo, run_id, severity, finding in [
+        ("repo-a", "run-a-old", "INFO", "old"),
+        ("repo-a", "run-a", "ERROR", "a1"),
+        ("repo-b", "run-b", "WARN", "b1"),
+        ("repo-b", "run-b", "WARN", "b2"),
+    ]:
+        resp = await client.post(
+            "/v1/evaluations",
+            json={
+                "repo": repo,
+                "dimension": "testing_coverage",
+                "severity": severity,
+                "run_id": run_id,
+                "finding": finding,
+                "source": "summary_src",
+            },
+        )
+        assert resp.status_code == 200
+    async with async_engine.begin() as conn:
+        for run_id, at in [
+            ("run-a-old", "2024-01-01T00:00:00+00:00"),
+            ("run-a", "2024-01-02T00:00:00+00:00"),
+            ("run-b", "2024-01-02T00:00:00+00:00"),
+        ]:
+            await conn.execute(
+                text(
+                    "UPDATE pipeline_evaluations SET evaluated_at = :at WHERE run_id = :r"
+                ),
+                {"at": datetime.fromisoformat(at), "r": run_id},
+            )
+
+    everything = (await client.get("/v1/evaluations/summary")).json()["data"]
+    assert [
+        (r["error_count"], r["warn_count"], r["info_count"]) for r in everything
+    ] == [(1, 2, 0)]
+
+    run_a = await client.get("/v1/evaluations/summary", params={"run_id": "run-a"})
+    assert run_a.status_code == 200
+    rows = run_a.json()["data"]
+    assert [(r["error_count"], r["warn_count"], r["info_count"]) for r in rows] == [
+        (1, 0, 0)
+    ]
+
+    superseded = await client.get(
+        "/v1/evaluations/summary", params={"run_id": "run-a-old"}
+    )
+    assert superseded.json()["data"] == []
+    assert superseded.json()["meta"]["total"] == 0
+
+
 # ── PIPE-002: one finding lands once per run, however often it is offered ────
 #
 # SQS is at-least-once and the shared release workflow already retries the
@@ -775,3 +836,58 @@ async def test_findings_with_no_run_id_are_always_stored(client, db_session) -> 
 
     assert second.json()["data"]["deduplicated"] is False
     assert await _stored_rows(db_session) == 2
+
+
+async def test_losing_the_insert_race_answers_with_the_winners_row(
+    client, async_engine, db_session
+) -> None:
+    """Two workers both miss the fast-path read and both insert the finding.
+
+    The unique index lets one land; the other must answer 200 with that row
+    and ``deduplicated``, not a 500. Made deterministic by committing the
+    rival row from another connection just before this request's flush.
+    """
+    rival_ids: list = []
+
+    class RacingSession(AsyncSession):
+        async def flush(self, objects=None) -> None:
+            pending = [o for o in self.new if isinstance(o, PipelineEvaluation)]
+            if pending and not rival_ids:
+                mine = pending[0]
+                values = {
+                    attr.key: getattr(mine, attr.key)
+                    for attr in sa_inspect(PipelineEvaluation).column_attrs
+                    if attr.key != "id" and getattr(mine, attr.key) is not None
+                }
+                async with async_engine.begin() as conn:
+                    rival_ids.append(
+                        (
+                            await conn.execute(
+                                insert(PipelineEvaluation)
+                                .values(**values)
+                                .returning(PipelineEvaluation.id)
+                            )
+                        ).scalar_one()
+                    )
+            await super().flush(objects)
+
+    maker = async_sessionmaker(
+        async_engine, class_=RacingSession, expire_on_commit=False, autoflush=False
+    )
+
+    async def racing_db_session() -> AsyncIterator[AsyncSession]:
+        async with maker() as session:
+            yield session
+
+    original = app.dependency_overrides[get_db_session]
+    app.dependency_overrides[get_db_session] = racing_db_session
+    try:
+        resp = await client.post("/v1/evaluations", json=_finding())
+    finally:
+        app.dependency_overrides[get_db_session] = original
+
+    assert resp.status_code == 200, resp.text
+    assert len(rival_ids) == 1
+    assert resp.json()["data"]["id"] == str(rival_ids[0])
+    assert resp.json()["data"]["deduplicated"] is True
+    assert await _stored_rows(db_session) == 1

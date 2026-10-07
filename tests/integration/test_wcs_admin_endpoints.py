@@ -88,6 +88,38 @@ async def test_name_correction_global_deferred(client) -> None:
     assert data["recomposed_source_ids"] == []
 
 
+async def test_name_correction_scoped_to_a_source_recomposes_it(
+    client, source_id: str
+) -> None:
+    """A source-scoped correction is applied at once, not deferred.
+
+    The recompose resolves the source's raw instructor "Kaiano" through the
+    correction, so the corrected instructor exists as soon as the call returns.
+    """
+    before = await client.get("/v1/wcs/wiki/instructors/kaiano-levine")
+    assert before.status_code == 404
+
+    resp = await client.post(
+        "/v1/wcs/admin/corrections/name",
+        json={
+            "raw_name": "Kaiano",
+            "corrected_name": "Kaiano Levine",
+            "scope": "source",
+            "source_id": source_id,
+            "reason": "Full name.",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["deferred"] is False
+    assert data["message"] == ""
+    assert [str(x) for x in data["recomposed_source_ids"]] == [source_id]
+
+    after = await client.get("/v1/wcs/wiki/instructors/kaiano-levine")
+    assert after.status_code == 200, after.text
+    assert after.json()["data"]["instructor"]["canonical_name"] == "Kaiano Levine"
+
+
 async def test_attribution_correction_recomposes(client, source_id: str) -> None:
     resp = await client.post(
         "/v1/wcs/admin/corrections/attribution",
@@ -403,3 +435,58 @@ async def test_patch_source_endpoints_404_missing(client) -> None:
         json={"title": "nope"},
     )
     assert meta.status_code == 404
+
+
+async def test_recompose_unknown_source_returns_404(client) -> None:
+    resp = await client.post(f"/v1/wcs/admin/recompose/{uuid.uuid4()}")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "source_not_found"
+
+
+async def test_gaps_skills_unpaired_names_the_side_each_skill_is_on(
+    client, rich_source_id: str
+) -> None:
+    """A drill skill with no technique counterpart, and vice versa, are both gaps."""
+    drill = await client.post(
+        "/v1/wcs/admin/additions/drill_purpose",
+        json={
+            "drill_entity_slug": "paper-drill",
+            "source_id": rich_source_id,
+            "skill_name": "Balance",
+            "prose": "Train weight commitment.",
+        },
+    )
+    assert drill.status_code == 200, drill.text
+    tech = await client.post(
+        "/v1/wcs/admin/additions/technique_requirement",
+        json={
+            "technique_entity_slug": "anchor-step",
+            "source_id": rich_source_id,
+            "skill_name": "Posture",
+            "prose": "Anchor step requires posture.",
+        },
+    )
+    assert tech.status_code == 200, tech.text
+
+    resp = await client.get("/v1/wcs/admin/gaps/skills-unpaired")
+    assert resp.status_code == 200
+    details = {(g["slug"], g["detail"]) for g in resp.json()["data"]}
+    assert details == {
+        ("balance", "drill only: Balance"),
+        ("posture", "technique only: Posture"),
+    }
+    assert all(g["kind"] == "skill" for g in resp.json()["data"])
+
+    # Pairing the drill's skill on the technique side closes that gap.
+    pair = await client.post(
+        "/v1/wcs/admin/additions/technique_requirement",
+        json={
+            "technique_entity_slug": "anchor-step",
+            "source_id": rich_source_id,
+            "skill_name": "Balance",
+            "prose": "Anchor step requires balance.",
+        },
+    )
+    assert pair.status_code == 200
+    after = await client.get("/v1/wcs/admin/gaps/skills-unpaired")
+    assert [g["slug"] for g in after.json()["data"]] == ["posture"]

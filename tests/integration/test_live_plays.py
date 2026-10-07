@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from kaianolevine_api.models import FeatureFlag as DbFeatureFlag
+from kaianolevine_api.models import LivePlay as DbLivePlay
+
 
 async def test_live_plays_ingest_inserts_skips_duplicate_same_key(client) -> None:
     payload = {
@@ -69,3 +75,49 @@ async def test_live_plays_recent_limit_param_caps_page_size(client) -> None:
     assert len(rj["data"]) == 1
     assert rj["meta"]["count"] == 1
     assert rj["meta"]["total"] == 1
+
+
+async def _disable_live_plays(async_engine) -> None:
+    maker = async_sessionmaker(async_engine, expire_on_commit=False, autoflush=False)
+    async with maker() as session:
+        session.add(
+            DbFeatureFlag(
+                owner_id="dev-owner",
+                name="flags.deejay_api.live_plays_enabled",
+                enabled=False,
+                description="Disable live plays",
+            )
+        )
+        await session.commit()
+
+
+async def test_live_plays_ingest_disabled_by_flag_writes_nothing(
+    client, async_engine
+) -> None:
+    await _disable_live_plays(async_engine)
+
+    resp = await client.post(
+        "/v1/live-plays",
+        json={
+            "plays": [
+                {"played_at": "2026-06-01T01:00:00Z", "title": "T", "artist": "A"}
+            ]
+        },
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "feature_disabled"
+
+    maker = async_sessionmaker(async_engine)
+    async with maker() as session:
+        count = (
+            await session.execute(select(func.count()).select_from(DbLivePlay))
+        ).scalar_one()
+    assert count == 0
+
+
+async def test_live_plays_recent_disabled_by_flag(client, async_engine) -> None:
+    await _disable_live_plays(async_engine)
+
+    resp = await client.get("/v1/live-plays/recent")
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "feature_disabled"

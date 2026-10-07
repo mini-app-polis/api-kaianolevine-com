@@ -160,3 +160,30 @@ async def test_tracks_get_id_unknown_uuid_returns_404(client) -> None:
     missing = await client.get(f"/v1/tracks/{uuid.uuid4()}")
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "not_found"
+
+
+async def test_tracks_get_list_title_filter_is_case_insensitive_substring(
+    client,
+) -> None:
+    await _ingest(
+        client,
+        "t-title.csv",
+        [
+            _full_track(1, "Midnight City", "M83"),
+            _full_track(2, "City of Stars", "Gosling"),
+            _full_track(3, "Unrelated", "Someone"),
+        ],
+    )
+
+    resp = await client.get("/v1/tracks", params={"title": "CITY", "limit": 1})
+    assert resp.status_code == 200
+    j = resp.json()
+    # total counts every match under the filter, not just the page.
+    assert j["meta"]["total"] == 2
+    assert j["meta"]["count"] == 1
+
+    both = await client.get("/v1/tracks", params={"title": "city"})
+    assert {t["title"] for t in both.json()["data"]} == {
+        "Midnight City",
+        "City of Stars",
+    }

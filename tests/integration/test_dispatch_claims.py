@@ -9,15 +9,24 @@ that a file edited in place is one job per version.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+import respx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kaianolevine_api.main import app
 from kaianolevine_api.models import DispatchClaim
-from kaianolevine_api.services import deejay_dispatch, job_queue, transcription_dispatch
+from kaianolevine_api.services import (
+    activity,
+    deejay_dispatch,
+    job_queue,
+    transcription_dispatch,
+)
 from kaianolevine_api.services import dispatch_claims as claims
 
 pytestmark = pytest.mark.asyncio
@@ -35,6 +44,12 @@ async def _claim(session: AsyncSession, now: dt.datetime, **kw) -> claims.Claim:
     kw.setdefault("scope", SCOPE)
     kw.setdefault("drive_file_id", "f-1")
     return await claims.claim(session, now=now, **kw)
+
+
+async def _drain_activity() -> None:
+    """Let the activity middleware's fire-and-forget reports finish."""
+    while activity._in_flight:
+        await asyncio.gather(*list(activity._in_flight), return_exceptions=True)
 
 
 async def _row(session: AsyncSession, **where) -> DispatchClaim | None:
@@ -345,6 +360,119 @@ async def test_live_history_runs_once_per_edit(client) -> None:
     assert same.json()["data"]["deduplicated"] is True
     assert edited.status_code == 202
     assert dispatched.await_count == 2
+
+
+async def test_a_capped_file_in_a_sweep_is_reported_once_and_not_enqueued(
+    client, db_session
+) -> None:
+    """A poison file alone in the folder: one report, no sweep, deduplicated."""
+    db_session.add(
+        DispatchClaim(
+            scope=claims.scope_for("deejay", "process-new-files"),
+            drive_file_id="f-poison",
+            revision="",
+            attempts=claims.MAX_ATTEMPTS,
+            claimed_at=dt.datetime.now(dt.UTC) - claims.CLAIM_WINDOW * 2,
+            message_id="m-old",
+        )
+    )
+    await db_session.commit()
+
+    with (
+        patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched,
+        patch.object(job_queue, "report_dropped", AsyncMock()) as reported,
+    ):
+        first = await client.post("/v1/deejay/runs", json=_sweep("f-poison"))
+        second = await client.post("/v1/deejay/runs", json=_sweep("f-poison"))
+
+    assert first.status_code == 200, first.text
+    # Answered with the job the file last went out as.
+    assert first.json()["data"]["message_id"] == "m-old"
+    assert first.json()["data"]["deduplicated"] is True
+    assert second.status_code == 200
+    dispatched.assert_not_awaited()
+    reported.assert_awaited_once()
+    assert "f-poison" in reported.await_args.args[0]
+    assert reported.await_args.kwargs["heading"] == "Drive file given up on"
+
+
+async def test_a_capped_file_beside_a_new_one_does_not_block_the_sweep(
+    client, db_session
+) -> None:
+    scope = claims.scope_for("deejay", "process-new-files")
+    db_session.add(
+        DispatchClaim(
+            scope=scope,
+            drive_file_id="f-poison",
+            revision="",
+            attempts=claims.MAX_ATTEMPTS,
+            claimed_at=dt.datetime.now(dt.UTC) - claims.CLAIM_WINDOW * 2,
+        )
+    )
+    await db_session.commit()
+
+    with (
+        patch.object(deejay_dispatch, "dispatch_deejay", _deejay("m-7")) as dispatched,
+        patch.object(job_queue, "report_dropped", AsyncMock()) as reported,
+    ):
+        response = await client.post(
+            "/v1/deejay/runs", json=_sweep("f-poison", "f-new")
+        )
+
+    assert response.status_code == 202, response.text
+    dispatched.assert_awaited_once()
+    reported.assert_awaited_once()
+    db_session.expire_all()
+    fresh = await _row(db_session, scope=scope, drive_file_id="f-new")
+    poison = await _row(db_session, scope=scope, drive_file_id="f-poison")
+    assert fresh is not None and fresh.message_id == "m-7"
+    # The capped file is not re-attributed to the sweep that skipped it.
+    assert poison is not None and poison.message_id != "m-7"
+
+
+async def test_a_claim_failing_mid_sweep_releases_the_claims_already_taken(
+    client, db_session
+) -> None:
+    """A file claimed before the failure must not sit held for the window."""
+    real_claim = claims.claim
+    calls = 0
+
+    async def claim_then_fail(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("database went away")
+        return await real_claim(*args, **kwargs)
+
+    # The unhandled error is rendered as a 500 rather than re-raised into the
+    # test, and the activity middleware's report of it goes nowhere real.
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    with (
+        respx.mock(assert_all_called=False) as router,
+        patch.object(claims, "claim", claim_then_fail),
+        patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched,
+    ):
+        router.post(url__startswith="https://discord.test/").mock(
+            return_value=httpx.Response(204)
+        )
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver", headers=client.headers
+        ) as raw:
+            response = await raw.post("/v1/deejay/runs", json=_sweep("a", "b"))
+        await _drain_activity()
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
+    dispatched.assert_not_awaited()
+    db_session.expire_all()
+    assert await _row(db_session, drive_file_id="a") is None
+    assert await _row(db_session, drive_file_id="b") is None
+
+    # And so the next tick dispatches the files rather than deduplicating them.
+    with patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched:
+        retried = await client.post("/v1/deejay/runs", json=_sweep("a", "b"))
+    assert retried.status_code == 202, retried.text
+    dispatched.assert_awaited_once()
 
 
 @pytest.mark.parametrize(

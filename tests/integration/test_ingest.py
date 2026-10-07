@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from collections.abc import AsyncIterator
 
+from sqlalchemy import func, insert, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from kaianolevine_api.database import get_db_session
+from kaianolevine_api.main import app
 from kaianolevine_api.models import FeatureFlag as DbFeatureFlag
+from kaianolevine_api.models import Set as DbSet
 
 
 def _payload(set_date: str, venue: str, source_file: str, tracks: list[dict]) -> dict:
@@ -291,3 +297,81 @@ async def test_ingest_empty_tracks_list_succeeds(client) -> None:
     j = r.json()
     assert j["meta"]["total"] == 1
     assert j["data"]["tracks_created"] == 0
+
+
+async def test_ingest_losing_the_insert_race_reuses_the_winners_set(
+    client, async_engine
+) -> None:
+    """Two ingests of one source_file that both miss the lookup.
+
+    The unique (owner_id, source_file) constraint lets only one insert land;
+    the other must find that set and ingest into it as a re-ingestion, not
+    fail and not create a second set. The race is made deterministic by
+    committing the rival set from another connection just before this
+    request's flush.
+    """
+    rival_ids: list = []
+
+    class RacingSession(AsyncSession):
+        async def flush(self, objects=None) -> None:
+            pending = [o for o in self.new if isinstance(o, DbSet)]
+            if pending and not rival_ids:
+                mine = pending[0]
+                async with async_engine.begin() as conn:
+                    rival_ids.append(
+                        (
+                            await conn.execute(
+                                insert(DbSet)
+                                .values(
+                                    owner_id=mine.owner_id,
+                                    set_date=mine.set_date,
+                                    venue=mine.venue,
+                                    source_file=mine.source_file,
+                                )
+                                .returning(DbSet.id)
+                            )
+                        ).scalar_one()
+                    )
+            await super().flush(objects)
+
+    maker = async_sessionmaker(
+        async_engine, class_=RacingSession, expire_on_commit=False, autoflush=False
+    )
+
+    async def racing_db_session() -> AsyncIterator[AsyncSession]:
+        async with maker() as session:
+            yield session
+
+    original = app.dependency_overrides[get_db_session]
+    app.dependency_overrides[get_db_session] = racing_db_session
+    try:
+        resp = await client.post(
+            "/v1/ingest",
+            json=_payload(
+                "2026-08-03",
+                "Venue",
+                "2026-08-03 race.csv",
+                [{"play_order": 1, "title": "Raced", "artist": "Racer"}],
+            ),
+        )
+    finally:
+        app.dependency_overrides[get_db_session] = original
+
+    assert resp.status_code == 200, resp.text
+    assert len(rival_ids) == 1
+    assert resp.json()["data"]["set_id"] == str(rival_ids[0])
+    assert resp.json()["data"]["tracks_created"] == 1
+
+    async with async_sessionmaker(async_engine)() as session:
+        sets = (
+            await session.execute(
+                select(func.count())
+                .select_from(DbSet)
+                .where(DbSet.source_file == "2026-08-03 race.csv")
+            )
+        ).scalar_one()
+    assert sets == 1
+
+    detail = await client.get(f"/v1/sets/{rival_ids[0]}/tracks")
+    assert detail.status_code == 200
+    assert [t["title"] for t in detail.json()["data"]] == ["Raced"]

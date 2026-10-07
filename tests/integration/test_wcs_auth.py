@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import AsyncMock
 
 import httpx
@@ -366,3 +367,154 @@ async def test_patch_wcs_admin_user_not_found_returns_404(client) -> None:
     )
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "user_not_found"
+
+
+# ── Visibility for an ordinary reader ─────────────────────────────────────────
+
+
+@pytest.fixture
+async def _reader_notes(client) -> dict:
+    """One default-visible and one hidden note, created as the admin caller."""
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
+
+    tr = await _create_transcript(client)
+    shared = await _create_note(client, tr["id"], title="Shared")
+    hidden = await _create_note(client, tr["id"], title="Hidden")
+    vis = await client.patch(
+        f"/v1/wcs/admin/notes/{shared['id']}/visibility",
+        json={"is_default_visible": True},
+    )
+    assert vis.status_code == 200
+    return {"shared": shared["id"], "hidden": hidden["id"]}
+
+
+@pytest.fixture
+async def reader_client(_reader_notes, async_engine):
+    """A caller holding wcs.notes.read (wcs-reader) with no WCS profile yet."""
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO identity_principals (id, kind, issuer, subject, "
+                "display_name, status) VALUES "
+                "('33333333333343338333333333333333', 'human', "
+                "'https://clerk.kaianolevine.com', 'reader-user', '', 'active')"
+            )
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO identity_principal_roles (principal_id, role_name, "
+                "granted_by) VALUES "
+                "('33333333333343338333333333333333', 'wcs-reader', 'test')"
+            )
+        )
+    original_verify = auth_mod.verify_bearer
+    auth_mod.verify_bearer = AsyncMock(return_value=_vs("reader-user", "human"))
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"Authorization": "Bearer reader-token"},
+    ) as c:
+        yield c
+    auth_mod.verify_bearer = original_verify
+
+
+async def test_reader_without_profile_sees_default_visible_note(
+    _reader_notes, reader_client
+) -> None:
+    r = await reader_client.get(f"/v1/wcs/notes/{_reader_notes['shared']}")
+    assert r.status_code == 200
+    assert r.json()["data"]["title"] == "Shared"
+
+
+async def test_reader_without_profile_is_refused_a_hidden_note(
+    _reader_notes, reader_client
+) -> None:
+    r = await reader_client.get(f"/v1/wcs/notes/{_reader_notes['hidden']}")
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "forbidden"
+
+
+async def test_reader_with_profile_and_grant_sees_hidden_note(
+    _reader_notes, reader_client, async_engine
+) -> None:
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
+                "VALUES ('reader-user', '', '', false)"
+            )
+        )
+    note_id = _reader_notes["hidden"]
+
+    # A profile alone grants nothing.
+    assert (await reader_client.get(f"/v1/wcs/notes/{note_id}")).status_code == 403
+
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_note_grants (id, user_id, note_id, granted_by) "
+                "VALUES (gen_random_uuid(), 'reader-user', :nid, 'dev-owner')"
+            ),
+            {"nid": note_id},
+        )
+    r = await reader_client.get(f"/v1/wcs/notes/{note_id}")
+    assert r.status_code == 200
+    assert r.json()["data"]["id"] == note_id
+
+
+async def test_wcs_me_get_404_when_caller_has_no_profile(reader_client) -> None:
+    r = await reader_client.get("/v1/wcs/me")
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "profile_not_found"
+
+
+# ── Admin grants and visibility: filters and missing rows ─────────────────────
+
+
+async def test_wcs_admin_grants_filter_by_note_id(client, async_engine) -> None:
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
+                "VALUES ('g3', '', '', false)"
+            )
+        )
+    from tests.integration.test_wcs_notes import (  # noqa: PLC0415
+        _create_note,
+        _create_transcript,
+    )
+
+    tr = await _create_transcript(client)
+    first = await _create_note(client, tr["id"])
+    second = await _create_note(client, tr["id"])
+    for nid in (first["id"], second["id"]):
+        resp = await client.post(
+            "/v1/wcs/admin/grants", json={"user_id": "g3", "note_id": nid}
+        )
+        assert resp.status_code == 201
+
+    everything = await client.get("/v1/wcs/admin/grants", params={"user_id": "g3"})
+    assert everything.json()["meta"]["total"] == 2
+
+    one = await client.get("/v1/wcs/admin/grants", params={"note_id": second["id"]})
+    assert one.status_code == 200
+    assert [g["note_id"] for g in one.json()["data"]] == [second["id"]]
+
+
+async def test_wcs_admin_delete_unknown_grant_returns_404(client) -> None:
+    r = await client.delete(f"/v1/wcs/admin/grants/{uuid.uuid4()}")
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "grant_not_found"
+
+
+async def test_patch_default_visibility_unknown_note_returns_404(client) -> None:
+    r = await client.patch(
+        f"/v1/wcs/admin/notes/{uuid.uuid4()}/visibility",
+        json={"is_default_visible": True},
+    )
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "note_not_found"

@@ -354,6 +354,54 @@ async def test_list_notes_empty(client) -> None:
     assert body["meta"]["total"] == 0
 
 
+async def test_list_notes_shows_default_visible_and_granted_only(client) -> None:
+    """The caller-scoped list has no admin bypass, even for an admin caller.
+
+    dev-owner is a WCS admin here; a note that is neither default-visible nor
+    granted to them stays out of this list (it is what /notes/all is for).
+    """
+    transcript = await _create_transcript(client)
+    shared = await _create_note(client, transcript["id"], title="Shared")
+    granted = await _create_note(
+        client,
+        transcript["id"],
+        title="Granted",
+        session_type="group_class",
+        students=[],
+        visibility="public",
+    )
+    await _create_note(client, transcript["id"], title="Hidden")
+
+    vis = await client.patch(
+        f"/v1/wcs/admin/notes/{shared['id']}/visibility",
+        json={"is_default_visible": True},
+    )
+    assert vis.status_code == 200
+    grant = await client.post(
+        "/v1/wcs/admin/grants",
+        json={"user_id": "dev-owner", "note_id": granted["id"]},
+    )
+    assert grant.status_code == 201
+
+    resp = await client.get("/v1/wcs/notes")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert {n["title"] for n in body["data"]} == {"Shared", "Granted"}
+    assert body["meta"]["total"] == 2
+
+    by_type = await client.get("/v1/wcs/notes", params={"session_type": "group_class"})
+    assert [n["title"] for n in by_type.json()["data"]] == ["Granted"]
+    assert by_type.json()["meta"]["total"] == 1
+
+    by_vis = await client.get("/v1/wcs/notes", params={"visibility": "private"})
+    assert [n["title"] for n in by_vis.json()["data"]] == ["Shared"]
+    assert by_vis.json()["meta"]["total"] == 1
+
+    page = await client.get("/v1/wcs/notes", params={"limit": 1})
+    assert page.json()["meta"]["count"] == 1
+    assert page.json()["meta"]["total"] == 2
+
+
 async def test_list_all_notes_returns_created_notes(client) -> None:
     # NOTE: endpoint name predates the auth relaxation. /v1/wcs/notes/all
     # is currently authenticated-but-not-admin while service-account auth
