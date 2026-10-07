@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS, LOG_WARNING, get_logger
@@ -83,34 +85,73 @@ def depluralize(slug: str) -> str:
     return slug
 
 
+async def _name_corrections_for(
+    session: AsyncSession, raw_names: Iterable[str]
+) -> dict[str, list[WcsNameCorrection]]:
+    """Every name correction for these raw names, any scope, grouped by raw name."""
+    names = set(raw_names)
+    out: dict[str, list[WcsNameCorrection]] = defaultdict(list)
+    if not names:
+        return out
+    result = await session.execute(
+        select(WcsNameCorrection).where(WcsNameCorrection.raw_name.in_(names))
+    )
+    for row in result.scalars().all():
+        out[row.raw_name].append(row)
+    return out
+
+
+def _pick_name_correction(
+    raw_name: str,
+    source_id: uuid.UUID | None,
+    corrections: list[WcsNameCorrection],
+) -> str:
+    """Corrected form of raw_name given its corrections: source-scoped first, then global.
+
+    The one place the precedence lives, so composition (apply_name_corrections)
+    and the wiki's instructor pages (resolved_instructor_slugs) cannot drift.
+    """
+    if source_id is not None:
+        for row in corrections:
+            if row.source_id == source_id:
+                return row.corrected_name
+    for row in corrections:
+        if row.scope == "global":
+            return row.corrected_name
+    return raw_name
+
+
 async def apply_name_corrections(
     session: AsyncSession,
     raw_name: str,
     source_id: uuid.UUID | None = None,
 ) -> str:
     """Apply name corrections: source-scoped first, then global."""
-    name = raw_name
-    if source_id is not None:
-        result = await session.execute(
-            select(WcsNameCorrection).where(
-                WcsNameCorrection.raw_name == raw_name,
-                WcsNameCorrection.source_id == source_id,
-            )
-        )
-        row = result.scalars().first()
-        if row is not None:
-            return row.corrected_name
+    corrections = await _name_corrections_for(session, [raw_name])
+    return _pick_name_correction(raw_name, source_id, corrections.get(raw_name, []))
 
-    result = await session.execute(
-        select(WcsNameCorrection).where(
-            WcsNameCorrection.raw_name == raw_name,
-            WcsNameCorrection.scope == "global",
-        )
+
+async def resolved_instructor_slugs(
+    session: AsyncSession,
+    sources: Iterable[tuple[uuid.UUID, list[str]]],
+) -> dict[uuid.UUID, set[str]]:
+    """Slugs each source's raw instructor names resolve to, after name corrections.
+
+    The batch form of the first step of resolve_instructor, for readers that
+    need to know which instructor a source belongs to without composing it:
+    one query for the corrections however many sources are passed.
+    """
+    sources = list(sources)
+    corrections = await _name_corrections_for(
+        session, (name for _, names in sources for name in names)
     )
-    row = result.scalars().first()
-    if row is not None:
-        return row.corrected_name
-    return name
+    return {
+        source_id: {
+            slugify(_pick_name_correction(name, source_id, corrections.get(name, [])))
+            for name in names
+        }
+        for source_id, names in sources
+    }
 
 
 async def _find_entity_by_slug(session: AsyncSession, slug: str) -> WcsEntity | None:

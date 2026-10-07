@@ -80,12 +80,42 @@ async def create_attribution_correction(
     return row, [payload.source_id]
 
 
+# The wcs_sources column each correctable metadata field writes. Keyed by
+# every value of WcsMetadataCorrectionField, so each field the schema accepts
+# reaches the apply step.
+_METADATA_FIELD_COLUMNS: dict[str, str] = {
+    "title": "title",
+    "organization": "organization",
+    "session_date": "session_date",
+    "session_type": "session_type",
+    "instructors": "instructors_raw",
+    "students": "students_raw",
+    "visibility": "visibility",
+    "is_default_visible": "is_default_visible",
+}
+
+
+async def source_exists(session: AsyncSession, source_id: uuid.UUID) -> bool:
+    """Return True if a wcs_sources row with this id exists.
+
+    Selects the id only: session.get would also load the source's selectin
+    relationships, which an existence check has no use for.
+    """
+    found = await session.execute(select(WcsSource.id).where(WcsSource.id == source_id))
+    return found.scalar_one_or_none() is not None
+
+
 async def create_metadata_correction(
     session: AsyncSession,
     owner_id: str,
     payload: WcsSourceMetadataCorrectionCreate,
 ) -> tuple[WcsSourceMetadataCorrection, list[uuid.UUID]]:
-    """Persist a metadata correction, apply it to the source row, and recompose."""
+    """Persist a metadata correction, apply it to the source row, and recompose.
+
+    The schema has already checked that corrected_value fits the field, so
+    the value is written as is; only session_date needs converting, from its
+    ISO string to the DATE the column holds.
+    """
     row = WcsSourceMetadataCorrection(
         source_id=payload.source_id,
         field=payload.field,
@@ -97,33 +127,11 @@ async def create_metadata_correction(
     await session.flush()
 
     source = await session.get(WcsSource, payload.source_id)
-    if source is not None and payload.field in {
-        "session_date",
-        "session_type",
-        "organization",
-        "instructors",
-        "students",
-        "title",
-        "visibility",
-        "is_default_visible",
-    }:
-        val = payload.corrected_value
-        if payload.field == "session_date" and isinstance(val, str):
-            source.session_date = dt.date.fromisoformat(val)
-        elif payload.field == "session_type" and isinstance(val, str):
-            source.session_type = val
-        elif payload.field == "organization" and isinstance(val, str):
-            source.organization = val
-        elif payload.field == "title" and isinstance(val, str):
-            source.title = val
-        elif payload.field == "visibility" and isinstance(val, str):
-            source.visibility = val
-        elif payload.field == "is_default_visible" and isinstance(val, bool):
-            source.is_default_visible = val
-        elif payload.field == "instructors" and isinstance(val, list):
-            source.instructors_raw = [str(x) for x in val]
-        elif payload.field == "students" and isinstance(val, list):
-            source.students_raw = [str(x) for x in val]
+    if source is not None:
+        value: object = payload.corrected_value
+        if payload.field == "session_date":
+            value = dt.date.fromisoformat(str(value))
+        setattr(source, _METADATA_FIELD_COLUMNS[payload.field], value)
 
     await compose_source(session, payload.source_id)
     return row, [payload.source_id]

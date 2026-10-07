@@ -38,6 +38,7 @@ from ..schemas import (
     WcsTechniqueRequirementItem,
     WcsWikiExportItem,
 )
+from .wcs_composition import resolved_instructor_slugs
 from .wcs_source_visibility import visible_source_ids_for_user
 
 
@@ -303,6 +304,48 @@ async def list_instructors(
     return [_instructor_item(i, alias_map.get(i.id, [])) for i in rows], total or 0
 
 
+async def _sources_resolving_to(
+    session: AsyncSession,
+    instructor: WcsInstructor,
+    aliases: list[str],
+    source_ids: list[uuid.UUID],
+) -> set[uuid.UUID]:
+    """Ids among source_ids with a raw instructor name that resolves to instructor.
+
+    Follows resolve_instructor: a raw name is corrected (source-scoped
+    correction first, then global), slugified, and resolves to the instructor
+    with that slug, else to the one holding it as an alias. So an alias of
+    this instructor that is another live instructor's slug resolves there,
+    not here. A constant three queries, whatever the number of sources.
+    """
+    taken = set(
+        (
+            await session.execute(
+                select(WcsInstructor.slug).where(
+                    WcsInstructor.slug.in_(aliases),
+                    WcsInstructor.id != instructor.id,
+                    WcsInstructor.merged_into_id.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    slugs = {instructor.slug, *aliases} - taken
+
+    rows = (
+        await session.execute(
+            select(WcsSource.id, WcsSource.instructors_raw).where(
+                WcsSource.id.in_(source_ids)
+            )
+        )
+    ).all()
+    resolved = await resolved_instructor_slugs(
+        session, [(sid, list(names or [])) for sid, names in rows]
+    )
+    return {sid for sid, resolved_slugs in resolved.items() if resolved_slugs & slugs}
+
+
 async def get_instructor_view(
     session: AsyncSession,
     user_id: str,
@@ -323,24 +366,12 @@ async def get_instructor_view(
     visible_ids = await visible_source_ids_for_user(session, user_id)
     alias_map = await _alias_map_for_instructors(session, [instructor.id])
 
-    # Names this instructor is known by — canonical plus aliases. Used to
-    # match against wcs_sources.instructors_raw (a list[str]) to find every
-    # source where this instructor was teaching, regardless of whether the
-    # row-level instructor_id is set.
-    instructor_names = {instructor.canonical_name, *alias_map.get(instructor.id, [])}
-
-    # Visible sources whose instructors_raw names this instructor (TEXT[] &&).
-    coauth_source_ids: set[uuid.UUID] = set(
-        (
-            await session.execute(
-                select(WcsSource.id).where(
-                    WcsSource.id.in_(visible_ids),
-                    WcsSource.instructors_raw.overlap(sorted(instructor_names)),
-                )
-            )
-        )
-        .scalars()
-        .all()
+    # Visible sources this instructor taught: those with a raw instructor name
+    # that resolves to them, after name corrections, as composition resolves
+    # it. Matching instructors_raw directly would leave a corrected source on
+    # the uncorrected name's page and off the corrected one.
+    coauth_source_ids = await _sources_resolving_to(
+        session, instructor, alias_map.get(instructor.id, []), visible_ids
     )
 
     attr_rows = (

@@ -160,7 +160,7 @@ Plus the operator-authored **correction and addition records** (also input-layer
 |---|---|---|
 | `wcs_name_corrections` | `POST /v1/wcs/admin/corrections/name` | Override raw name resolution during `resolve_instructor` / `resolve_entity`. Scope: global or per-source. |
 | `wcs_attribution_corrections` | `POST /v1/wcs/admin/corrections/attribution` | Override fields on individual attributions in a specific source. |
-| `wcs_source_metadata_corrections` | `POST /v1/wcs/admin/corrections/metadata` | Override filename-derived source fields (`instructors_raw`, `students_raw`, etc.). |
+| `wcs_source_metadata_corrections` | `POST /v1/wcs/admin/corrections/metadata` | Override filename-derived source fields (`field`: `instructors`, `students`, `title`, `session_date`, etc.; `corrected_value`: the field's plain value). |
 | `wcs_*_additions` (four tables) | `POST /v1/wcs/admin/additions/*` | First-class operator-authored content not from any extraction. |
 
 ### Canonical layer (composition output, operator-editable per ADR-0006)
@@ -385,16 +385,16 @@ POST /v1/wcs/admin/corrections/name
 
 ### Fix a wrong filename on a source
 
-**Tool:** source metadata correction + recompose.
-**Calls:** `POST /v1/wcs/admin/corrections/metadata`, then `POST /v1/wcs/admin/recompose/{source_id}`.
+**Tool:** source metadata correction (it recomposes the source itself).
+**Calls:** `POST /v1/wcs/admin/corrections/metadata`.
 **Example:** Source's filename had `Kaiano-Amy` as a single concatenated instructor; correct to two separate names.
 
 ```
 POST /v1/wcs/admin/corrections/metadata
-{ "source_id": "...", "instructors_raw": ["Kaiano", "Amy"] }
-
-POST /v1/wcs/admin/recompose/{source_id}
+{ "source_id": "...", "field": "instructors", "corrected_value": ["Kaiano", "Amy"], "reason": "Filename joined two names." }
 ```
+
+`field` is one of `title`, `organization`, `session_date`, `session_type`, `instructors`, `students`, `visibility`, `is_default_visible`. `corrected_value` is that field's plain value: a string (`session_type` one of `private_lesson`, `group_class`, `other`; `visibility` one of `private`, `public`), an ISO date string for `session_date`, a boolean for `is_default_visible`, a list of names for `instructors` and `students`. A value that does not fit its field is a 422 and nothing is written.
 
 After recompose, the synthetic `kaiano-amy` instructor row is orphan. `DELETE` it.
 

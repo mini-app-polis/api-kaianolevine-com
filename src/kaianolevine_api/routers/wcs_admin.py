@@ -38,6 +38,16 @@ router = APIRouter()
 log = logger_mod.get_logger()
 
 
+async def _require_source(session: AsyncSession, source_id: uuid.UUID | None) -> None:
+    """Answer 404 before any write when the payload names a source that does not exist.
+
+    Otherwise the insert fails on the source_id foreign key at flush, which
+    surfaces as a 500 for what is the caller's mistake.
+    """
+    if source_id is not None and not await admin_svc.source_exists(session, source_id):
+        raise api_error(404, "source_not_found", "Source not found")
+
+
 @router.patch(
     "/wcs/admin/sources/{source_id}/visibility",
     response_model=Envelope[WcsSourceItem],
@@ -109,6 +119,7 @@ async def create_name_correction(
     owner_id = owner_id_principal.subject
     log.info("%s name correction raw=%s", LOG_START, payload.raw_name)
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed, deferred, message = await admin_svc.create_name_correction(
         session, owner_id, payload
     )
@@ -142,6 +153,7 @@ async def create_attribution_correction(
     """Record an attribution correction and recompose the affected source."""
     owner_id = owner_id_principal.subject
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_attribution_correction(
         session, owner_id, payload
     )
@@ -172,6 +184,7 @@ async def create_metadata_correction(
     """Record a source metadata correction and recompose the affected source."""
     owner_id = owner_id_principal.subject
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_metadata_correction(
         session, owner_id, payload
     )
@@ -201,6 +214,7 @@ async def create_attribution_addition(
     """Append an admin-authored attribution to a source and recompose."""
     owner_id = owner_id_principal.subject
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_attribution_addition(
         session, owner_id, payload
     )
@@ -229,6 +243,7 @@ async def create_drill_purpose_addition(
     """Append an admin-authored drill-purpose pairing to a source and recompose."""
     owner_id = owner_id_principal.subject
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_drill_purpose_addition(
         session, owner_id, payload
     )
@@ -257,6 +272,7 @@ async def create_technique_requirement_addition(
     """Append an admin-authored technique requirement to a source and recompose."""
     owner_id = owner_id_principal.subject
     settings = get_settings()
+    await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_technique_requirement_addition(
         session, owner_id, payload
     )
