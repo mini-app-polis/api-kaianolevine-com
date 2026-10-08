@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default_factory=lambda: current_environment().value)
     API_VERSION: str = "1.0"
     STANDARDS_VERSION: str = "3.4.2"
-    SENTRY_DSN_API: str | None = None
+    SENTRY_DSN_APIS: str | None = None
     CORS_ORIGINS: list[str] = ["*"]
 
     # Logging

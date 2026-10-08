@@ -219,7 +219,7 @@ release (AUTH-002) — a mismatch 401s every cog at once.
 Three-layer observability, aligned with the ecosystem standard:
 
 - **Sentry** — unhandled exceptions and FastAPI integration, initialized
-  in `main.py` `lifespan` when `SENTRY_DSN_API` is set.
+  in `main.py` `lifespan` when `SENTRY_DSN_APIS` is set.
 - **Structured logs** — emitted via the shared logger from
   `mini_app_polis.logger` (install name `common-python-utils`); consistent
   JSON format and emoji-prefixed lifecycle lines across the ecosystem.
