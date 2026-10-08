@@ -1,3 +1,10 @@
+## [2.3.13](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.12...v2.3.13) (2026-10-08)
+
+
+### Bug Fixes
+
+* **observability:** read Sentry DSN from SENTRY_DSN_APIS and tag service ([66dc9d8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/66dc9d88487d20f72a8ec6e883043d90584a7b6a))
+
 ## [2.3.12](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.11...v2.3.12) (2026-10-08)
 
 
