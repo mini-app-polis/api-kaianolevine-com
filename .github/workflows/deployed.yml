@@ -14,10 +14,12 @@ name: deployed
 # have met the new deploy. Railway only switches traffic once /health
 # answers (healthcheckPath in railway.json), which keeps that wait short.
 #
-# After a dev deploy it also asks common-python-utils to run the live
-# contract suite against it. The cogs call this API through that library's
-# client, so the suite lives there, next to the catalog it checks (TEST-016,
-# ADR-012). Triggering on the deploy rather than on the push means the suite
+# After a dev deploy it also asks every consumer that keeps a live contract
+# suite to run it against the new API (TEST-016, ADR-012):
+#   common-python-utils — the cogs call this API through that library's
+#     client, so their suite lives there, next to the catalog it checks;
+#   website-astro-wcs, website-astro-software — the sites call it from the
+#     browser, not through that client, so each keeps its own read-only suite. Triggering on the deploy rather than on the push means the suite
 # meets the new API, not the one it replaced. Production only gets the
 # read-only smoke test: the contract suite writes data and never runs there.
 #
@@ -26,7 +28,7 @@ name: deployed
 #
 # The cross-repository trigger uses the promote GitHub App (the same org
 # secrets as promote and automerge): a repository_dispatch needs a token
-# with Contents: write on common-python-utils, which GITHUB_TOKEN never has.
+# with Contents: write on each consumer, which GITHUB_TOKEN never has.
 
 on: deployment_status
 
@@ -75,22 +77,27 @@ jobs:
     if: endsWith(github.event.deployment.environment, '/ development')
     runs-on: ubuntu-latest
     steps:
-      - name: Mint an App token for common-python-utils
+      - name: Mint an App token for the contract consumers
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ secrets.PROMOTE_APP_CLIENT_ID }}
           private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
           owner: mini-app-polis
-          repositories: common-python-utils
+          repositories: |
+            common-python-utils
+            website-astro-wcs
+            website-astro-software
           permission-contents: write
 
-      - name: Run the contract suite against the new API
+      - name: Run the contract suites against the new API
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SHA: ${{ github.event.deployment.sha }}
         run: |
-          gh api repos/mini-app-polis/common-python-utils/dispatches \
-            -f event_type=dev-api-deployed \
-            -f "client_payload[api_sha]=$SHA"
-          echo "Asked common-python-utils to run the contract suite against $SHA."
+          for repo in common-python-utils website-astro-wcs website-astro-software; do
+            gh api "repos/mini-app-polis/$repo/dispatches" \
+              -f event_type=dev-api-deployed \
+              -f "client_payload[api_sha]=$SHA"
+            echo "Asked $repo to run its contract suite against $SHA."
+          done
