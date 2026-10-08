@@ -61,13 +61,14 @@ logger = get_logger()
 async def lifespan(_app: FastAPI):
     """Initialize and tear down process-level app resources."""
     settings = get_settings()
-    if settings.SENTRY_DSN_API:
+    if settings.SENTRY_DSN_APIS:
         sentry_sdk.init(
-            dsn=settings.SENTRY_DSN_API,
+            dsn=settings.SENTRY_DSN_APIS,
             integrations=[FastApiIntegration()],
             environment=settings.ENVIRONMENT,
             traces_sample_rate=1.0,
         )
+        sentry_sdk.get_global_scope().set_tag("service", "api-kaianolevine-com")
         logger.info(
             with_log_prefix(
                 LOG_START,
