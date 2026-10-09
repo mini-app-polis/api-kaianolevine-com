@@ -431,6 +431,34 @@ async def test_untracked_events_are_dropped(client: AsyncClient, event: str) -> 
     assert not route.called
 
 
+@pytest.mark.parametrize(
+    ("event", "payload"),
+    [("push", _push()), ("workflow_run", _workflow_run("failure"))],
+)
+@pytest.mark.asyncio
+async def test_github_deliveries_wait_less_than_githubs_timeout(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, event: str, payload: dict
+) -> None:
+    """GitHub gives a delivery ten seconds; the transport's default wait on
+    Discord's rate limits would spend all of it."""
+    from mini_app_polis import discord as transport
+
+    from kaianolevine_api.services import discord
+
+    waits: list[float] = []
+
+    async def post_webhook(url: str, **kwargs) -> bool:
+        waits.append(kwargs["max_wait"])
+        return True
+
+    monkeypatch.setattr(transport, "post_webhook", post_webhook)
+    resp = await _post(client, payload, event)
+
+    assert resp.json()["data"]["forwarded"] is True
+    assert waits == [discord.GITHUB_MAX_WAIT_SECS]
+    assert discord.GITHUB_MAX_WAIT_SECS < 10
+
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_answers_200_when_discord_is_down(client: AsyncClient) -> None:

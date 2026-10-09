@@ -46,6 +46,7 @@ __all__ = [
     "CHANNEL_DEFAULT",
     "CHANNEL_ERRORS",
     "CHANNEL_RUNS",
+    "GITHUB_MAX_WAIT_SECS",
     "GITHUB_SUFFIX",
     "discord_base_url",
     "environment_prefix",
@@ -55,6 +56,12 @@ __all__ = [
 ]
 
 logger = get_logger()
+
+#: Seconds a GitHub delivery's notification may wait on Discord's rate
+#: limits before it is dropped. GitHub gives a delivery ten seconds to be
+#: answered, and the post itself has to fit in what is left; the shared
+#: transport's default would spend all of it waiting.
+GITHUB_MAX_WAIT_SECS = 5.0
 
 
 def webhook_source(settings: Settings) -> dict[str, str | None]:
@@ -118,6 +125,7 @@ async def forward_github_event(
         context=f"github/{event}",
         channel=channel,
         timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
+        max_wait=GITHUB_MAX_WAIT_SECS,
     )
 
 
@@ -127,12 +135,14 @@ async def send_message(
     payload: dict[str, Any],
     channel: str = CHANNEL_DEFAULT,
     context: str = "notify",
+    max_wait: float = _transport.MAX_WAIT_SECS,
 ) -> bool:
     """Post an ordinary Discord message to this channel's bare webhook URL.
 
     ``payload`` goes out exactly as given; producers that want the
     environment label add ``environment_prefix()`` themselves. ``context``
-    names the producer for the log line only.
+    names the producer for the log line only. ``max_wait`` bounds the time
+    spent waiting on Discord's rate limits (the shared transport's).
     """
     return await _transport.send_payload(
         channel,
@@ -140,4 +150,5 @@ async def send_message(
         context=context,
         source=webhook_source(settings),
         timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
+        max_wait=max_wait,
     )

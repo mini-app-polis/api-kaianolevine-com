@@ -466,6 +466,7 @@ async def github_webhook(
             payload=decision.message,
             channel=decision.channel,
             context=f"github/{event}",
+            max_wait=discord.GITHUB_MAX_WAIT_SECS,
         )
     else:
         forwarded = await discord.forward_github_event(
