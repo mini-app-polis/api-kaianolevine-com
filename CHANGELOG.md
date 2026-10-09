@@ -1,3 +1,10 @@
+## [2.3.14](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.13...v2.3.14) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** report a dropped dispatch once, labelled, without exception text ([18a58a2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/18a58a2fc578c1faa1a1c32e62efccbfe7e86616))
+
 ## [2.3.13](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.12...v2.3.13) (2026-10-08)
 
 
