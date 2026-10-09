@@ -1,3 +1,10 @@
+## [2.3.16](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.15...v2.3.16) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** keep GitHub deliveries inside GitHub's timeout on Discord rate limits ([0770e16](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0770e1649f60058e556d7bf0e0221dc2e5a1bbc6))
+
 ## [2.3.15](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.14...v2.3.15) (2026-10-09)
 
 
