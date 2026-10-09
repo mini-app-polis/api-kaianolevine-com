@@ -1,3 +1,15 @@
+# [2.4.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.18...v2.4.0) (2026-10-09)
+
+
+### Bug Fixes
+
+* **spotify:** show fixed text on re-auth failure pages, never exception detail ([7457829](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7457829ac295e7f62d5853a595e26c1aa41f3e1e))
+
+
+### Features
+
+* **spotify:** one-click re-auth and expiry reminders for deejay-cog's token ([dc74d2f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dc74d2f068f5cee1c040acfc7fef81e894ab563f))
+
 ## [2.3.18](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.17...v2.3.18) (2026-10-09)
 
 
