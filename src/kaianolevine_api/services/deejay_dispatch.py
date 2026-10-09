@@ -68,21 +68,10 @@ async def dispatch_deejay(job: DeejayJob, *, settings: Settings) -> dict:
         f"deejay {job.mode}",
         cog="deejay",
         label="deejay dispatch",
-        report=lambda text: _report(text, settings),
-        settings=settings,
-    )
-
-
-async def _report(message: str, settings: Settings) -> None:
-    """Say a job was dropped, in the one place someone is watching.
-
-    The caller is a Drive watcher that will not read the 502. A dropped
-    deejay job is a DJ set that never reaches the catalog while the folder
-    it was uploaded to looks processed from the outside.
-    """
-    await job_queue.report_dropped(
-        message,
-        label="deejay dispatch",
+        # The caller is a Drive watcher that will not read the 502, so the
+        # route's fault report says this. A dropped deejay job is a DJ set
+        # that never reaches the catalog while the folder it was uploaded to
+        # looks processed from the outside.
         heading="Deejay run not dispatched",
         settings=settings,
     )

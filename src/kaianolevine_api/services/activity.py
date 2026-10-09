@@ -12,8 +12,11 @@ What stays here is this service's policy, read from ``Settings`` on every
 request: ``NOTIFY_*`` switches, suppressed tables and excluded paths, its
 machine callers (``request.state.caller_kind``, stamped by ``auth``), and
 delivery through ``services.discord`` so webhooks resolve from
-``Settings``. Messages carry ``settings.ENVIRONMENT`` and no service name,
-as they always have.
+``Settings``. Every message's footer names ``api-kaianolevine-com`` and
+``settings.ENVIRONMENT``, and outside production its title is prefixed
+with the environment (``label=True``, ``[DEVELOPMENT] fault · 500``), as
+api-deejaytools' are: the channels are shared, and a development fault
+must not be read as production's.
 """
 
 from __future__ import annotations
@@ -74,6 +77,7 @@ def _config(settings: Settings) -> _activity.ActivityConfig:
         report_faults=settings.NOTIFY_FAULTS,
         is_machine=_is_machine if settings.NOTIFY_MACHINE_CLIENT_ERRORS else None,
         send=send,
+        label=True,
     )
 
 

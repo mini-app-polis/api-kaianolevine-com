@@ -82,21 +82,10 @@ async def dispatch_transcription(job: TranscriptionJob, *, settings: Settings) -
         job.describe(),
         cog="transcription",
         label="transcription dispatch",
-        report=lambda text: _report(text, settings),
-        settings=settings,
-    )
-
-
-async def _report(message: str, settings: Settings) -> None:
-    """Say a job was dropped, in the one place someone is watching.
-
-    The caller is a Drive watcher that will not read the 502. A dropped
-    transcription job is a transcript or a voice note sitting in Drive while
-    nothing says it has not been processed.
-    """
-    await job_queue.report_dropped(
-        message,
-        label="transcription dispatch",
+        # The caller is a Drive watcher that will not read the 502, so the
+        # route's fault report says this. A dropped transcription job is a
+        # transcript or a voice note sitting in Drive while nothing says it
+        # has not been processed.
         heading="Transcription run not dispatched",
         settings=settings,
     )

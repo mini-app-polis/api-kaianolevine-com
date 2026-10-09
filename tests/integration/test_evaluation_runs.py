@@ -165,19 +165,17 @@ async def test_development_cannot_reach_the_production_queue(monkeypatch) -> Non
     )
 
 
-async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> None:
-    """Nobody is waiting on the CI side, so the channel is the witness."""
+async def test_a_queue_refusal_carries_its_detail(monkeypatch) -> None:
+    """Nobody is waiting on the CI side, so the 502's fault report is the
+    witness, and the detail is what it says."""
     settings = _settings(monkeypatch)
     refusal = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "SendMessage"
     )
     sqs = _sqs(side_effect=refusal)
 
-    with (
-        patch.object(job_queue.boto3, "client", return_value=sqs),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
-    ):
-        with pytest.raises(dispatch.DispatchError):
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_evaluation(
                 dispatch.EvaluationJob(
                     repo="x", ref="main", org="o", mode="deterministic"
@@ -185,7 +183,10 @@ async def test_a_queue_refusal_reports_to_the_errors_channel(monkeypatch) -> Non
                 settings=settings,
             )
 
-    assert "could not enqueue" in reported.await_args.args[0]
+    assert raised.value.detail.startswith(
+        "Evaluation not dispatched — could not enqueue"
+    )
+    assert "nope" not in raised.value.detail
 
 
 async def test_absent_credentials_are_a_dropped_job_like_any_other(
@@ -200,11 +201,8 @@ async def test_absent_credentials_are_a_dropped_job_like_any_other(
     settings = _settings(monkeypatch)
     sqs = _sqs(side_effect=NoCredentialsError())
 
-    with (
-        patch.object(job_queue.boto3, "client", return_value=sqs),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
-    ):
-        with pytest.raises(dispatch.DispatchError):
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_evaluation(
                 dispatch.EvaluationJob(
                     repo="watcher-cog",
@@ -215,7 +213,8 @@ async def test_absent_credentials_are_a_dropped_job_like_any_other(
                 settings=settings,
             )
 
-    assert "could not enqueue" in reported.await_args.args[0]
+    assert "could not enqueue" in raised.value.detail
+    assert "NoCredentialsError" in raised.value.detail
 
 
 async def test_an_acknowledgement_without_a_message_id_is_a_failure(
@@ -226,11 +225,8 @@ async def test_an_acknowledgement_without_a_message_id_is_a_failure(
     sqs = MagicMock()
     sqs.send_message.return_value = {}
 
-    with (
-        patch.object(job_queue.boto3, "client", return_value=sqs),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
-    ):
-        with pytest.raises(dispatch.DispatchError, match="message id"):
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        with pytest.raises(dispatch.DispatchError, match="message id") as raised:
             await dispatch.dispatch_evaluation(
                 dispatch.EvaluationJob(
                     repo="x", ref="main", org="o", mode="deterministic"
@@ -238,7 +234,7 @@ async def test_an_acknowledgement_without_a_message_id_is_a_failure(
                 settings=settings,
             )
 
-    assert "no MessageId" in reported.await_args.args[0]
+    assert "no MessageId" in raised.value.detail
 
 
 # ── the sweep routes ─────────────────────────────────────────────────────

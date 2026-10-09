@@ -10,7 +10,7 @@ file is already accounted for.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from identity.types import Principal
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,7 @@ _LABEL = "deejay dispatch"
 )
 async def create_deejay_run(
     payload: DeejayRunRequest,
+    request: Request,
     response: Response,
     principal: Principal = Depends(require_scope("deejay.runs.create")),
     session: AsyncSession = Depends(get_db_session),
@@ -55,8 +56,9 @@ async def create_deejay_run(
 
     The enqueue is awaited, not backgrounded: SQS acknowledges in
     milliseconds, so waiting makes a dropped job visible while the caller
-    is still on the line. A failure is a 502 here *and* a message in the
-    errors channel, because a Drive watcher will not act on the 502 — and
+    is still on the line. A failure is a 502 here *and* one message in the
+    errors channel (its fault report, naming the drop), because a Drive
+    watcher will not act on the 502 — and
     every claim this request took is released, so the next tick asks again.
 
     Without ``drive_files`` nothing is claimed and the sweep is always
@@ -115,6 +117,7 @@ async def create_deejay_run(
     except deejay_dispatch.DispatchError as exc:
         for claim in acquired:
             await dispatch_claims.release(session, claim)
+        job_queue.record_drop(request, exc)
         raise api_error(
             502,
             "dispatch_failed",

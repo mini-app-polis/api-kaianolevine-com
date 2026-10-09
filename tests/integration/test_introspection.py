@@ -327,8 +327,15 @@ async def test_a_failed_introspection_does_not_fail_the_pass(
         patch.object(
             dispatch,
             "dispatch_introspection",
-            AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
+            AsyncMock(
+                side_effect=dispatch.DispatchError(
+                    "queue unreachable",
+                    detail="Evaluation not dispatched — could not enqueue "
+                    "introspection i-1 onto evaluator-jobs: ClientError",
+                )
+            ),
         ),
+        patch.object(dispatch, "report_dropped", AsyncMock()) as reported,
     ):
         response = await client.post(
             "/v1/evaluations/fleet", json={"mode": "deterministic"}
@@ -338,3 +345,8 @@ async def test_a_failed_introspection_does_not_fail_the_pass(
     data = response.json()["data"]
     assert data["introspection_run_id"] == ""
     assert data["enqueued"][0]["repo"] == "watcher-cog"
+    # A 202 has no fault report to carry the drop, so it is posted here.
+    reported.assert_awaited_once()
+    assert reported.await_args.args[0].endswith(
+        ": could not enqueue introspection i-1 onto evaluator-jobs: ClientError"
+    )

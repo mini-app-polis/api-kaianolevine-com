@@ -8,7 +8,7 @@ so the repeats are answered as deduplicated rather than becoming jobs.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from identity.types import Principal
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ _LABEL = "transcription dispatch"
 )
 async def create_transcription_run(
     payload: TranscriptionRunRequest,
+    request: Request,
     response: Response,
     principal: Principal = Depends(require_scope("transcription.runs.create")),
     session: AsyncSession = Depends(get_db_session),
@@ -53,8 +54,9 @@ async def create_transcription_run(
 
     The enqueue is awaited, not backgrounded: SQS acknowledges in
     milliseconds, so waiting makes a dropped job visible while the caller
-    is still on the line. A failure is a 502 here *and* a message in the
-    errors channel, because a Drive watcher will not act on the 502 — and
+    is still on the line. A failure is a 502 here *and* one message in the
+    errors channel (its fault report, naming the drop), because a Drive
+    watcher will not act on the 502 — and
     it releases the claim, so the next tick asks again instead of the file
     waiting out the window with nothing running for it.
 
@@ -99,6 +101,7 @@ async def create_transcription_run(
     except transcription_dispatch.DispatchError as exc:
         if claim is not None:
             await dispatch_claims.release(session, claim)
+        job_queue.record_drop(request, exc)
         raise api_error(
             502,
             "dispatch_failed",

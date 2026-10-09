@@ -39,6 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from mini_app_polis import activity
 from mini_app_polis.logger import get_logger
 
 from ..config import Settings
@@ -46,6 +47,9 @@ from . import fleet_registry, job_queue
 from .job_queue import DispatchError
 
 logger = get_logger()
+
+#: How the errors channel names a dropped evaluation.
+_HEADING = "Evaluation not dispatched"
 
 #: Schema version carried on every message.
 #:
@@ -235,43 +239,54 @@ async def dispatch_fleet(job: FleetJob, *, settings: Settings) -> dict:
     try:
         units = fleet_registry.fleet()
     except fleet_registry.RegistryError as exc:
-        await _report(f"could not read the fleet registry: {exc}", settings)
-        raise DispatchError(str(exc)) from exc
+        # The cause by type and Sentry id: the registry error wraps an
+        # HTTP or YAML error's text, which is for the log, not the channel.
+        cause = activity.fault_detail(exc.__cause__ or exc)
+        raise DispatchError(
+            str(exc),
+            detail=f"{_HEADING} — could not read the fleet registry: {cause}",
+        ) from exc
 
     if not units:
         # An empty roster is not an empty fleet; it is a registry that
         # parsed to nothing useful. Dispatching zero messages and
         # returning 202 would report a successful pass over no
         # repositories, which is the silent-success shape again.
-        await _report("the fleet registry lists no active repositories", settings)
-        raise DispatchError("the fleet registry lists no active repositories")
+        raise DispatchError(
+            "the fleet registry lists no active repositories",
+            detail=f"{_HEADING} — the fleet registry lists no active repositories",
+        )
 
     messages = job.messages(units)
     enqueued: list[dict[str, str]] = []
     failed: list[str] = []
+    first_drop: DispatchError | None = None
 
     for message, unit in zip(messages, units, strict=True):
         what = f"{unit.org}/{unit.repo}@{unit.ref}"
         try:
             result = await _enqueue(message, what, settings=settings)
-        except DispatchError:
-            # _enqueue has already reported this one. Keep going: the
-            # remaining repositories are independent jobs and there is no
-            # reason one unreachable send should cancel them.
+        except DispatchError as exc:
+            # Keep going: the remaining repositories are independent jobs
+            # and there is no reason one unreachable send should cancel
+            # them. Reported once, below, rather than once per repository.
             failed.append(unit.repo)
+            first_drop = first_drop or exc
             continue
         enqueued.append({"repo": unit.repo, "message_id": result["message_id"]})
 
     if not enqueued:
+        reason = f"none of the {len(messages)} fleet messages reached the queue"
         raise DispatchError(
-            f"none of the {len(messages)} fleet messages reached the queue"
+            reason, detail=f"{_HEADING} — {reason}{_first_cause(first_drop)}"
         )
 
     if failed:
-        await _report(
+        await report_dropped(
             f"fleet pass {job.run_id} enqueued {len(enqueued)} of "
-            f"{len(messages)} repositories; missing: {', '.join(sorted(failed))}",
-            settings,
+            f"{len(messages)} repositories; missing: {', '.join(sorted(failed))}"
+            f"{_first_cause(first_drop)}",
+            settings=settings,
         )
 
     logger.info(
@@ -299,16 +314,27 @@ async def _enqueue(message: dict[str, Any], what: str, *, settings: Settings) ->
         what,
         cog="evaluator",
         label="evaluation dispatch",
-        report=lambda text: _report(text, settings),
+        heading=_HEADING,
         settings=settings,
     )
 
 
-async def _report(message: str, settings: Settings) -> None:
-    """Say a job was dropped, in the one place someone is watching."""
+def _first_cause(drop: DispatchError | None) -> str:
+    """``; first: <why>`` for a fan-out's first drop, or nothing."""
+    if drop is None or not drop.detail:
+        return ""
+    return f"; first: {drop.detail.removeprefix(f'{_HEADING} — ')}"
+
+
+async def report_dropped(message: str, *, settings: Settings) -> None:
+    """Post a drop that does not end in a 502 — part of a fleet pass.
+
+    A drop that fails the request is said by the route's fault report
+    instead (``job_queue.record_drop``), so it is not posted twice.
+    """
     await job_queue.report_dropped(
         message,
         label="evaluation dispatch",
-        heading="Evaluation not dispatched",
+        heading=_HEADING,
         settings=settings,
     )

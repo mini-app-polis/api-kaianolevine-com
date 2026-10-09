@@ -101,6 +101,19 @@ def test_faults_can_be_turned_off(monkeypatch):
     assert activity.is_notifiable_fault(500, "machine", settings) is False
 
 
+def test_titles_carry_the_environment_outside_production(monkeypatch):
+    """The channels are shared with api-deejaytools, which labels its
+    titles; an unlabelled development fault reads as production's."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    config = activity._config(get_settings())
+    assert config._title("fault · 500") == "[DEVELOPMENT] fault · 500"
+
+
+def test_titles_are_bare_in_production():
+    config = activity._config(get_settings())
+    assert config._title("fault · 500") == "fault · 500"
+
+
 def test_excluded_paths_cover_children():
     settings = get_settings()
     assert activity._excluded("/health", settings) is True
