@@ -129,6 +129,9 @@ class Settings(BaseSettings):
         "identity_audit_events",
         "dispatch_claims",
         "pipeline_evaluations",
+        # A reminder row is written when its Discord message is sent; the
+        # message is the news.
+        "spotify_token_reminders",
     ]
     # Paths outside the feed entirely. Liveness and version are polled by
     # uptime monitors and their failures are already Healthchecks.io's job;
@@ -202,6 +205,38 @@ class Settings(BaseSettings):
     # `*-jobs`, so deejay-jobs and every later queue use this same key.
     EVALUATION_QUEUE_PRODUCER_KEY_ID: str | None = None
     EVALUATION_QUEUE_PRODUCER_SECRET: str | None = None
+
+    # ── Spotify refresh-token renewal ────────────────────────────────────
+    # deejay-cog's Spotify refresh token expires six months after sign-in,
+    # and only a person approving the app in a browser can renew it. This
+    # service sends the reminders and runs the one-click re-auth
+    # (routers.spotify_reauth, services.spotify_token). All optional: with
+    # any of them unset, the re-auth routes answer 503 and the reminder loop
+    # does not start. The links are built from KAIANO_API_BASE_URL
+    # (mini_app_polis.environment.api_base_url, the name deejay-cog reads
+    # too), and {KAIANO_API_BASE_URL}/v1/spotify/callback must be registered
+    # as a redirect URI in the Spotify dashboard exactly.
+    #
+    # The Spotify app's credentials: the same names deejay-cog reads, from
+    # the same shared config.
+    SPOTIPY_CLIENT_ID: str | None = None
+    SPOTIPY_CLIENT_SECRET: str | None = None
+    # The Spotify user ID the token must belong to. The callback refuses any
+    # other account, so a link opened by someone else cannot swap the cog
+    # onto their playlists.
+    SPOTIFY_OWNER_USER_ID: str | None = None
+    # A Doppler service token with write access to the config deejay-cog
+    # reads. The config is shared with the whole fleet and Doppler scopes a
+    # token to a config, not to names, so this token could rewrite any prd
+    # secret; services.spotify_token writes the two Spotify names and
+    # nothing else.
+    DOPPLER_SPOTIFY_WRITE_TOKEN: str | None = None
+    SPOTIFY_DOPPLER_PROJECT: str = "mini-app-polis-ecosystem"
+    SPOTIFY_DOPPLER_CONFIG: str = "prd"
+    # How often the reminder loop checks the token's age. Each due reminder
+    # is sent once (spotify_token_reminders), so this is only how late one
+    # can be.
+    SPOTIFY_TOKEN_CHECK_INTERVAL_SECS: int = 3600
 
     # Google service account (Drive resume proxy)
     GOOGLE_CLIENT_EMAIL: str | None = None

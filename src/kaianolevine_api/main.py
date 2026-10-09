@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 from contextlib import asynccontextmanager
@@ -36,6 +37,7 @@ from .routers import (
     resume,
     sets,
     spotify,
+    spotify_reauth,
     standards,
     stats,
     tracks,
@@ -83,9 +85,31 @@ async def lifespan(_app: FastAPI):
             )
         )
     await _reconcile_identity_registry()
+    reminders = _start_spotify_token_reminders(settings)
 
     yield
+    if reminders is not None:
+        reminders.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reminders
     logger.info(with_log_prefix(LOG_WARNING, "kaianolevine-api shutting down"))
+
+
+def _start_spotify_token_reminders(settings: Any) -> asyncio.Task[None] | None:
+    """Start the hourly Spotify token check, when it is configured.
+
+    In-process rather than an EventBridge schedule: calling this API from
+    EventBridge needs a machine key in a Connection, which Terraform would
+    hold in state. Every process may run it; spotify_token_reminders keeps
+    each reminder to one message.
+    """
+    from mini_app_polis.environment import api_base_url
+
+    from .services import spotify_token
+
+    if not (settings.DOPPLER_SPOTIFY_WRITE_TOKEN and api_base_url()):
+        return None
+    return asyncio.create_task(spotify_token.reminder_loop(settings))
 
 
 async def _reconcile_identity_registry() -> None:
@@ -292,6 +316,7 @@ def _build_app() -> FastAPI:
     app.include_router(standards.router, prefix="/v1", tags=["standards"])
     app.include_router(stats.router, prefix="/v1", tags=["stats"])
     app.include_router(spotify.router, prefix="/v1", tags=["spotify"])
+    app.include_router(spotify_reauth.router, prefix="/v1", tags=["spotify"])
     app.include_router(ingest.router, prefix="/v1", tags=["ingest"])
     app.include_router(live_plays.router, prefix="/v1", tags=["live-plays"])
     app.include_router(notifications.router, prefix="/v1", tags=["notifications"])
