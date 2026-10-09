@@ -4,8 +4,8 @@ The transport itself — channels, webhook resolution with the
 ``DISCORD_WEBHOOK_URL`` fallback, rate-limit cooldowns, never raising —
 lives in ``mini_app_polis.discord``, shared with the fleet's other APIs.
 What stays here is what is this service's own: webhooks resolved from
-``Settings`` rather than straight from the environment (``Settings`` also
-reads a ``.env`` file, and the two must not disagree), its HTTP timeout,
+``Settings`` rather than straight from the environment (so every setting
+resolves from one place and a test can override it there), its HTTP timeout,
 and GitHub forwarding.
 
 Two payload shapes. GitHub's payloads go to the webhook's ``/github``
@@ -61,8 +61,8 @@ def webhook_source(settings: Settings) -> dict[str, str | None]:
     """The webhook variables, as ``Settings`` resolved them.
 
     Handed to the shared transport in place of ``os.environ``, so a
-    ``DISCORD_WEBHOOK_URL_*`` set in ``.env`` resolves exactly as it did
-    when this module read ``Settings`` itself.
+    ``DISCORD_WEBHOOK_URL_*`` resolves exactly as it did when this module
+    read ``Settings`` itself.
     """
     names = (_transport.FALLBACK_ENV, *_transport.CHANNEL_ENV.values())
     return {name: getattr(settings, name, None) for name in names}

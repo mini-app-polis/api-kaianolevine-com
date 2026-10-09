@@ -748,6 +748,31 @@ async def _stored_rows(db_session) -> int:
     return result.scalar_one()
 
 
+async def test_stored_findings_stay_out_of_the_change_feed(client, db_session) -> None:
+    """A pass posts findings a dozen a second; one "data changed" each ran
+    the activity webhook into Discord's rate limit and lost the feed."""
+    import asyncio
+
+    import respx
+    from httpx import Response
+
+    from kaianolevine_api.services import activity
+
+    with respx.mock:
+        route = respx.post(url__startswith="https://discord").mock(
+            return_value=Response(204)
+        )
+        for n in range(3):
+            res = await client.post(
+                "/v1/evaluations", json=_finding(violation_id=f"CD-02{n}")
+            )
+            assert res.status_code == 200
+        await asyncio.gather(*list(activity._in_flight), return_exceptions=True)
+
+    assert await _stored_rows(db_session) == 3
+    assert route.call_count == 0
+
+
 async def test_the_same_finding_twice_in_one_run_stores_one_row(
     client, db_session
 ) -> None:

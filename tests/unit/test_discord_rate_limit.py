@@ -1,9 +1,14 @@
-"""Discord rate limits: a 429 holds later sends instead of posting through it.
+"""Discord rate limits: a long hold is not posted through.
 
 Production on 2026-09-23: Cloudflare answered every webhook with error 1015,
 an HTML page applied to this service's IP, and the API kept posting — 41
 refused sends in four minutes, each one reported to Sentry. Posting through a
-1015 is what extends it. These tests pin the cooldown that stops that.
+1015 is what extends it. These tests pin the cooldown that stops that, as
+this service's wiring (webhooks resolved from Settings) meets it.
+
+Every hold here is a minute or more: past the time common-python-utils lets
+one send wait (``MAX_WAIT_SECS``), so the send is dropped rather than
+waited out. How short holds are waited out is the library's to test.
 """
 
 from __future__ import annotations
@@ -30,9 +35,9 @@ CLOUDFLARE_1015 = (
 @pytest.fixture(autouse=True)
 def _no_cooldown_between_tests():
     """Cooldowns are process state; one test's 429 must not mute the next."""
-    transport._cooldowns.clear()
+    transport.reset_cooldowns()
     yield
-    transport._cooldowns.clear()
+    transport.reset_cooldowns()
 
 
 @pytest.fixture
@@ -53,7 +58,7 @@ async def _send(settings, channel: str) -> bool:
 @respx.mock
 async def test_bucket_429_holds_only_that_webhook(settings) -> None:
     runs = respx.post(RUNS_URL).mock(
-        return_value=Response(429, json={"retry_after": 5, "global": False})
+        return_value=Response(429, json={"retry_after": 60, "global": False})
     )
     activity = respx.post(ACTIVITY_URL).mock(return_value=Response(204))
 
@@ -68,7 +73,7 @@ async def test_bucket_429_holds_only_that_webhook(settings) -> None:
 @respx.mock
 async def test_global_429_holds_every_webhook(settings) -> None:
     runs = respx.post(RUNS_URL).mock(
-        return_value=Response(429, json={"retry_after": 5, "global": True})
+        return_value=Response(429, json={"retry_after": 60, "global": True})
     )
     activity = respx.post(ACTIVITY_URL).mock(return_value=Response(204))
 
@@ -123,7 +128,7 @@ async def test_sends_resume_after_the_cooldown(
 ) -> None:
     runs = respx.post(RUNS_URL).mock(
         side_effect=[
-            Response(429, json={"retry_after": 5, "global": False}),
+            Response(429, json={"retry_after": 60, "global": False}),
             Response(204),
         ]
     )
@@ -131,7 +136,7 @@ async def test_sends_resume_after_the_cooldown(
     monkeypatch.setattr(transport.time, "monotonic", lambda: now)
     assert await _send(settings, discord.CHANNEL_RUNS) is False
 
-    monkeypatch.setattr(transport.time, "monotonic", lambda: now + 6)
+    monkeypatch.setattr(transport.time, "monotonic", lambda: now + 61)
     assert await _send(settings, discord.CHANNEL_RUNS) is True
     assert runs.call_count == 2
 
