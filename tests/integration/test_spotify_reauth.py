@@ -216,7 +216,8 @@ async def test_spotify_refusing_the_code_is_a_502_without_its_body(client) -> No
     resp = await _callback(client, state=state, cookie=state, code="the-code")
 
     assert resp.status_code == 502
-    assert "HTTP 400" in resp.text
+    assert "did not complete the renewal" in resp.text
+    assert "HTTP 400" not in resp.text
     assert NEW_TOKEN not in resp.text
     assert not doppler.called
 

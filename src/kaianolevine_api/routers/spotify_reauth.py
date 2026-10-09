@@ -28,7 +28,7 @@ from mini_app_polis.logger import LOG_FAILURE, LOG_WARNING, get_logger, with_log
 
 from ..config import Settings, get_settings
 from ..services import spotify_token
-from ..services.spotify_token import DopplerError, ReauthError
+from ..services.spotify_token import DopplerError, ReauthError, WrongSpotifyAccount
 
 router = APIRouter()
 logger = get_logger()
@@ -158,12 +158,23 @@ async def spotify_callback(
 
     try:
         expiry = await spotify_token.renew(settings, code)
-    except ReauthError as exc:
+    # Every page below is fixed text: the exception's detail goes to the
+    # log, never into a response.
+    except WrongSpotifyAccount as exc:
         logger.warning(with_log_prefix(LOG_WARNING, f"spotify re-auth refused: {exc}"))
         return _page(
-            exc.status,
+            403,
+            "Wrong Spotify account",
+            "That Spotify account is not the one deejay-cog publishes as. Sign in "
+            "to Spotify as the owner and try again. Nothing was changed.",
+            link=link,
+        )
+    except ReauthError as exc:
+        logger.warning(with_log_prefix(LOG_WARNING, f"spotify re-auth failed: {exc}"))
+        return _page(
+            502,
             "Not renewed",
-            f"{exc} Nothing was changed.",
+            "Spotify did not complete the renewal. Nothing was changed.",
             link=link,
         )
     except DopplerError as exc:

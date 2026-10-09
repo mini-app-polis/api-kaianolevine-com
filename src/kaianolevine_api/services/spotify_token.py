@@ -76,15 +76,16 @@ REMINDER_DAYS = (30, 14, 7, 1, 0)
 
 
 class ReauthError(Exception):
-    """The re-auth could not finish. The message is safe to show the person.
+    """The re-auth could not finish because Spotify did not cooperate.
 
-    ``status`` is the page's HTTP status: 403 for the wrong account, 502 for
-    Spotify misbehaving.
+    The message is for the log. The page a person sees is fixed text chosen
+    by the route from the exception's type, so nothing from an exception
+    ever reaches a response.
     """
 
-    def __init__(self, message: str, *, status: int = 502) -> None:
-        super().__init__(message)
-        self.status = status
+
+class WrongSpotifyAccount(ReauthError):
+    """The approved token belongs to someone other than the owner."""
 
 
 # ---------------------------------------------------------------------------
@@ -373,9 +374,10 @@ async def renew(
 ) -> dt.date:
     """Exchange ``code``, prove the token, and write it to Doppler.
 
-    Returns the new token's expiry. Raises :class:`ReauthError` with a
-    message for the person, or :class:`DopplerError` if the write fails;
-    either way nothing has been written.
+    Returns the new token's expiry. Raises :class:`WrongSpotifyAccount`,
+    :class:`ReauthError` for any other Spotify failure, or
+    :class:`DopplerError` if the write fails; whichever, nothing has been
+    written.
 
     The token is proved before it is kept: refreshed once (the thing
     deejay-cog will do with it) and used to read ``/v1/me``, whose user ID
@@ -426,10 +428,8 @@ async def renew(
         except (ValueError, AttributeError):
             user_id = None
         if user_id != settings.SPOTIFY_OWNER_USER_ID:
-            raise ReauthError(
-                "That Spotify account is not the one deejay-cog publishes as. "
-                "Sign in to Spotify as the owner and try again.",
-                status=403,
+            raise WrongSpotifyAccount(
+                "approved by a Spotify account other than SPOTIFY_OWNER_USER_ID"
             )
 
     issued_on = today or _today()
@@ -471,6 +471,7 @@ async def announce_renewal(settings: Settings, expiry: dt.date) -> bool:
 __all__ = [
     "DopplerError",
     "ReauthError",
+    "WrongSpotifyAccount",
     "add_months",
     "announce_renewal",
     "check_and_remind",
