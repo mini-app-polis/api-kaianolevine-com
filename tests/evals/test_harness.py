@@ -1,10 +1,13 @@
 """WCS Q&A eval harness — local only.
 
 Run with:
-    doppler run -- pytest tests/evals/
+    RUN_EVALS=1 doppler run -- pytest tests/evals/
 
-Skipped automatically anywhere lacking OPENAI_API_KEY + ANTHROPIC_API_KEY
-(see conftest.py). For each question in questions.yaml:
+Opt-in (CD-033): it writes to production and spends on real OpenAI and
+Anthropic calls, so it is skipped unless RUN_EVALS=1 is set — having the
+keys in the environment is not enough, or a plain `doppler run -- pytest`
+would run it. Also skipped anywhere lacking OPENAI_API_KEY +
+ANTHROPIC_API_KEY. For each question in questions.yaml:
 
   1. POST /v1/wcs/ask via in-process ASGI transport (real DB + real OpenAI +
      real Anthropic — auth is overridden so the harness runs as a configured
@@ -101,6 +104,8 @@ async def eval_client() -> AsyncIterator[httpx.AsyncClient]:
 
 
 _SKIP_REASONS: list[str] = []
+if os.environ.get("RUN_EVALS") != "1":
+    _SKIP_REASONS.append("eval harness writes to production; set RUN_EVALS=1 to run it")
 if not (os.environ.get("OPENAI_API_KEY") and os.environ.get("ANTHROPIC_API_KEY")):
     _SKIP_REASONS.append("eval harness requires OPENAI_API_KEY and ANTHROPIC_API_KEY")
 if not _QUESTIONS:
