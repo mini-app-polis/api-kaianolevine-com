@@ -69,7 +69,8 @@ uv run check-doppler-keys     # every required .env.example name is in dev
 
 ### Run the server
 `DATABASE_URL` is not in Doppler; set it in the shell for your local
-Postgres and `doppler run` passes it through:
+Postgres. `doppler run` passes it through because Doppler holds no value
+for that name; if it did, Doppler's would win:
 ```bash
 export DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/deejay_sets
 doppler run -- uv run uvicorn src.kaianolevine_api.main:app --reload
