@@ -283,6 +283,32 @@ class DispatchClaim(Base):
     )
 
 
+class SpotifyTokenReminder(Base):
+    """One Spotify token reminder sent, so it is sent once.
+
+    Keyed by the token's issue date and how many days before expiry the
+    reminder is for (0 for "expired"). A renewed token has a new issue date,
+    so its reminders start afresh. See services/spotify_token.py.
+    """
+
+    __tablename__ = "spotify_token_reminders"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "issued_on", "days_before", name="uq_spotify_token_reminders_key"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    issued_on: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    days_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    sent_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class FeatureFlag(Base):
     """Feature flag row controlling runtime behavior by name."""
 
