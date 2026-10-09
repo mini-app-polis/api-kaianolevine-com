@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
 from mini_app_polis.logger import get_logger
 from sqlalchemy import case, func, select, union
@@ -31,7 +31,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import evaluation_dispatch
+from ..services import evaluation_dispatch, job_queue
 from ..services.evaluation_fingerprint import evaluation_fingerprint
 
 logger = get_logger()
@@ -419,6 +419,7 @@ async def create_evaluation(
 )
 async def create_evaluation_run(
     payload: EvaluationRunRequest,
+    request: Request,
     principal: Principal = Depends(require_scope("evaluations.runs.create")),
 ) -> Envelope[EvaluationRunAccepted]:
     """Accept one evaluation request and hand it to the evaluator.
@@ -433,8 +434,8 @@ async def create_evaluation_run(
     The enqueue is therefore awaited rather than backgrounded. SQS
     acknowledges in milliseconds, so waiting for it makes a dropped job
     visible while the caller is still on the line. A failure is a 502 here
-    *and* a message in the errors channel, because the caller will not read
-    the 502.
+    *and* one message in the errors channel (its fault report, naming the
+    drop), because the caller will not read the 502.
 
     Once the message is on the queue the job is durable: retried on
     failure, dead-lettered when it cannot be processed. That is the whole
@@ -454,6 +455,7 @@ async def create_evaluation_run(
     try:
         accepted = await evaluation_dispatch.dispatch_evaluation(job, settings=settings)
     except evaluation_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
         raise api_error(
             502,
             "dispatch_failed",
@@ -571,6 +573,7 @@ async def _pinned_standards_version(session: AsyncSession) -> str:
 )
 async def create_evaluation_introspection(
     payload: EvaluationIntrospectionRequest,
+    request: Request,
     principal: Principal = Depends(require_scope("evaluations.runs.create")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[EvaluationIntrospectionAccepted]:
@@ -600,6 +603,7 @@ async def create_evaluation_introspection(
             job, settings=settings
         )
     except evaluation_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
         raise api_error(
             502,
             "dispatch_failed",
@@ -629,6 +633,7 @@ async def create_evaluation_introspection(
 )
 async def create_evaluation_fleet(
     payload: EvaluationFleetRequest,
+    request: Request,
     principal: Principal = Depends(require_scope("evaluations.runs.create")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[EvaluationFleetAccepted]:
@@ -653,6 +658,7 @@ async def create_evaluation_fleet(
     try:
         accepted = await evaluation_dispatch.dispatch_fleet(job, settings=settings)
     except evaluation_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
         raise api_error(
             502,
             "dispatch_failed",
@@ -681,10 +687,17 @@ async def create_evaluation_fleet(
     except evaluation_dispatch.DispatchError as exc:
         # Not fatal to the pass. Fifteen repositories are already being
         # evaluated and saying the whole request failed would be false.
-        # _enqueue has already reported it to the errors channel; this
-        # puts it in the answer too, so the caller is not told a pass is
-        # whole when part of it is missing.
+        # No 502, so no fault report to carry it: posted here, and put in
+        # the answer too, so the caller is not told a pass is whole when
+        # part of it is missing.
         logger.warning("fleet pass %s: introspection not enqueued: %s", run_id, exc)
+        await evaluation_dispatch.report_dropped(
+            f"fleet pass {run_id}: "
+            + (exc.detail or "introspection not enqueued").removeprefix(
+                "Evaluation not dispatched — "
+            ),
+            settings=settings,
+        )
         introspection_run_id = ""
 
     data = EvaluationFleetAccepted(

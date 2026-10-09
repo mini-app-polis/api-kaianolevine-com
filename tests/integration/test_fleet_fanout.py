@@ -270,19 +270,27 @@ async def test_a_partial_fan_out_reports_but_does_not_raise(monkeypatch) -> None
     async def _flaky(message, what, *, settings):
         calls["n"] += 1
         if calls["n"] == 2:
-            raise dispatch.DispatchError("queue unreachable")
+            raise dispatch.DispatchError(
+                "queue unreachable",
+                detail="Evaluation not dispatched — could not enqueue x: ClientError",
+            )
         return {"message_id": "m"}
 
     with (
         patch.object(fleet_registry, "fleet", return_value=_units()),
         patch.object(dispatch, "_enqueue", _flaky),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
+        patch.object(dispatch, "report_dropped", AsyncMock()) as reported,
     ):
         result = await dispatch.dispatch_fleet(job, settings=get_settings())
 
     assert len(result["failed"]) == 1
     assert len(result["enqueued"]) == len(_units()) - 1
+    # One message for the pass, naming the gap and its cause — not one
+    # per repository that missed.
     assert reported.await_count == 1
+    message = reported.await_args.args[0]
+    assert "missing:" in message
+    assert message.endswith("; first: could not enqueue x: ClientError")
 
 
 async def test_a_fan_out_that_landed_nothing_raises(monkeypatch) -> None:
@@ -295,12 +303,25 @@ async def test_a_fan_out_that_landed_nothing_raises(monkeypatch) -> None:
     with (
         patch.object(fleet_registry, "fleet", return_value=_units()),
         patch.object(
-            dispatch, "_enqueue", AsyncMock(side_effect=dispatch.DispatchError("no"))
+            dispatch,
+            "_enqueue",
+            AsyncMock(
+                side_effect=dispatch.DispatchError(
+                    "no", detail="Evaluation not dispatched — cause"
+                )
+            ),
         ),
-        patch.object(dispatch, "_report", AsyncMock()),
-        pytest.raises(dispatch.DispatchError),
+        patch.object(dispatch, "report_dropped", AsyncMock()) as reported,
+        pytest.raises(dispatch.DispatchError) as raised,
     ):
         await dispatch.dispatch_fleet(job, settings=get_settings())
+
+    # Raised, so the route's 502 says it; nothing posted here as well.
+    reported.assert_not_awaited()
+    assert raised.value.detail == (
+        f"Evaluation not dispatched — none of the {len(_units())} fleet "
+        "messages reached the queue; first: cause"
+    )
 
 
 async def test_an_empty_roster_raises_rather_than_reporting_success(
@@ -316,10 +337,13 @@ async def test_an_empty_roster_raises_rather_than_reporting_success(
 
     with (
         patch.object(fleet_registry, "fleet", return_value=[]),
-        patch.object(dispatch, "_report", AsyncMock()),
-        pytest.raises(dispatch.DispatchError),
+        patch.object(dispatch, "report_dropped", AsyncMock()) as reported,
+        pytest.raises(dispatch.DispatchError) as raised,
     ):
         await dispatch.dispatch_fleet(job, settings=get_settings())
+
+    reported.assert_not_awaited()
+    assert "lists no active repositories" in raised.value.detail
 
 
 # ── the route ────────────────────────────────────────────────────────────

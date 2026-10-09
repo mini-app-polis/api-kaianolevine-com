@@ -8,12 +8,14 @@ scope, the message shape and which queue it goes to.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import respx
 from botocore.exceptions import ClientError
 from identity.store.models import Principal, PrincipalRole
 from identity.types import VerifiedSubject
@@ -22,13 +24,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api import identity_registry
 from kaianolevine_api.main import app
+from kaianolevine_api.services import activity, job_queue
 from kaianolevine_api.services import deejay_dispatch as dispatch
-from kaianolevine_api.services import job_queue
 
 pytestmark = pytest.mark.asyncio
 
 QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/deejay-jobs"
 ISSUER = "https://clerk.kaianolevine.com"
+DISCORD_URL = "https://discord.test/api/webhooks/1/token"
+
+
+async def _drain() -> None:
+    """Let the fire-and-forget deliveries land before asserting on them."""
+    for _ in range(3):
+        if not activity._in_flight:
+            break
+        await asyncio.gather(*list(activity._in_flight), return_exceptions=True)
+    await asyncio.sleep(0)
 
 
 def _settings(monkeypatch):
@@ -223,20 +235,23 @@ async def test_a_missing_dev_queue_is_reported_by_name(monkeypatch) -> None:
         {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue"}}, "SendMessage"
     )
 
-    with (
-        patch.object(job_queue.boto3, "client", return_value=_sqs(side_effect=missing)),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
+    with patch.object(
+        job_queue.boto3, "client", return_value=_sqs(side_effect=missing)
     ):
-        with pytest.raises(dispatch.DispatchError):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_deejay(
                 dispatch.DeejayJob(mode="process-new-files"), settings=get_settings()
             )
 
-    assert "onto deejay-dev-jobs" in reported.await_args.args[0]
+    assert "onto deejay-dev-jobs" in raised.value.detail
 
 
-async def test_a_queue_refusal_reports_as_deejay(monkeypatch) -> None:
-    """The drop reaches deejay's reporter, and the errors channel says deejay."""
+async def test_a_queue_refusal_is_named_as_deejay_and_not_posted(monkeypatch) -> None:
+    """The drop's detail says deejay; posting it is the route's 502's job.
+
+    The detail names the cause by type, never its text: a botocore error's
+    message is for the log, not a shared channel.
+    """
     settings = _settings(monkeypatch)
     refusal = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "SendMessage"
@@ -246,11 +261,40 @@ async def test_a_queue_refusal_reports_as_deejay(monkeypatch) -> None:
         patch.object(job_queue.boto3, "client", return_value=_sqs(side_effect=refusal)),
         patch.object(job_queue.discord, "send_message", AsyncMock()) as sent,
     ):
-        with pytest.raises(dispatch.DispatchError):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_deejay(
                 dispatch.DeejayJob(mode="process-new-files"), settings=settings
             )
 
-    content = sent.await_args.kwargs["payload"]["content"]
-    assert content.startswith("Deejay run not dispatched — could not enqueue")
-    assert sent.await_args.kwargs["context"] == "deejay-dispatch"
+    detail = raised.value.detail
+    assert detail.startswith("Deejay run not dispatched — could not enqueue")
+    assert "ClientError" in detail
+    assert "nope" not in detail
+    sent.assert_not_awaited()
+
+
+@respx.mock
+async def test_a_dropped_run_is_one_message_the_502_naming_the_drop(
+    client, monkeypatch
+) -> None:
+    """The errors channel hears of a drop once: as the 502, saying why."""
+    _settings(monkeypatch)
+    refusal = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "SendMessage"
+    )
+    route = respx.post(DISCORD_URL).mock(return_value=httpx.Response(204))
+
+    with patch.object(
+        job_queue.boto3, "client", return_value=_sqs(side_effect=refusal)
+    ):
+        response = await client.post(
+            "/v1/deejay/runs", json={"mode": "process-new-files"}
+        )
+    assert response.status_code == 502
+
+    await _drain()
+    assert route.call_count == 1
+    body = route.calls[0].request.content.decode()
+    assert "fault · 502" in body
+    assert "Deejay run not dispatched" in body
+    assert "nope" not in body

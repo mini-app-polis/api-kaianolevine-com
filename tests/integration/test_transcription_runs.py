@@ -284,21 +284,20 @@ async def test_a_missing_dev_queue_is_reported_by_name(monkeypatch) -> None:
         {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue"}}, "SendMessage"
     )
 
-    with (
-        patch.object(job_queue.boto3, "client", return_value=_sqs(side_effect=missing)),
-        patch.object(dispatch, "_report", AsyncMock()) as reported,
+    with patch.object(
+        job_queue.boto3, "client", return_value=_sqs(side_effect=missing)
     ):
-        with pytest.raises(dispatch.DispatchError):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_transcription(
                 dispatch.TranscriptionJob(mode="wcs-transcripts"),
                 settings=get_settings(),
             )
 
-    assert "onto transcription-dev-jobs" in reported.await_args.args[0]
+    assert "onto transcription-dev-jobs" in raised.value.detail
 
 
-async def test_a_queue_refusal_reports_as_transcription(monkeypatch) -> None:
-    """The drop reaches transcription's reporter, naming the file it lost."""
+async def test_a_queue_refusal_is_named_as_transcription(monkeypatch) -> None:
+    """The drop's detail names the file it lost; the route's 502 posts it."""
     settings = _settings(monkeypatch)
     refusal = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "SendMessage"
@@ -308,13 +307,14 @@ async def test_a_queue_refusal_reports_as_transcription(monkeypatch) -> None:
         patch.object(job_queue.boto3, "client", return_value=_sqs(side_effect=refusal)),
         patch.object(job_queue.discord, "send_message", AsyncMock()) as sent,
     ):
-        with pytest.raises(dispatch.DispatchError):
+        with pytest.raises(dispatch.DispatchError) as raised:
             await dispatch.dispatch_transcription(
                 dispatch.TranscriptionJob(mode="voicenotes", drive_file_id="f-3"),
                 settings=settings,
             )
 
-    content = sent.await_args.kwargs["payload"]["content"]
-    assert content.startswith("Transcription run not dispatched — could not enqueue")
-    assert "file f-3" in content
-    assert sent.await_args.kwargs["context"] == "transcription-dispatch"
+    detail = raised.value.detail
+    assert detail.startswith("Transcription run not dispatched — could not enqueue")
+    assert "file f-3" in detail
+    assert "nope" not in detail
+    sent.assert_not_awaited()

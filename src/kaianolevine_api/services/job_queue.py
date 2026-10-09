@@ -20,19 +20,24 @@ production queue at all.
 **A dropped job is the failure mode worth designing for.** Callers are
 fire-and-forget — a release job, a Drive watcher — and nobody reads the
 response. So the send is awaited, a missing ``MessageId`` is a failure, and
-every drop is reported to the errors channel before it is raised.
+every drop raises :class:`DispatchError` carrying an operator-facing
+``detail``. The route that answers 502 for it hands that detail to the
+fault report (:func:`record_drop`), so the errors channel hears of a drop
+exactly once: as the 502, naming what was dropped and why. A drop that does
+not end in a 5xx — a file given up on, part of a fleet pass — has no fault
+report to ride on, and is posted with :func:`report_dropped` instead.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 import boto3
 import sentry_sdk
 from botocore.exceptions import BotoCoreError, ClientError
+from mini_app_polis import activity
 from mini_app_polis.environment import Environment, current_environment
 from mini_app_polis.logger import LOG_FAILURE, get_logger, with_log_prefix
 
@@ -40,9 +45,6 @@ from ..config import Settings
 from . import discord
 
 logger = get_logger()
-
-#: How a dispatcher says a job was dropped. Takes the message, reports it.
-Reporter = Callable[[str], Awaitable[None]]
 
 #: The fleet's AWS account. Not a secret, and the same in every
 #: environment — the environment split is in the queue name.
@@ -81,7 +83,17 @@ def queue_url(cog: str, *, settings: Settings) -> str:
 
 
 class DispatchError(RuntimeError):
-    """The job did not reach the queue."""
+    """The job did not reach the queue.
+
+    ``detail`` is what the errors channel should say about it: what was
+    dropped, onto which queue, and the cause as an exception type and
+    Sentry id — never an exception's text. The ``str()`` is the shorter
+    account the 502 hands the caller.
+    """
+
+    def __init__(self, message: str, *, detail: str | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail
 
 
 def producer_credentials(settings: Settings) -> dict[str, str]:
@@ -133,14 +145,14 @@ async def enqueue(
     *,
     cog: str,
     label: str,
-    report: Reporter,
+    heading: str,
     settings: Settings,
 ) -> dict:
     """Put one job on ``cog``'s queue and insist that it landed.
 
-    ``label`` is how the dispatcher appears in logs. ``report`` is called
-    before every raise: a drop is always worth mentioning, and the caller
-    is a route about to answer someone who will not read the answer.
+    ``label`` is how the dispatcher appears in logs. ``heading`` leads the
+    ``detail`` of the :class:`DispatchError` raised for a drop ("Deejay run
+    not dispatched"), which the route's 502 fault report carries.
     """
     url = queue_url(cog, settings=settings)
     name = queue_name(cog)
@@ -154,22 +166,40 @@ async def enqueue(
         # access key is the one long-lived credential in this system, so
         # "no credentials" and "queue unreachable" both land here and both
         # mean the job did not land.
-        sentry_sdk.capture_exception(exc)
+        event_id = sentry_sdk.capture_exception(exc)
         # The queue is named because in development the likeliest cause
         # is that no -dev-jobs queue has been created, and the name says so.
-        await report(f"could not enqueue {what} onto {name}: {exc!r}")
-        raise DispatchError(f"could not reach the queue: {exc}") from exc
+        # The cause by type and Sentry id, as every fault report has it: a
+        # botocore error's text carries request ids and endpoint detail
+        # that belong behind auth, not in a shared channel.
+        cause = activity.fault_detail(exc, event_id=event_id, capture=None)
+        detail = f"{heading} — could not enqueue {what} onto {name}: {cause}"
+        logger.error(with_log_prefix(LOG_FAILURE, f"{label}: {detail}"))
+        raise DispatchError(f"could not reach the queue: {exc}", detail=detail) from exc
 
     message_id = str(response.get("MessageId") or "")
     if not message_id:
         # SQS returning 200 without a MessageId should be impossible. If it
         # ever happens, the job is in an unknown state and saying so beats
         # reporting an acknowledgement nobody can trace.
-        await report(f"enqueued {what} but SQS returned no MessageId")
-        raise DispatchError("the queue acknowledged without a message id")
+        detail = f"{heading} — enqueued {what} but SQS returned no MessageId"
+        logger.error(with_log_prefix(LOG_FAILURE, f"{label}: {detail}"))
+        raise DispatchError(
+            "the queue acknowledged without a message id", detail=detail
+        )
 
     logger.info("%s: enqueued %s onto %s as %s", label, what, name, message_id)
     return {"message_id": message_id}
+
+
+def record_drop(request: Any, exc: DispatchError) -> None:
+    """Have this request's 502 fault report say what was dropped.
+
+    Called by a route as it turns a :class:`DispatchError` into a 502. The
+    fault report is the one message the errors channel gets for the drop;
+    posting the drop separately as well would say the same thing twice.
+    """
+    activity.record_fault_detail(request, exc.detail or "job not dispatched")
 
 
 async def report_dropped(
@@ -177,14 +207,18 @@ async def report_dropped(
 ) -> None:
     """Say a job was dropped, in the one place someone is watching.
 
-    ``heading`` leads the Discord message ("Evaluation not dispatched");
-    ``label`` prefixes the log line and names the notification context.
+    For a drop that does not end in a 5xx — a Drive file given up on, part
+    of a fleet pass — so has no fault report to ride on. ``message`` is
+    operator-facing text the caller composed; never an exception's
+    ``str()``. ``heading`` leads the Discord message ("Evaluation not
+    dispatched"); ``label`` prefixes the log line and names the
+    notification context.
     """
     logger.error(with_log_prefix(LOG_FAILURE, f"{label}: {message}"))
     try:
         await discord.send_message(
             settings=settings,
-            payload={"content": f"{heading} — {message}"},
+            payload={"content": f"{discord.environment_prefix()}{heading} — {message}"},
             channel=discord.CHANNEL_ERRORS,
             context=label.replace(" ", "-"),
         )

@@ -142,14 +142,22 @@ async def _reconcile_identity_registry() -> None:
                 payload={
                     "embeds": [
                         {
-                            "title": "identity reconcile failed",
+                            "title": (
+                                f"{discord.environment_prefix()}"
+                                "identity reconcile failed"
+                            ),
                             "color": 0xDA3633,
                             "description": (
                                 "Declared machine principals were not applied at "
                                 f"boot: `{detail}`. Any role revocation in this "
                                 "deploy did not take effect."
                             ),
-                            "footer": {"text": get_settings().ENVIRONMENT},
+                            "footer": {
+                                "text": (
+                                    "api-kaianolevine-com · "
+                                    f"{get_settings().ENVIRONMENT}"
+                                )
+                            },
                         }
                     ]
                 },
