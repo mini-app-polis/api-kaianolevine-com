@@ -1,3 +1,10 @@
+## [2.3.15](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.14...v2.3.15) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** keep evaluation findings out of the change feed ([e8b42c6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e8b42c6e7cfde6a5f71da8012400b694699494d7))
+
 ## [2.3.14](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.13...v2.3.14) (2026-10-09)
 
 
