@@ -120,7 +120,16 @@ class Settings(BaseSettings):
     # line a minute per pending file. The dispatch it guards is already
     # reported where it matters: a drop or a capped file in errors, the
     # run itself in runs.
-    NOTIFY_SUPPRESSED_TABLES: list[str] = ["identity_audit_events", "dispatch_claims"]
+    # pipeline_evaluations is written one finding per request, and an
+    # evaluator pass posts them about twelve a second — one "data changed"
+    # each, past Discord's per-webhook limit, so the feed lost most of a
+    # pass and everything else sent during it. The pass is reported where
+    # it is read: its run report in runs, a failure in errors.
+    NOTIFY_SUPPRESSED_TABLES: list[str] = [
+        "identity_audit_events",
+        "dispatch_claims",
+        "pipeline_evaluations",
+    ]
     # Paths outside the feed entirely. Liveness and version are polled by
     # uptime monitors and their failures are already Healthchecks.io's job;
     # the two notification routes are excluded so a Discord outage cannot
@@ -249,7 +258,9 @@ class Settings(BaseSettings):
             return v
         return v.replace("\\n", "\n")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # The process environment only: Doppler supplies it (`doppler run`
+    # locally, the Railway sync deployed). No .env file is read.
+    model_config = SettingsConfigDict(extra="ignore")
 
 
 @lru_cache(maxsize=1)

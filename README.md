@@ -60,13 +60,19 @@ uv sync --all-extras
 # 2. Install pre-commit hooks
 uv run pre-commit install
 
-# 3. Copy env file and fill in values
-cp .env.example .env
+# 3. Secrets come from Doppler's shared dev config — nothing reads a .env
+#    file, and local runs never use prd. Once per machine, then per clone:
+brew install gnupg dopplerhq/cli/doppler && doppler login
+doppler setup                 # reads doppler.yaml: mini-app-polis-ecosystem / dev
+uv run check-doppler-keys     # every required .env.example name is in dev
 ```
 
 ### Run the server
+`DATABASE_URL` is not in Doppler; set it in the shell for your local
+Postgres and `doppler run` passes it through:
 ```bash
-uv run uvicorn src.kaianolevine_api.main:app --reload
+export DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/deejay_sets
+doppler run -- uv run uvicorn src.kaianolevine_api.main:app --reload
 ```
 
 API docs available at http://localhost:8000/docs
