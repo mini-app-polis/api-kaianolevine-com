@@ -1,3 +1,10 @@
+## [2.4.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.0...v2.4.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **spotify:** declare response_model=None on the re-auth routes ([18ac962](https://github.com/mini-app-polis/api-kaianolevine-com/commit/18ac962dfcf3ccc2bff5d2c0724ef24562ed4e54))
+
 # [2.4.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.18...v2.4.0) (2026-10-09)
 
 
