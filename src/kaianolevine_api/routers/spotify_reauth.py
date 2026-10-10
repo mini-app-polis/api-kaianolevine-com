@@ -91,6 +91,8 @@ def _not_configured(settings: Settings) -> HTMLResponse | None:
         "new refresh token to Doppler if it belongs to the configured owner."
     ),
     response_class=RedirectResponse,
+    # A redirect to Spotify (or a 503 page), never a JSON body.
+    response_model=None,
     status_code=302,
 )
 async def spotify_authorize(settings: Settings = Depends(get_settings)) -> Response:
@@ -122,6 +124,8 @@ async def spotify_authorize(settings: Settings = Depends(get_settings)) -> Respo
     summary="Finish renewing deejay-cog's Spotify token",
     description="Spotify's redirect target. Answers with a page, never the token.",
     response_class=HTMLResponse,
+    # A page for a person, never a JSON body.
+    response_model=None,
 )
 async def spotify_callback(
     request: Request,
