@@ -56,7 +56,7 @@ Errors return:
 * `GET /v1/stats/top-artists`
 * `GET /v1/stats/top-tracks`
 * `GET /v1/stats/summaries` — headline numbers per year; the current year is `in_progress`
-* `GET /v1/stats/summaries/{year}` — one year's summary, computed from its sets, with the curated layer from `config_data/year_summaries.yaml` attached when the year has one
+* `GET /v1/stats/summaries/{year}` — one year's summary, computed from its sets
 * `GET /v1/stats/summaries/{year}/songs` — every song played in the year, versions merged, most played first
 
 ### Ingest

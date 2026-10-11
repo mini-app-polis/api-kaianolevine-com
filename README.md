@@ -22,7 +22,7 @@ Route groups:
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/flags`, `/v1/flags/{name}` — feature flags
 - `/v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks` — aggregate stats
-- `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs` — annual DJ summaries, each with the year's full song list: computed from the year's sets (the current year updates as sets land), plus the curated layer from the original 2016–2022 summaries in `config_data/year_summaries.yaml`
+- `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs` — annual DJ summaries and each year's full song list, computed from the year's sets (the current year updates as sets land)
 - `/v1/spotify/playlists` — Spotify playlist catalog
 - `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
 - `/v1/ingest` — set ingestion endpoint

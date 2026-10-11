@@ -219,8 +219,7 @@ async def stats_year_summaries(
     "/stats/summaries/{year}",
     response_model=Envelope[YearSummary],
     summary="Year summary",
-    description="One year's DJ summary: numbers computed from its sets, plus "
-    "the curated layer from the original published summary when there is one.",
+    description="One year's DJ summary, computed from its sets.",
 )
 async def stats_year_summary(
     year: int,
@@ -239,8 +238,7 @@ async def stats_year_summary(
     response_model=Envelope[list[YearSummarySong]],
     summary="Year summary song list",
     description="Every song played in the year, one row per catalog entry with "
-    "its versions merged, most played first — the list the original annual "
-    "summary sheets carried.",
+    "its versions merged, most played first.",
 )
 async def stats_year_songs(
     year: int,

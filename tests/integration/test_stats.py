@@ -229,14 +229,6 @@ async def test_year_summary_computes_from_the_years_sets(client) -> None:
     assert data["length_coverage"] == 0.75
     assert data["avg_set_length_secs"] == 250
     assert data["avg_song_length_secs"] == 167
-    assert data["top_tracks"][0]["title"] == "Song A"
-    assert data["top_tracks"][0]["play_count"] == 2
-    assert data["top_artists"][0] == {
-        "artist": "Artist X",
-        "play_count": 3,
-        "song_count": 2,
-    }
-    assert data["most_songs_by_artist"][0]["artist"] == "Artist X"
 
 
 async def test_year_summary_new_songs_ignores_ingest_order(client) -> None:
@@ -270,27 +262,6 @@ async def test_year_summary_status_follows_the_calendar(client, monkeypatch) -> 
     assert by_year[2025]["songs_played"] == 1
 
 
-async def test_year_summary_attaches_the_curated_layer(client) -> None:
-    await _ingest(client, "2016-06-01", [_track("Missing You", "Betty Who")])
-
-    data = (await client.get("/v1/stats/summaries/2016")).json()["data"]
-    assert data["has_curated"] is True
-    curated = data["curated"]
-    assert curated["hours_played"] == "71+"
-    assert curated["spotify_playlist_url"].startswith("https://open.spotify.com/")
-    assert {"label": "Versions of No Diggity", "value": "4"} in curated["highlights"]
-
-    listing = (await client.get("/v1/stats/summaries")).json()["data"]
-    assert listing[0]["has_curated"] is True
-
-
-async def test_year_summary_without_curated_layer(client) -> None:
-    await _ingest(client, "2025-06-01", [_track("A", "B")])
-    data = (await client.get("/v1/stats/summaries/2025")).json()["data"]
-    assert data["has_curated"] is False
-    assert data["curated"] is None
-
-
 async def test_year_summary_404_for_a_year_without_sets(client) -> None:
     resp = await client.get("/v1/stats/summaries/2030")
     assert resp.status_code == 404
@@ -301,16 +272,6 @@ async def test_year_summaries_empty_db(client) -> None:
     resp = await client.get("/v1/stats/summaries")
     assert resp.status_code == 200
     assert resp.json()["data"] == []
-
-
-def test_curated_layer_is_well_formed() -> None:
-    from kaianolevine_api.services.year_summaries import load_curated
-
-    curated = load_curated()
-    assert set(curated) == set(range(2016, 2023))
-    for year, entry in curated.items():
-        assert entry.spotify_playlist_url, year
-        assert entry.highlights, year
 
 
 async def test_year_songs_lists_every_song_once_most_played_first(client) -> None:

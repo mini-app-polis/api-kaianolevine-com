@@ -1,4 +1,4 @@
-"""Annual DJ summaries — computed from the sets on record, plus a curated layer.
+"""Annual DJ summaries — computed from the sets on record.
 
 **Computed, not stored.** Every number is derived from ``sets`` and
 ``tracks`` at request time, scoped to the calendar year. The current year's
@@ -6,27 +6,15 @@ summary therefore moves on its own as sets are ingested — including a late
 set for a dance earlier in the year — and a past year's stays put because
 its sets do. There is no summary table to keep in step with the sets.
 
-**Curated where computation can't reach.** Before the pipeline, summaries
-were published by hand as Google Sheets for 2016–2022. What those carried
-that the data can't produce — hours for years whose track lengths are
-missing or unparsed, the summary playlists, and hand-written highlights reflecting
-manual merging of versions — lives in ``config_data/year_summaries.yaml``
-and is attached verbatim. Curated hours replace the computed figure; the
-highlights sit beside the computed lists rather than overriding them.
-
-**Songs are catalog entries.** Unique, once-played, new and top-track counts
-all key on ``catalog_id``, so versions the reconciler already matched count
-as one song — the same identity ``/v1/stats/top-tracks`` uses. Artists group
-on the trimmed, lowercased artist string, as played.
+**Songs are catalog entries.** Unique, once-played and new counts and the
+song list all key on ``catalog_id``, so versions the reconciler already
+matched count as one song — the same identity ``/v1/stats/top-tracks`` uses.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-from functools import lru_cache
-from pathlib import Path
 
-import yaml
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,32 +23,10 @@ from ..models import Track as DbTrack
 from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
     YearSummary,
-    YearSummaryArtist,
-    YearSummaryCurated,
     YearSummaryListItem,
     YearSummarySong,
     YearSummaryStatus,
-    YearSummaryTrack,
 )
-
-#: The committed curated layer, relative to this package.
-CURATED_PATH = (
-    Path(__file__).resolve().parent.parent / "config_data" / "year_summaries.yaml"
-)
-
-#: Entries on each ranked list.
-TOP_N = 10
-
-
-@lru_cache(maxsize=1)
-def load_curated() -> dict[int, YearSummaryCurated]:
-    """Read the curated layer, keyed by year."""
-    raw = yaml.safe_load(CURATED_PATH.read_text()) or {}
-    years = raw.get("years") or {}
-    return {
-        int(year): YearSummaryCurated.model_validate(entry or {})
-        for year, entry in years.items()
-    }
 
 
 def today() -> dt.date:
@@ -75,7 +41,6 @@ def status_for(year: int) -> YearSummaryStatus:
 
 async def list_year_summaries(session: AsyncSession) -> list[YearSummaryListItem]:
     """Headline numbers for every year with at least one set, newest first."""
-    curated = load_curated()
     year_expr = func.extract("year", DbSet.set_date).cast(Integer).label("year")
     rows = (
         await session.execute(
@@ -102,7 +67,6 @@ async def list_year_summaries(session: AsyncSession) -> list[YearSummaryListItem
             unique_songs=row.unique_songs,
             first_set_date=row.first_set_date,
             last_set_date=row.last_set_date,
-            has_curated=int(row.year) in curated,
         )
         for row in rows
     ]
@@ -161,24 +125,6 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         )
     ).scalar_one()
 
-    top_track_rows = (
-        await session.execute(
-            select(
-                DbCatalog.id,
-                DbCatalog.title,
-                DbCatalog.artist,
-                per_song.c.play_count,
-            )
-            .join(per_song, per_song.c.catalog_id == DbCatalog.id)
-            .order_by(
-                per_song.c.play_count.desc(),
-                func.lower(DbCatalog.title),
-                func.lower(DbCatalog.artist),
-            )
-            .limit(TOP_N)
-        )
-    ).all()
-
     # From the plays, not track_catalog.first_played: that is stamped with
     # the set date of the first *ingest*, so history backfilled out of order
     # leaves it later than the song's real first play.
@@ -198,32 +144,6 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         )
     ).scalar_one()
 
-    artist_key = func.lower(func.trim(plays.c.artist))
-    artist_stats = select(
-        func.min(func.trim(plays.c.artist)).label("artist"),
-        func.count().label("play_count"),
-        func.count(plays.c.catalog_id.distinct()).label("song_count"),
-    ).group_by(artist_key)
-    top_artist_rows = (
-        await session.execute(
-            artist_stats.order_by(
-                func.count().desc(),
-                func.count(plays.c.catalog_id.distinct()).desc(),
-                artist_key,
-            ).limit(TOP_N)
-        )
-    ).all()
-    most_songs_rows = (
-        await session.execute(
-            artist_stats.order_by(
-                func.count(plays.c.catalog_id.distinct()).desc(),
-                func.count().desc(),
-                artist_key,
-            ).limit(TOP_N)
-        )
-    ).all()
-
-    curated = load_curated().get(year)
     return YearSummary(
         year=year,
         status=status_for(year),
@@ -232,7 +152,6 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         unique_songs=unique_songs,
         first_set_date=first_set_date,
         last_set_date=last_set_date,
-        has_curated=curated is not None,
         songs_played_once=songs_played_once,
         new_songs=new_songs,
         hours_played_secs=length_total,
@@ -245,21 +164,6 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
             if length_total is not None and plays_with_length
             else None
         ),
-        top_tracks=[
-            YearSummaryTrack(
-                catalog_id=catalog_id, title=title, artist=artist, play_count=count
-            )
-            for catalog_id, title, artist, count in top_track_rows
-        ],
-        top_artists=[
-            YearSummaryArtist(artist=a, play_count=p, song_count=s)
-            for a, p, s in top_artist_rows
-        ],
-        most_songs_by_artist=[
-            YearSummaryArtist(artist=a, play_count=p, song_count=s)
-            for a, p, s in most_songs_rows
-        ],
-        curated=curated,
     )
 
 
@@ -267,8 +171,7 @@ async def list_year_songs(
     session: AsyncSession, year: int
 ) -> list[YearSummarySong] | None:
     """Every song played in a year, one row per catalog entry, most played
-    first — the list the original summary sheets carried. None when no set
-    falls in the year.
+    first. None when no set falls in the year.
 
     Metadata comes from the catalog, which keeps the first non-empty value
     seen for each field; length and play time come from the year's plays.
