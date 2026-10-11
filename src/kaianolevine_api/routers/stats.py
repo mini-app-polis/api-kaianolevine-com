@@ -10,6 +10,7 @@ from ..models import Set as DbSet
 from ..models import Track as DbTrack
 from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
+    CollectionSong,
     Envelope,
     StatsByYearItem,
     StatsOverview,
@@ -23,6 +24,7 @@ from ..schemas import (
 )
 from ..services.year_summaries import (
     get_year_summary,
+    list_collection,
     list_year_songs,
     list_year_summaries,
 )
@@ -219,8 +221,7 @@ async def stats_year_summaries(
     "/stats/summaries/{year}",
     response_model=Envelope[YearSummary],
     summary="Year summary",
-    description="One year's DJ summary: numbers computed from its sets, plus "
-    "the curated layer from the original published summary when there is one.",
+    description="One year's DJ summary, computed from its sets.",
 )
 async def stats_year_summary(
     year: int,
@@ -239,8 +240,7 @@ async def stats_year_summary(
     response_model=Envelope[list[YearSummarySong]],
     summary="Year summary song list",
     description="Every song played in the year, one row per catalog entry with "
-    "its versions merged, most played first — the list the original annual "
-    "summary sheets carried.",
+    "its versions merged, most played first.",
 )
 async def stats_year_songs(
     year: int,
@@ -251,6 +251,25 @@ async def stats_year_songs(
     data = await list_year_songs(session, year)
     if data is None:
         raise api_error(404, "not_found", f"No sets in {year}")
+    return success_envelope(
+        data, count=len(data), total=len(data), version=settings.API_VERSION
+    )
+
+
+@router.get(
+    "/stats/collection",
+    response_model=Envelope[list[CollectionSong]],
+    summary="Complete collection",
+    description="Every song on record, one row per catalog entry with its "
+    "versions merged, most played first, marked with the years it was played. "
+    "Grows as sets are ingested.",
+)
+async def stats_collection(
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[CollectionSong]]:
+    """Return the complete collection."""
+    settings = get_settings()
+    data = await list_collection(session)
     return success_envelope(
         data, count=len(data), total=len(data), version=settings.API_VERSION
     )
