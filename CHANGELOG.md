@@ -1,3 +1,16 @@
+# [2.6.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.5.0...v2.6.0) (2026-10-11)
+
+
+### Bug Fixes
+
+* **stats:** derive year summaries only from the database ([05a98e8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/05a98e85d4f0827a3a16fff2aa8ed40455345622))
+* **stats:** type the collection query for mypy ([fca07b3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fca07b3312609f91bf4f0dae4177171df5e62e37))
+
+
+### Features
+
+* **stats:** complete collection endpoint ([ca22158](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ca22158e2cafe8bdc586718b8a641cc9bb2331a5))
+
 # [2.5.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.1...v2.5.0) (2026-10-11)
 
 
