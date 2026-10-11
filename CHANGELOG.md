@@ -4,6 +4,19 @@
 ### Bug Fixes
 
 * **deps:** bump miniapppolis-common-utils to 5.25.1 ([6fee416](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fee4163b4425f2f63b2e90d6a8bd8271ce5e32e))
+* **deps:** bump miniapppolis-common-utils to 5.25.2 ([5028478](https://github.com/mini-app-polis/api-kaianolevine-com/commit/50284788351965afecda261583c79da7eb30ed79))
+
+
+### Features
+
+* **stats:** annual DJ summaries with curated layer ([a4e643b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a4e643b3150709102353f30ba66c9a0464374989))
+
+# [2.5.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.1...v2.5.0) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.1 ([6fee416](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fee4163b4425f2f63b2e90d6a8bd8271ce5e32e))
 
 
 ### Features
