@@ -14,8 +14,10 @@ matched count as one song — the same identity ``/v1/stats/top-tracks`` uses.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import Integer, distinct, func, select
+from sqlalchemy import Integer, Row, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Set as DbSet
@@ -170,7 +172,7 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
 
 async def _song_rows(
     session: AsyncSession, start: dt.date | None = None, end: dt.date | None = None
-) -> list:
+) -> Sequence[Row[Any]]:
     """One row per catalog song played between start and end (all time when
     both are None), most played first: the catalog entry, then play count,
     longest known length, summed length, years played, first and last set.
@@ -179,7 +181,7 @@ async def _song_rows(
     seen for each field; everything else comes from the plays in range.
     """
     year_expr = func.extract("year", DbSet.set_date).cast(Integer)
-    per_song = (
+    stmt = (
         select(
             DbTrack.catalog_id.label("catalog_id"),
             func.count().label("play_count"),
@@ -194,8 +196,8 @@ async def _song_rows(
         .group_by(DbTrack.catalog_id)
     )
     if start is not None and end is not None:
-        per_song = per_song.where(DbSet.set_date.between(start, end))
-    per_song = per_song.subquery()
+        stmt = stmt.where(DbSet.set_date.between(start, end))
+    per_song = stmt.subquery()
     return (
         await session.execute(
             select(
