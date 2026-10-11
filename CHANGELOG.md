@@ -1,3 +1,10 @@
+## [2.6.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.0...v2.6.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-identity to 2.1.4 ([145c58c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/145c58c451abf23a44c57777ebff17cc8bae61cf))
+
 # [2.6.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.5.0...v2.6.0) (2026-10-11)
 
 
