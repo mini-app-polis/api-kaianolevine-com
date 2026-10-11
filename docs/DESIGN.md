@@ -58,6 +58,7 @@ Errors return:
 * `GET /v1/stats/summaries` — headline numbers per year; the current year is `in_progress`
 * `GET /v1/stats/summaries/{year}` — one year's summary, computed from its sets
 * `GET /v1/stats/summaries/{year}/songs` — every song played in the year, versions merged, most played first
+* `GET /v1/stats/collection` — every song on record, versions merged, most played first, with the years each was played
 
 ### Ingest
 

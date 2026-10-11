@@ -354,6 +354,18 @@ class YearSummarySong(BaseModel):
     )
 
 
+class CollectionSong(YearSummarySong):
+    """One song in the complete collection — every play on record, every
+    version merged — marked with the years it was played."""
+
+    years: list[int] = Field(
+        ..., description="Calendar years with at least one play, ascending."
+    )
+    year_count: int = Field(..., description="How many years the song was played in.")
+    first_played: dt.date = Field(..., description="Date of the song's first set.")
+    last_played: dt.date = Field(..., description="Date of the song's latest set.")
+
+
 class YearSummaryListItem(BaseModel):
     """Headline numbers for one year, computed from the sets on record."""
 

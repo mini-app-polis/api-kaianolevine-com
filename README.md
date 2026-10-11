@@ -23,6 +23,7 @@ Route groups:
 - `/v1/flags`, `/v1/flags/{name}` — feature flags
 - `/v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks` — aggregate stats
 - `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs` — annual DJ summaries and each year's full song list, computed from the year's sets (the current year updates as sets land)
+- `/v1/stats/collection` — the complete collection: every song on record, versions merged, marked with the years it was played
 - `/v1/spotify/playlists` — Spotify playlist catalog
 - `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
 - `/v1/ingest` — set ingestion endpoint
@@ -197,7 +198,7 @@ Every route is in exactly one of three states:
   so it cannot require a principal in order to grant one), `GET /v1/wcs/me`
   (reads only the caller's own profile), and `GET /v1/identity/whoami`
   (reports what verify and resolve saw, and authorizes nothing).
-- **Public** (26) — see below.
+- **Public** (27) — see below.
 
 Every decision is audited, allow and deny alike, with the enforcement
 point, principal, scope, outcome and reason.
@@ -209,7 +210,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | Routes | Why |
 |---|---|
 | `GET /v1/sets`, `/v1/sets/{id}`, `/v1/sets/{id}/tracks`, `/v1/tracks`, `/v1/tracks/{id}`, `/v1/catalog`, `/v1/catalog/{id}` | Public catalog reads backing the website. |
-| `GET /v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks`, `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs`, `/v1/spotify/playlists`, `/v1/live-plays/recent` | Public aggregate reads backing the website. |
+| `GET /v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks`, `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs`, `/v1/stats/collection`, `/v1/spotify/playlists`, `/v1/live-plays/recent` | Public aggregate reads backing the website. |
 | `GET /v1/evaluations`, `/v1/evaluations/summary`, `/v1/flags` | Pipeline Health and feature flags — read-only, no per-owner content. |
 | `POST /v1/contact` | Contact form. CORS + Turnstile gated rather than credential gated. |
 | `GET /v1/resume` | Public resume proxy. |

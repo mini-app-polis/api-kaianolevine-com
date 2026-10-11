@@ -308,3 +308,55 @@ async def test_year_songs_lists_every_song_once_most_played_first(client) -> Non
 async def test_year_songs_404_for_a_year_without_sets(client) -> None:
     resp = await client.get("/v1/stats/summaries/2030/songs")
     assert resp.status_code == 404
+
+
+async def test_collection_marks_every_year_a_song_was_played(client) -> None:
+    await _ingest(
+        client,
+        "2023-05-01",
+        [_track("Song A", "Artist X", length_secs=200), _track("Song B", "Artist Y")],
+    )
+    await _ingest(
+        client, "2025-03-01", [_track("song a!", "Artist X", length_secs=210)]
+    )
+    await _ingest(
+        client, "2025-09-01", [_track("Song A", "Artist X", length_secs=None)]
+    )
+
+    resp = await client.get("/v1/stats/collection")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meta"]["total"] == 2
+    a, b = body["data"]
+    assert (a["title"], a["play_count"]) == ("Song A", 3)
+    assert a["years"] == [2023, 2025]
+    assert a["year_count"] == 2
+    assert a["first_played"] == "2023-05-01"
+    assert a["last_played"] == "2025-09-01"
+    assert a["length_secs"] == 210
+    assert a["total_play_secs"] == 410
+    assert (b["title"], b["years"], b["year_count"]) == ("Song B", [2023], 1)
+
+
+async def test_collection_grows_with_new_sets(client) -> None:
+    await _ingest(client, "2024-01-01", [_track("Song A", "Artist X")])
+    first = (await client.get("/v1/stats/collection")).json()["data"]
+    assert [s["title"] for s in first] == ["Song A"]
+
+    await _ingest(
+        client,
+        "2026-02-01",
+        [_track("Song A", "Artist X"), _track("Song C", "Artist Z")],
+    )
+    after = {
+        s["title"]: s for s in (await client.get("/v1/stats/collection")).json()["data"]
+    }
+    assert after["Song A"]["years"] == [2024, 2026]
+    assert after["Song A"]["play_count"] == 2
+    assert after["Song C"]["years"] == [2026]
+
+
+async def test_collection_empty_db(client) -> None:
+    resp = await client.get("/v1/stats/collection")
+    assert resp.status_code == 200
+    assert resp.json()["data"] == []
