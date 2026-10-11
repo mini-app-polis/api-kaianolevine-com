@@ -177,3 +177,173 @@ async def test_stats_top_tracks(client) -> None:
 async def test_stats_overview_method_not_allowed(client) -> None:
     method_not_allowed = await client.post("/v1/stats/overview", json={})
     assert method_not_allowed.status_code == 405
+
+
+def _track(title: str, artist: str, *, length_secs: int | None = 180) -> dict:
+    return {
+        "play_order": 1,
+        "title": title,
+        "artist": artist,
+        "length_secs": length_secs,
+    }
+
+
+async def _ingest(client, set_date: str, tracks: list[dict]) -> None:
+    resp = await client.post(
+        "/v1/ingest",
+        json=_ingest_payload(set_date, f"{set_date} MADjam.csv", tracks),
+    )
+    assert resp.status_code == 200
+
+
+async def test_year_summary_computes_from_the_years_sets(client) -> None:
+    await _ingest(client, "2024-06-01", [_track("Old Song", "Artist Z")])
+    await _ingest(
+        client,
+        "2025-03-01",
+        [
+            _track("Song A", "Artist X", length_secs=200),
+            _track("Song B", "Artist X", length_secs=None),
+            _track("Old Song", "Artist Z", length_secs=100),
+        ],
+    )
+    await _ingest(
+        client,
+        "2025-09-01",
+        [_track("Song A", "Artist X", length_secs=200)],
+    )
+
+    resp = await client.get("/v1/stats/summaries/2025")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["year"] == 2025
+    assert data["set_count"] == 2
+    assert data["songs_played"] == 4
+    assert data["unique_songs"] == 3
+    assert data["songs_played_once"] == 2
+    # Old Song was first played in 2024, so it is not new in 2025.
+    assert data["new_songs"] == 2
+    assert data["first_set_date"] == "2025-03-01"
+    assert data["last_set_date"] == "2025-09-01"
+    assert data["hours_played_secs"] == 500
+    assert data["length_coverage"] == 0.75
+    assert data["avg_set_length_secs"] == 250
+    assert data["avg_song_length_secs"] == 167
+    assert data["top_tracks"][0]["title"] == "Song A"
+    assert data["top_tracks"][0]["play_count"] == 2
+    assert data["top_artists"][0] == {
+        "artist": "Artist X",
+        "play_count": 3,
+        "song_count": 2,
+    }
+    assert data["most_songs_by_artist"][0]["artist"] == "Artist X"
+
+
+async def test_year_summary_new_songs_ignores_ingest_order(client) -> None:
+    # A later year ingested first, then the earlier set backfilled.
+    await _ingest(client, "2025-03-01", [_track("Song A", "Artist X")])
+    await _ingest(client, "2024-03-01", [_track("Song A", "Artist X")])
+
+    s2025 = (await client.get("/v1/stats/summaries/2025")).json()["data"]
+    s2024 = (await client.get("/v1/stats/summaries/2024")).json()["data"]
+    assert s2025["new_songs"] == 0
+    assert s2024["new_songs"] == 1
+
+
+async def test_year_summary_status_follows_the_calendar(client, monkeypatch) -> None:
+    import datetime as dt
+
+    from kaianolevine_api.services import year_summaries
+
+    monkeypatch.setattr(year_summaries, "today", lambda: dt.date(2025, 10, 10))
+    await _ingest(client, "2024-06-01", [_track("A", "B")])
+    await _ingest(client, "2025-06-01", [_track("A", "B")])
+
+    resp = await client.get("/v1/stats/summaries")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meta"]["count"] == 2
+    by_year = {item["year"]: item for item in body["data"]}
+    assert [item["year"] for item in body["data"]] == [2025, 2024]
+    assert by_year[2025]["status"] == "in_progress"
+    assert by_year[2024]["status"] == "final"
+    assert by_year[2025]["songs_played"] == 1
+
+
+async def test_year_summary_attaches_the_curated_layer(client) -> None:
+    await _ingest(client, "2016-06-01", [_track("Missing You", "Betty Who")])
+
+    data = (await client.get("/v1/stats/summaries/2016")).json()["data"]
+    assert data["has_curated"] is True
+    curated = data["curated"]
+    assert curated["hours_played"] == "71+"
+    assert curated["spotify_playlist_url"].startswith("https://open.spotify.com/")
+    assert {"label": "Versions of No Diggity", "value": "4"} in curated["highlights"]
+
+    listing = (await client.get("/v1/stats/summaries")).json()["data"]
+    assert listing[0]["has_curated"] is True
+
+
+async def test_year_summary_without_curated_layer(client) -> None:
+    await _ingest(client, "2025-06-01", [_track("A", "B")])
+    data = (await client.get("/v1/stats/summaries/2025")).json()["data"]
+    assert data["has_curated"] is False
+    assert data["curated"] is None
+
+
+async def test_year_summary_404_for_a_year_without_sets(client) -> None:
+    resp = await client.get("/v1/stats/summaries/2030")
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "not_found"
+
+
+async def test_year_summaries_empty_db(client) -> None:
+    resp = await client.get("/v1/stats/summaries")
+    assert resp.status_code == 200
+    assert resp.json()["data"] == []
+
+
+def test_curated_layer_is_well_formed() -> None:
+    from kaianolevine_api.services.year_summaries import load_curated
+
+    curated = load_curated()
+    assert set(curated) == set(range(2016, 2023))
+    for year, entry in curated.items():
+        assert entry.spotify_playlist_url, year
+        assert entry.highlights, year
+
+
+async def test_year_songs_lists_every_song_once_most_played_first(client) -> None:
+    await _ingest(client, "2024-06-01", [_track("Other Year", "Artist Q")])
+    await _ingest(
+        client,
+        "2025-03-01",
+        [
+            _track("Song B", "Artist Y", length_secs=None),
+            _track("Song A", "Artist X", length_secs=200),
+        ],
+    )
+    # A differently punctuated version of Song A reconciles to the same song.
+    await _ingest(
+        client, "2025-09-01", [_track("song a!", "Artist X", length_secs=210)]
+    )
+
+    resp = await client.get("/v1/stats/summaries/2025/songs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meta"]["total"] == 2
+    first, second = body["data"]
+    assert (first["title"], first["play_count"]) == ("Song A", 2)
+    assert first["length_secs"] == 210
+    assert first["total_play_secs"] == 410
+    assert (second["title"], second["play_count"]) == ("Song B", 1)
+    assert second["length_secs"] is None
+    assert second["total_play_secs"] is None
+
+    summary = (await client.get("/v1/stats/summaries/2025")).json()["data"]
+    assert summary["unique_songs"] == body["meta"]["total"]
+
+
+async def test_year_songs_404_for_a_year_without_sets(client) -> None:
+    resp = await client.get("/v1/stats/summaries/2030/songs")
+    assert resp.status_code == 404

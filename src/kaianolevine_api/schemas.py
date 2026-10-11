@@ -327,6 +327,138 @@ class StatsTopTrackItem(BaseModel):
     )
 
 
+YearSummaryStatus = Literal["final", "in_progress"]
+
+
+class YearSummaryTrack(BaseModel):
+    """One song on a year summary's most-played list."""
+
+    catalog_id: uuid.UUID | None = Field(
+        default=None, description="Catalog entry the plays reconcile to."
+    )
+    title: str = Field(..., description="Title value for this record.")
+    artist: str = Field(..., description="Artist name associated with this record.")
+    play_count: int = Field(..., description="Plays of this song in the year.")
+
+
+class YearSummaryArtist(BaseModel):
+    """One artist on a year summary's artist lists."""
+
+    artist: str = Field(..., description="Artist name associated with this record.")
+    play_count: int = Field(..., description="Plays of this artist in the year.")
+    song_count: int = Field(
+        ..., description="Distinct songs by this artist played in the year."
+    )
+
+
+class YearSummaryHighlight(BaseModel):
+    """A hand-written line from a published annual summary, verbatim."""
+
+    label: str = Field(..., description="The line's label as published.")
+    value: str = Field(..., description="The line's value as published.")
+
+
+class YearSummaryCurated(BaseModel):
+    """The curated layer of a year summary, from config_data/year_summaries.yaml."""
+
+    hours_played: str | None = Field(
+        default=None,
+        description="Published hours figure, shown in place of the computed one.",
+    )
+    spotify_playlist_url: str | None = Field(
+        default=None, description="The year's summary playlist on Spotify."
+    )
+    highlights: list[YearSummaryHighlight] = Field(
+        default_factory=list, description="Lines from the original summary."
+    )
+
+
+class YearSummarySong(BaseModel):
+    """One song in a year's full list — every version of it merged, as on the
+    original summary sheets."""
+
+    catalog_id: uuid.UUID = Field(
+        ..., description="Catalog entry the plays reconcile to."
+    )
+    title: str = Field(..., description="Title value for this record.")
+    remix: str | None = Field(
+        default=None, description="Remix, when the catalog has one."
+    )
+    artist: str = Field(..., description="Artist name associated with this record.")
+    genre: str | None = Field(default=None, description="Catalog genre.")
+    bpm: float | None = Field(default=None, description="Catalog BPM.")
+    release_year: int | None = Field(default=None, description="Catalog release year.")
+    length_secs: int | None = Field(
+        default=None, description="Longest known length across the year's plays."
+    )
+    play_count: int = Field(..., description="Plays of this song in the year.")
+    total_play_secs: int | None = Field(
+        default=None,
+        description="Summed length of the year's plays with a known length.",
+    )
+
+
+class YearSummaryListItem(BaseModel):
+    """Headline numbers for one year, computed from the sets on record."""
+
+    year: int = Field(..., description="Calendar year summarized.")
+    status: YearSummaryStatus = Field(
+        ...,
+        description="final for a past year; in_progress for the current year, "
+        "which changes as sets are ingested.",
+    )
+    set_count: int = Field(..., description="Sets played in the year.")
+    songs_played: int = Field(..., description="Track plays across those sets.")
+    unique_songs: int = Field(
+        ..., description="Distinct catalog songs played in the year."
+    )
+    first_set_date: dt.date = Field(..., description="Date of the year's first set.")
+    last_set_date: dt.date = Field(
+        ..., description="Date of the year's latest set — the summary's as-of date."
+    )
+    has_curated: bool = Field(
+        default=False, description="Whether a curated layer exists for the year."
+    )
+
+
+class YearSummary(YearSummaryListItem):
+    """A year's DJ summary: computed numbers plus any curated layer."""
+
+    songs_played_once: int = Field(
+        ..., description="Songs played exactly once in the year."
+    )
+    new_songs: int = Field(
+        ..., description="Songs whose first play on record falls in the year."
+    )
+    hours_played_secs: int | None = Field(
+        default=None,
+        description="Summed length of plays with a known length; null when none do.",
+    )
+    length_coverage: float = Field(
+        ...,
+        description="Share of plays with a known length, 0–1. Below 1 the "
+        "hours figure is a floor.",
+    )
+    avg_set_length_secs: int | None = Field(
+        default=None, description="hours_played_secs divided by set_count."
+    )
+    avg_song_length_secs: int | None = Field(
+        default=None, description="Mean length of plays with a known length."
+    )
+    top_tracks: list[YearSummaryTrack] = Field(
+        default_factory=list, description="Most-played songs, ties broken by title."
+    )
+    top_artists: list[YearSummaryArtist] = Field(
+        default_factory=list, description="Artists ranked by plays."
+    )
+    most_songs_by_artist: list[YearSummaryArtist] = Field(
+        default_factory=list, description="Artists ranked by distinct songs played."
+    )
+    curated: YearSummaryCurated | None = Field(
+        default=None, description="Curated layer, when the year has one."
+    )
+
+
 class LivePlayRecord(BaseModel):
     """Live-play row returned by recent-play endpoints."""
 

@@ -1,0 +1,86 @@
+# Curated layer of the annual DJ summaries — GET /v1/stats/summaries/{year}.
+#
+# Every number on a year summary is computed from the sets in Postgres, so
+# the current year's summary moves as sets are ingested. This file holds
+# only what cannot be computed: the hand-written parts of the summaries
+# published as Google Sheets for 2016–2022, before the pipeline existed.
+#
+#   hours_played  The published figure, shown in place of the computed one.
+#                 Set where the source sheets carry no track lengths
+#                 (2016–2018) or carry them as "00:3:48", which the ingest
+#                 parser rejects (2019–2021) — either way the computed total
+#                 would be missing or far too low. 2019–2021 are the sheets'
+#                 exact totals rounded to the hour; 2022's sheet had none.
+#   spotify_playlist_url  The year's summary playlist.
+#   highlights    The sheet's "Stats" rows that are not computed headline
+#                 numbers, verbatim — they reflect manual merging of
+#                 versions and edits, so they may differ from the computed
+#                 top lists, and are shown as the original summary.
+#
+# A year with no entry gets the computed summary alone.
+
+years:
+  2016:
+    hours_played: "71+"
+    spotify_playlist_url: https://open.spotify.com/playlist/1a4T776p4NQH8EtiB3xzG9
+    highlights:
+      - { label: Most Played Song 1, value: Missing You - Betty Who }
+      - { label: Most Played Song 2, value: My House - Flo Rida }
+      - { label: Most Played Artist, value: Betty Who }
+      - { label: Most Songs by Artist, value: 6 (by Marian Hill) }
+      - { label: Versions of No Diggity, value: "4" }
+  2017:
+    hours_played: "53+"
+    spotify_playlist_url: https://open.spotify.com/playlist/5xrGkrSrwkBhJMe7VM0IKp
+    highlights:
+      - { label: Most Played Song 1, value: Runaway - Ed Sheeran }
+      - { label: Most Played Song 2 (Tied), value: Triggerfinger - Donkeyboy }
+      - { label: Most Played Song 2 (Tied), value: Dynamite (Feat. Pretty Sister) - Nause }
+      - { label: Most Played Artist, value: Charlie Puth }
+      - { label: Most Songs by Artist, value: 8 (by Charlie Puth) }
+  2018:
+    hours_played: "50+"
+    spotify_playlist_url: https://open.spotify.com/playlist/4j01vP4YMUIoQ2H9UwmeDG
+    highlights:
+      - { label: Most Played Song 1, value: No Fear - Dej Loaf }
+      - { label: Most Played Song 2, value: 679 & No Diggity - Jackson Breit }
+      - { label: Most Played Song 3, value: Woman - Elderbrook }
+      - { label: Most Played Artist, value: John Mayer }
+      - { label: Most Songs by Artist, value: 5 (by Charlie Puth) }
+  2019:
+    hours_played: "79"
+    spotify_playlist_url: https://open.spotify.com/playlist/4AWhkpQTpUglEPyPeihd7g
+    highlights:
+      - { label: Most Played Song 1, value: Money - Mat Kearney }
+      - { label: Most Played Song 2, value: Enjoy - Janet Jackson }
+      - { label: Most Played Song 3, value: Not A Love Song - Bülow }
+      - { label: Most Played Artist, value: Charlie Puth }
+      - { label: Most Songs by Artist, value: 8 (by Charlie Puth) }
+  2020:
+    hours_played: "12"
+    spotify_playlist_url: https://open.spotify.com/playlist/4yiYiVuGIjvfjNXqtbk3zT
+    highlights:
+      - { label: Most Played Song 1, value: Contagious - Cameo Club }
+      - { label: Most Played Song 2, value: Don't Be Lazy - Emotional Oranges }
+      - { label: Most Played Song 3, value: enjoy - Janet Jackson }
+      - { label: Most Played Song 4, value: Come On Over - Pretty Sister }
+  2021:
+    hours_played: "60"
+    spotify_playlist_url: https://open.spotify.com/playlist/6nBOlY2zQgDkYZ1aHOcmVA
+    highlights:
+      - { label: Most Played Song 1, value: Me N You - R.A.D. }
+      - { label: Most Played Song 2, value: Let Go Today - Shoffy }
+      - { label: Most Played Song 3, value: So Into You - Dylan Chambers }
+      - { label: Most Played Song 4, value: Shut Up - Greyson Chance }
+      - { label: Most Played Song 5, value: Purple Hat - Sofi Tukker }
+      - { label: Most Played Artist, value: Lauv }
+      - { label: Most Songs by (Solo) Artist, value: Terror Jr }
+      - { label: Most Songs by (Partnered) Artist, value: Lauv }
+  2022:
+    spotify_playlist_url: https://open.spotify.com/playlist/6AltcGCApPtrRzuH3DihIV
+    highlights:
+      - { label: Most Played Song 1, value: Ferris Wheel - Sylvan Esso }
+      - { label: Most Played Song 2, value: Mixer - Amber Mark }
+      - { label: Most Played Song 3, value: Sandman - Grace Gaustad }
+      - { label: Most Played Artist, value: Teddy Swims }
+      - { label: Most Songs by Artist, value: Marian Hill }

@@ -15,7 +15,16 @@ from ..schemas import (
     StatsOverview,
     StatsTopArtistItem,
     StatsTopTrackItem,
+    YearSummary,
+    YearSummaryListItem,
+    YearSummarySong,
+    api_error,
     success_envelope,
+)
+from ..services.year_summaries import (
+    get_year_summary,
+    list_year_songs,
+    list_year_summaries,
 )
 
 router = APIRouter()
@@ -185,4 +194,63 @@ async def stats_top_tracks(
     ).scalar_one()
     return success_envelope(
         data, count=len(data), total=total, version=settings.API_VERSION
+    )
+
+
+@router.get(
+    "/stats/summaries",
+    response_model=Envelope[list[YearSummaryListItem]],
+    summary="Year summaries",
+    description="Headline numbers for every year with sets, newest first. The "
+    "current year is in_progress and changes as sets are ingested.",
+)
+async def stats_year_summaries(
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[YearSummaryListItem]]:
+    """Return one headline row per year."""
+    settings = get_settings()
+    data = await list_year_summaries(session)
+    return success_envelope(
+        data, count=len(data), total=len(data), version=settings.API_VERSION
+    )
+
+
+@router.get(
+    "/stats/summaries/{year}",
+    response_model=Envelope[YearSummary],
+    summary="Year summary",
+    description="One year's DJ summary: numbers computed from its sets, plus "
+    "the curated layer from the original published summary when there is one.",
+)
+async def stats_year_summary(
+    year: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[YearSummary]:
+    """Return the full summary for one year."""
+    settings = get_settings()
+    data = await get_year_summary(session, year)
+    if data is None:
+        raise api_error(404, "not_found", f"No sets in {year}")
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+@router.get(
+    "/stats/summaries/{year}/songs",
+    response_model=Envelope[list[YearSummarySong]],
+    summary="Year summary song list",
+    description="Every song played in the year, one row per catalog entry with "
+    "its versions merged, most played first — the list the original annual "
+    "summary sheets carried.",
+)
+async def stats_year_songs(
+    year: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[YearSummarySong]]:
+    """Return the full song list for one year."""
+    settings = get_settings()
+    data = await list_year_songs(session, year)
+    if data is None:
+        raise api_error(404, "not_found", f"No sets in {year}")
+    return success_envelope(
+        data, count=len(data), total=len(data), version=settings.API_VERSION
     )
