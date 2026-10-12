@@ -1,3 +1,10 @@
+## [2.6.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.1...v2.6.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 4 updates ([851b3a6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/851b3a6b2d8b8cf9d4ba13ee2fb77cf440499e6a))
+
 ## [2.6.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.0...v2.6.1) (2026-10-11)
 
 
