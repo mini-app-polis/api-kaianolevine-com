@@ -1,3 +1,10 @@
+## [2.6.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.3...v2.6.4) (2026-10-13)
+
+
+### Bug Fixes
+
+* **github-status:** warm the snapshot at boot so deploys never land on a visitor ([beff4b3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/beff4b37d76f92a09d1b3cf3d5955efad073be67))
+
 ## [2.6.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.2...v2.6.3) (2026-10-12)
 
 
