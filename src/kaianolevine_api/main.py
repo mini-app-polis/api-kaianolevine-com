@@ -54,7 +54,7 @@ from .schemas import ErrorDetail, ErrorEnvelope
 # activity is imported for its side effect as well as its middleware:
 # importing it is what registers the SQLAlchemy listeners that tally
 # data changes.
-from .services import activity, cloudwatch, discord
+from .services import activity, cloudwatch, discord, github_dashboard
 
 logger = get_logger()
 
@@ -85,9 +85,15 @@ async def lifespan(_app: FastAPI):
             )
         )
     await _reconcile_identity_registry()
+    # Before /health answers, so no visitor meets an empty status snapshot.
+    await github_dashboard.warm(settings)
+    github_refresh = asyncio.create_task(github_dashboard.refresh_loop(settings))
     reminders = _start_spotify_token_reminders(settings)
 
     yield
+    github_refresh.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await github_refresh
     if reminders is not None:
         reminders.cancel()
         with contextlib.suppress(asyncio.CancelledError):
