@@ -128,6 +128,8 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
 
     sent = sqs.send_message.call_args.kwargs
     assert sent["QueueUrl"] == QUEUE_URL
+    # A standard queue refuses a message group; evaluations run in parallel.
+    assert "MessageGroupId" not in sent
     assert json.loads(sent["MessageBody"]) == {
         "type": dispatch.TYPE_REPOSITORY,
         "version": dispatch.MESSAGE_VERSION,

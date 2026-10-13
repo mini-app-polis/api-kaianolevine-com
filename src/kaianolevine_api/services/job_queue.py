@@ -50,9 +50,30 @@ logger = get_logger()
 #: environment — the environment split is in the queue name.
 AWS_ACCOUNT_ID = "400200465748"
 
+#: Cogs whose queue is FIFO (``fifo = true`` in infra's cog-worker module).
+#: Both run one job at a time. On a standard queue that took a reservation
+#: of 1, and every message the trigger pulled while the one run was busy was
+#: throttled, spent a delivery and hid for the visibility timeout — a burst
+#: of more files than ``max_receive_count`` dead-lettered good ones. A FIFO
+#: queue with a single message group hands the trigger one message at a time
+#: instead, so waiting costs nothing. Must match infra; a mismatch sends to a
+#: queue that does not exist, which fails as a drop and releases the claim.
+FIFO_COGS: frozenset[str] = frozenset({"deejay", "transcription"})
+
+
+def message_group(cog: str) -> str | None:
+    """The FIFO message group for ``cog``'s jobs, or None for a standard queue.
+
+    One group per queue, so the queue is strictly serial: the next job is
+    not delivered until the one before it is done or dead-lettered.
+    """
+    return cog if cog in FIFO_COGS else None
+
 
 def queue_name(cog: str) -> str:
     """``<cog>-jobs`` in production, ``<cog>-dev-jobs`` anywhere else.
+
+    A FIFO cog's name ends ``.fifo``, as SQS requires (:data:`FIFO_COGS`).
 
     ``cog`` is the Terraform ``name_prefix`` for that cog's queue, so this
     and ``infra/`` share one naming rule instead of a copied URL.
@@ -71,7 +92,8 @@ def queue_name(cog: str) -> str:
     work to the development queue.
     """
     suffix = "" if current_environment() is Environment.PRODUCTION else "-dev"
-    return f"{cog}{suffix}-jobs"
+    fifo = ".fifo" if cog in FIFO_COGS else ""
+    return f"{cog}{suffix}-jobs{fifo}"
 
 
 def queue_url(cog: str, *, settings: Settings) -> str:
@@ -118,15 +140,27 @@ def producer_credentials(settings: Settings) -> dict[str, str]:
     }
 
 
-def send(message: dict[str, Any], *, queue_url: str, settings: Settings) -> dict:
+def send(
+    message: dict[str, Any],
+    *,
+    queue_url: str,
+    settings: Settings,
+    message_group: str | None = None,
+) -> dict:
     """The blocking SQS call, kept in one place so the caller can offload it.
 
     boto3 is synchronous and this runs inside an async route, so calling it
     directly would block the event loop for the round trip.
+
+    ``message_group`` is required for a FIFO queue and refused by a standard
+    one. Deduplication is the queue's content-based setting: an identical
+    body within five minutes is one job, which the dispatch claims already
+    make true, so no deduplication id is sent.
     """
     client = boto3.client(
         "sqs", region_name=settings.AWS_REGION, **producer_credentials(settings)
     )
+    fifo = {} if message_group is None else {"MessageGroupId": message_group}
     return client.send_message(
         QueueUrl=queue_url,
         MessageBody=json.dumps(message),
@@ -136,6 +170,7 @@ def send(message: dict[str, Any], *, queue_url: str, settings: Settings) -> dict
         MessageAttributes={
             "type": {"DataType": "String", "StringValue": message["type"]}
         },
+        **fifo,
     )
 
 
@@ -159,7 +194,11 @@ async def enqueue(
 
     try:
         response = await asyncio.to_thread(
-            send, message, queue_url=url, settings=settings
+            send,
+            message,
+            queue_url=url,
+            settings=settings,
+            message_group=message_group(cog),
         )
     except (ClientError, BotoCoreError) as exc:
         # BotoCoreError covers the credential cases too — the producer's
