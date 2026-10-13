@@ -29,7 +29,7 @@ from kaianolevine_api.services import deejay_dispatch as dispatch
 
 pytestmark = pytest.mark.asyncio
 
-QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/deejay-jobs"
+QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/deejay-jobs.fifo"
 ISSUER = "https://clerk.kaianolevine.com"
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
 
@@ -191,19 +191,21 @@ async def test_enqueue_sends_the_run_message_to_deejays_queue(monkeypatch) -> No
         "payload": {"mode": "ingest-live-history"},
     }
     assert sent["MessageAttributes"]["type"]["StringValue"] == "deejay.run"
+    # FIFO, one group: the queue hands over one job at a time.
+    assert sent["MessageGroupId"] == "deejay"
 
 
 @pytest.mark.parametrize(
     ("environment", "expected"),
     [
-        ("production", "deejay-jobs"),
+        ("production", "deejay-jobs.fifo"),
         # An alias must resolve like the canonical name. Compared as a raw
         # string, "prod" would send production's work to the dev queue.
-        ("prod", "deejay-jobs"),
-        ("development", "deejay-dev-jobs"),
+        ("prod", "deejay-jobs.fifo"),
+        ("development", "deejay-dev-jobs.fifo"),
         # A local API has no queue of its own; the one thing it must never
         # reach is production's.
-        ("local", "deejay-dev-jobs"),
+        ("local", "deejay-dev-jobs.fifo"),
     ],
 )
 async def test_the_queue_is_derived_from_cog_and_environment(
@@ -243,7 +245,7 @@ async def test_a_missing_dev_queue_is_reported_by_name(monkeypatch) -> None:
                 dispatch.DeejayJob(mode="process-new-files"), settings=get_settings()
             )
 
-    assert "onto deejay-dev-jobs" in raised.value.detail
+    assert "onto deejay-dev-jobs.fifo" in raised.value.detail
 
 
 async def test_a_queue_refusal_is_named_as_deejay_and_not_posted(monkeypatch) -> None:

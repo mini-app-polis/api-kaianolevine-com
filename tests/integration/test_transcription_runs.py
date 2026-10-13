@@ -27,7 +27,7 @@ from kaianolevine_api.services import transcription_dispatch as dispatch
 
 pytestmark = pytest.mark.asyncio
 
-QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/transcription-jobs"
+QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/transcription-jobs.fifo"
 ISSUER = "https://clerk.kaianolevine.com"
 
 
@@ -218,6 +218,8 @@ async def test_a_file_message_goes_to_transcriptions_queue(monkeypatch) -> None:
     assert result == {"message_id": "m-1"}
     sent = sqs.send_message.call_args.kwargs
     assert sent["QueueUrl"] == QUEUE_URL
+    # FIFO, one group: the queue hands over one job at a time.
+    assert sent["MessageGroupId"] == "transcription"
     assert json.loads(sent["MessageBody"]) == {
         "type": "transcription.run",
         "version": 1,
@@ -245,14 +247,14 @@ async def test_the_cleanup_message_carries_no_file(monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("environment", "expected"),
     [
-        ("production", "transcription-jobs"),
+        ("production", "transcription-jobs.fifo"),
         # An alias must resolve like the canonical name. Compared as a raw
         # string, "prod" would send production's work to the dev queue.
-        ("prod", "transcription-jobs"),
-        ("development", "transcription-dev-jobs"),
+        ("prod", "transcription-jobs.fifo"),
+        ("development", "transcription-dev-jobs.fifo"),
         # A local API has no queue of its own; the one thing it must never
         # reach is production's.
-        ("local", "transcription-dev-jobs"),
+        ("local", "transcription-dev-jobs.fifo"),
     ],
 )
 async def test_the_queue_is_derived_from_cog_and_environment(
@@ -293,7 +295,7 @@ async def test_a_missing_dev_queue_is_reported_by_name(monkeypatch) -> None:
                 settings=get_settings(),
             )
 
-    assert "onto transcription-dev-jobs" in raised.value.detail
+    assert "onto transcription-dev-jobs.fifo" in raised.value.detail
 
 
 async def test_a_queue_refusal_is_named_as_transcription(monkeypatch) -> None:
