@@ -18,8 +18,12 @@ name: deployed
 # suite to run it against the new API (TEST-016, ADR-012):
 #   common-python-utils — the cogs call this API through that library's
 #     client, so their suite lives there, next to the catalog it checks;
-#   website-astro-wcs, website-astro-software — the sites call it from the
-#     browser, not through that client, so each keeps its own read-only suite. Triggering on the deploy rather than on the push means the suite
+#   website-astro-wcs, website-astro-software, website-astro-wcsmn — the
+#     sites call it from the browser, not through that client, so each keeps
+#     its own read-only suite;
+#   ecosystem-standards — its release job publishes the standards catalog
+#     here, so it keeps a read-only suite for that one call.
+# Triggering on the deploy rather than on the push means the suite
 # meets the new API, not the one it replaced. Production only gets the
 # read-only smoke test: the contract suite writes data and never runs there.
 #
@@ -88,6 +92,8 @@ jobs:
             common-python-utils
             website-astro-wcs
             website-astro-software
+            website-astro-wcsmn
+            ecosystem-standards
           permission-contents: write
 
       - name: Run the contract suites against the new API
@@ -95,7 +101,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SHA: ${{ github.event.deployment.sha }}
         run: |
-          for repo in common-python-utils website-astro-wcs website-astro-software; do
+          for repo in common-python-utils website-astro-wcs website-astro-software website-astro-wcsmn ecosystem-standards; do
             gh api "repos/mini-app-polis/$repo/dispatches" \
               -f event_type=dev-api-deployed \
               -f "client_payload[api_sha]=$SHA"
