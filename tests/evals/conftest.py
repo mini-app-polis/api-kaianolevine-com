@@ -9,6 +9,9 @@ Run locally with:
 
 Note: tests/integration/conftest.py (which resets a local *_test database)
 does not apply here. The eval harness uses
-get_sessionmaker(settings.DATABASE_URL) directly to write to production,
-which is why it runs only when RUN_EVALS=1 is set (test_harness.py).
+get_sessionmaker(settings.DATABASE_URL) directly, so it writes to whatever
+database the environment names — the development database under the repo's
+Doppler `dev` config. It runs only when RUN_EVALS=1 is set, and refuses to
+collect at all when the process resolves as production (test_harness.py,
+CD-033).
 """

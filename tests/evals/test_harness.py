@@ -1,13 +1,23 @@
-"""WCS Q&A eval harness — local only.
+"""WCS Q&A eval harness — local only, never against production.
 
 Run with:
     RUN_EVALS=1 doppler run -- pytest tests/evals/
 
-Opt-in (CD-033): it writes to production and spends on real OpenAI and
-Anthropic calls, so it is skipped unless RUN_EVALS=1 is set — having the
-keys in the environment is not enough, or a plain `doppler run -- pytest`
-would run it. Also skipped anywhere lacking OPENAI_API_KEY +
-ANTHROPIC_API_KEY. For each question in questions.yaml:
+doppler.yaml pins this repo to the shared `dev` config, so that command
+targets the development database and ENVIRONMENT=development. The harness
+still writes rows and spends on real OpenAI and Anthropic calls, so it is
+opt-in (CD-033): skipped unless RUN_EVALS=1 is set — having the keys in the
+environment is not enough, or a plain `doppler run -- pytest` would run it.
+Also skipped anywhere lacking OPENAI_API_KEY + ANTHROPIC_API_KEY.
+
+It refuses outright when the process resolves as production (the fleet's
+environment resolver: ENVIRONMENT, then Railway's environment name). The
+opt-in decides whether it runs; the guard decides where it may not. A
+collection error rather than a skip, so pointing it at production by
+mistake is loud. tests/evals/ is also outside pytest's testpaths, so a bare
+`pytest` never collects it.
+
+For each question in questions.yaml:
 
   1. POST /v1/wcs/ask via in-process ASGI transport (real DB + real OpenAI +
      real Anthropic — auth is overridden so the harness runs as a configured
@@ -33,6 +43,7 @@ import httpx
 import pytest
 import yaml
 from anthropic import AsyncAnthropic
+from mini_app_polis.environment import Environment, resolve
 
 from kaianolevine_api.agents.wcs_qa.prompts import JUDGE_PROMPT
 from kaianolevine_api.auth import get_current_owner
@@ -103,9 +114,23 @@ async def eval_client() -> AsyncIterator[httpx.AsyncClient]:
     app.dependency_overrides.pop(get_current_owner, None)
 
 
+_ENVIRONMENT, _ENVIRONMENT_SOURCE = resolve()
+if _ENVIRONMENT is Environment.PRODUCTION:
+    # Raised at import, so collection fails rather than the suite skipping
+    # quietly. Checked before the opt-in: a production process should not
+    # even report "skipped" as though RUN_EVALS were the only thing missing.
+    raise RuntimeError(
+        "Refusing to run the WCS Q&A eval harness in production "
+        f"({_ENVIRONMENT_SOURCE} resolves to {_ENVIRONMENT.value}). It writes "
+        "eval rows and calls paid models; run it against the dev config: "
+        "RUN_EVALS=1 doppler run -- pytest tests/evals/"
+    )
+
 _SKIP_REASONS: list[str] = []
 if os.environ.get("RUN_EVALS") != "1":
-    _SKIP_REASONS.append("eval harness writes to production; set RUN_EVALS=1 to run it")
+    _SKIP_REASONS.append(
+        "eval harness writes eval rows and calls paid models; set RUN_EVALS=1 to run it"
+    )
 if not (os.environ.get("OPENAI_API_KEY") and os.environ.get("ANTHROPIC_API_KEY")):
     _SKIP_REASONS.append("eval harness requires OPENAI_API_KEY and ANTHROPIC_API_KEY")
 if not _QUESTIONS:
@@ -152,7 +177,7 @@ async def test_eval_question(
         agent_answer=data["answer"],
     )
 
-    # 4. Persist on the configured DATABASE_URL (production for normal runs).
+    # 4. Persist on the configured DATABASE_URL (development; see the guard above).
     sm = get_sessionmaker(settings.DATABASE_URL)
     async with sm() as session:
         await write_eval_run(

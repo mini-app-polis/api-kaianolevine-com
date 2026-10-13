@@ -105,10 +105,10 @@ Offline eval lives under `tests/evals/` (not part of normal CI unless keys are p
 **Harness:** `tests/evals/test_harness.py`, run locally with:
 
 ```bash
-doppler run -- pytest tests/evals/
+RUN_EVALS=1 doppler run -- pytest tests/evals/
 ```
 
-Requires `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and a non-empty question set. For each question:
+Requires `RUN_EVALS=1`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and a non-empty question set. `doppler.yaml` pins local runs to the `dev` config, so rows land in the development database. The harness refuses to collect when the process resolves as production (CD-033) — there is no supported way to point it at production. For each question:
 
 1. `POST /v1/wcs/ask` via in-process ASGI (`httpx` + dependency override on `get_current_owner`; user defaults to `WCS_QA_EVAL_USER_ID` or `dev-owner`).
 2. **Auto-metrics** (`tests/evals/metrics.py`): `source_recall` and `source_precision` comparing cited IDs to `ideal_source_ids`.
