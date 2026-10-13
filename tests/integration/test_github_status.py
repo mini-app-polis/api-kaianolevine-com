@@ -637,3 +637,122 @@ async def test_skip_ci_release_commit_does_not_read_as_unchecked(
     # The counts follow the corrected state, not the head commit's emptiness.
     assert data["totals"]["builds"]["success"] == 1
     assert data["totals"]["builds"]["none"] == 1
+
+
+# ── Boot warm-up ─────────────────────────────────────────────────────────
+
+
+@respx.mock
+async def test_warm_fills_the_snapshot_so_the_first_request_skips_github(
+    client, dashboard
+) -> None:
+    """The reason warm() exists: every deploy starts a process with no
+    snapshot, and without it the first visitor paid for the GitHub fetch."""
+    route = respx.post(GRAPHQL).mock(
+        return_value=httpx.Response(200, json=_page([_repo("warmed")]))
+    )
+
+    await gh.warm(get_settings())
+    assert route.call_count == 1
+
+    resp = await client.get("/v1/github/status")
+    assert resp.status_code == 200
+    assert [r["name"] for r in resp.json()["data"]["repositories"]] == ["warmed"]
+    assert route.call_count == 1, "the request was served from the warmed snapshot"
+
+
+@respx.mock
+async def test_warm_without_a_token_does_not_call_github(monkeypatch) -> None:
+    settings = get_settings()
+    for name in ("GITHUB_DASHBOARD_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.setattr(settings, name, None, raising=False)
+    route = respx.post(GRAPHQL).mock(return_value=httpx.Response(500))
+
+    await gh.warm(settings)
+
+    assert route.call_count == 0
+
+
+@respx.mock
+async def test_warm_swallows_github_failure_and_the_request_retries(
+    client, dashboard
+) -> None:
+    """Boot must not fail on GitHub. The first request tries again and
+    reports the outage the same way it always has."""
+    route = respx.post(GRAPHQL).mock(return_value=httpx.Response(502))
+
+    await gh.warm(get_settings())  # does not raise
+
+    resp = await client.get("/v1/github/status")
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "upstream_error"
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_warm_stops_waiting_but_the_fetch_finishes(
+    dashboard, monkeypatch
+) -> None:
+    """A slow GitHub delays boot by the timeout, not by the fetch. The fetch
+    carries on and lands in the snapshot."""
+    import asyncio
+
+    monkeypatch.setattr(gh, "WARM_TIMEOUT_SECS", 0.01)
+    release = asyncio.Event()
+
+    async def slow(_request):
+        await release.wait()
+        return httpx.Response(200, json=_page([_repo("late")]))
+
+    respx.post(GRAPHQL).mock(side_effect=slow)
+
+    await gh.warm(get_settings())  # returns at the timeout
+    assert gh._snapshot["payload"] is None
+
+    release.set()
+    await gh._warming["task"]
+    assert [r.name for r in gh._snapshot["payload"].repositories] == ["late"]
+
+
+# ── Background refresh ───────────────────────────────────────────────────
+
+
+@respx.mock
+async def test_refresh_loop_updates_the_snapshot_without_a_request(
+    dashboard, monkeypatch
+) -> None:
+    """Why the loop exists: without it, a quiet page's next visitor was
+    served a snapshot as old as the quiet stretch."""
+    import asyncio
+
+    monkeypatch.setattr(gh, "cache_ttl", lambda _settings: 0)
+    route = respx.post(GRAPHQL).mock(
+        side_effect=[
+            httpx.Response(200, json=_page([_repo("before")])),
+            httpx.Response(200, json=_page([_repo("after")])),
+        ]
+    )
+    await gh.warm(get_settings())
+    assert [r.name for r in gh._snapshot["payload"].repositories] == ["before"]
+
+    task = asyncio.create_task(gh.refresh_loop(get_settings()))
+    try:
+        async with asyncio.timeout(5):
+            while route.call_count < 2:
+                await asyncio.sleep(0.05)
+    finally:
+        task.cancel()
+
+    assert [r.name for r in gh._snapshot["payload"].repositories] == ["after"]
+
+
+@respx.mock
+async def test_refresh_loop_without_a_token_exits_at_once(monkeypatch) -> None:
+    settings = get_settings()
+    for name in ("GITHUB_DASHBOARD_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.setattr(settings, name, None, raising=False)
+    route = respx.post(GRAPHQL).mock(return_value=httpx.Response(500))
+
+    await gh.refresh_loop(settings)  # returns rather than looping
+
+    assert route.call_count == 0

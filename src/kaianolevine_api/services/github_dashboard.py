@@ -42,6 +42,7 @@ import httpx
 import yaml
 from mini_app_polis.logger import (
     LOG_FAILURE,
+    LOG_START,
     LOG_WARNING,
     get_logger,
     with_log_prefix,
@@ -550,6 +551,15 @@ _refresh_lock = asyncio.Lock()
 #: second expired request joins it rather than starting another.
 _background: dict[str, asyncio.Task[None] | None] = {"task": None}
 
+#: How long boot waits for the first snapshot before letting the process
+#: report healthy anyway. Comfortably past the ~6.7 s a refresh takes, and
+#: far inside Railway's healthcheck window, so a slow GitHub delays a deploy
+#: by seconds and an unreachable one never blocks it.
+WARM_TIMEOUT_SECS = 20.0
+
+#: The boot-time fetch, held so it survives a warm() that stopped waiting.
+_warming: dict[str, asyncio.Task[GithubStatus] | None] = {"task": None}
+
 
 def reset_cache() -> None:
     """Drop the cached snapshot. Tests call this; nothing else should."""
@@ -559,6 +569,10 @@ def reset_cache() -> None:
     if task is not None and not task.done():
         task.cancel()
     _background["task"] = None
+    warming = _warming["task"]
+    if warming is not None and not warming.done():
+        warming.cancel()
+    _warming["task"] = None
     # Defensive: tests substitute load_config with a plain callable.
     clear = getattr(load_config, "cache_clear", None)
     if clear is not None:
@@ -694,3 +708,77 @@ async def _refresh_in_background(
 
         _snapshot["payload"] = payload
         _snapshot["monotonic"] = time.monotonic()
+
+
+async def warm(settings: Settings) -> None:
+    """Fill the snapshot at boot, before the process reports healthy.
+
+    Stale-while-revalidate keeps every request after the first one fast, but
+    a new process starts with no snapshot, and this service deploys several
+    times a day. Without this, the first visitor after each deploy (and
+    anyone arriving during the same few seconds) waited the full GitHub
+    fetch. Run from the lifespan, it happens before /health answers, and
+    Railway keeps the old container serving until then.
+
+    Bounded by WARM_TIMEOUT_SECS and never raises. On timeout the fetch
+    keeps running under the refresh lock, so early requests join it rather
+    than starting another. On failure the first request tries again, and
+    gets the 502 if GitHub is still down, exactly as before.
+    """
+    if not settings.github_dashboard_token:
+        return
+
+    task = asyncio.create_task(get_status(settings))
+    _warming["task"] = task
+    # Mark a late failure as handled; the first request will report it.
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())
+
+    started = time.monotonic()
+    try:
+        await asyncio.wait_for(asyncio.shield(task), WARM_TIMEOUT_SECS)
+    except TimeoutError:
+        logger.warning(
+            with_log_prefix(
+                LOG_WARNING,
+                f"github dashboard: warm-up still running after {WARM_TIMEOUT_SECS:.0f}s; "
+                "first requests will wait on it",
+            )
+        )
+        return
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.warning(
+            with_log_prefix(
+                LOG_WARNING,
+                f"github dashboard: warm-up failed ({type(exc).__name__}); "
+                "first request will retry",
+            )
+        )
+        return
+
+    logger.info(
+        with_log_prefix(
+            LOG_START,
+            f"github dashboard: snapshot warmed in {time.monotonic() - started:.1f}s",
+        )
+    )
+
+
+async def refresh_loop(settings: Settings) -> None:
+    """Refresh the snapshot every TTL, whether or not anyone is asking.
+
+    Stale-while-revalidate alone only refreshes when a request arrives past
+    the TTL, and that request is still answered with the old snapshot. On a
+    page visited a few times an hour, the visitor after a quiet stretch saw
+    a board as old as the gap since the last visit, whatever the TTL. With
+    this loop the snapshot is never much older than the TTL, and requests
+    almost never find it expired.
+
+    Started from the lifespan after warm(). Never raises: a failed refresh
+    marks the snapshot stale and the next tick tries again.
+    """
+    if not settings.github_dashboard_token:
+        return
+    while True:
+        ttl = cache_ttl(settings)
+        await asyncio.sleep(max(ttl, 1))
+        await _refresh_in_background(settings, load_config(), ttl)

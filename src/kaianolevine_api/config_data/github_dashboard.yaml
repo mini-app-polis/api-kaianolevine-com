@@ -9,9 +9,12 @@
 version: 1
 
 # How long one fetched snapshot is served before GitHub is called again.
-# The dashboard is a portfolio panel, not an oncall board: five minutes
-# keeps the GraphQL cost near zero and the page honest enough.
-cache_ttl_seconds: 300
+# Also the interval of the background refresh, so the board is never more
+# than about this old. Sixty seconds shows a finished build within a minute,
+# and at a few GraphQL points per refresh it spends well under 5% of the
+# hourly budget. Lowered from 300 in Oct 2026: five minutes read as broken
+# while watching a CI run land.
+cache_ttl_seconds: 60
 
 # Organizations to enumerate. One GraphQL query per org per refresh.
 #
