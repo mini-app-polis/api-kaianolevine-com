@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.4...v2.7.0) (2026-10-13)
+
+
+### Features
+
+* **cogs:** make the deejay and transcription queues FIFO ([900f2e3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/900f2e3b239db9bf4fab7b81152d86aaa241721a))
+
 ## [2.6.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.3...v2.6.4) (2026-10-13)
 
 
