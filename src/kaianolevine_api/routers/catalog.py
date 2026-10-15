@@ -46,7 +46,9 @@ async def list_catalog(
     settings = get_settings()
 
     stmt = select(DbCatalog).order_by(
-        DbCatalog.play_count.desc(), DbCatalog.last_played.desc().nullslast()
+        DbCatalog.play_count.desc(),
+        DbCatalog.last_played.desc().nullslast(),
+        DbCatalog.id,
     )
 
     if artist:
