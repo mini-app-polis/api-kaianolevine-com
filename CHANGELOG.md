@@ -1,3 +1,11 @@
+## [2.9.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.0...v2.9.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge five songs held under two spellings ([3021f39](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3021f393d932f44b591a8e61daea4fdb6e745972))
+* **ingest): read an underscore artist list as commas, fix(data:** merge songs split by underscore artists and two versions ([2e4555d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2e4555d0ca90568237dec2a44dec6be1f93da423))
+
 # [2.9.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.2...v2.9.0) (2026-10-15)
 
 
