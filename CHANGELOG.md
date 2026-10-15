@@ -1,3 +1,13 @@
+## [2.7.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.5...v2.7.6) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data): restore the 2023-02-04 Charlotte Westie Fest set, fix(api:** return label, remix and comment on track responses ([767cd13](https://github.com/mini-app-polis/api-kaianolevine-com/commit/767cd13cc863eb4bbd49d2d70765cca05113508b))
+* **data:** correct the 2022-11-19 DCSX Saturday song lengths ([8cf7309](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8cf730978d7d5a9b8254b1c963f254d5280e9ba4))
+* **data:** count Coke Henny Pt 2 as Coke & Henny Pt. 2 ([0abe98f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0abe98f38c467dbc457a49c92bdd89e171bbdf56))
+* **data:** restore two 2023 plays dropped for a blank artist ([4f0e098](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4f0e098f275392267cc0857afeabbfc7914a1613))
+
 ## [2.7.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.4...v2.7.5) (2026-10-15)
 
 
