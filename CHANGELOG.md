@@ -1,3 +1,10 @@
+## [2.8.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.0...v2.8.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** file the last 43 misfiled version plays ([ab655bd](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ab655bdaad1d7d15a121d98149e467d3294d1093))
+
 # [2.8.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.8...v2.8.0) (2026-10-15)
 
 
