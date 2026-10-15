@@ -1,3 +1,11 @@
+## [2.7.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.4...v2.7.5) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** count DJ Don't (Remix) as DJ Don't ([d37dd08](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d37dd08437ab0115bd2ae48c9e00b30b02e6f71e))
+* **data:** honour the Remix column on plays from 2022 on ([65e6bdf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/65e6bdfe1f15e4b346024d6c4fc20b7854fc00f4))
+
 ## [2.7.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.3...v2.7.4) (2026-10-15)
 
 
