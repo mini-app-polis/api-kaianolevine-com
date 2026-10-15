@@ -1,3 +1,10 @@
+## [2.7.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.0...v2.7.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **stats:** count one song once across catalog owners ([5ebe5cf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5ebe5cf28ed3e4db49ca04053f8fd700d21eb0b1))
+
 # [2.7.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.4...v2.7.0) (2026-10-13)
 
 
