@@ -16,6 +16,7 @@ from ..models import TrackCatalog
 from ..schemas import IngestTrack
 from .normalization import normalize_for_matching
 from .song_identity import (
+    catalog_artist,
     catalog_title_key,
     display_title,
     loose_title_key,
@@ -108,7 +109,8 @@ async def reconcile_set_tracks(
     # Prefetch all catalogs matching the normalized (title, artist) pairs in this set.
     # This removes the per-track SELECT and speeds up reconciliation significantly.
     # A play's song includes its version: the Remix column's when it names one,
-    # and a version in the title is kept in the key (see song_identity).
+    # and a version in the title is kept in the key (see song_identity). An
+    # artist list exported with "_" is read as ",".
     normalized_pairs: list[tuple[str, str]] = []
     normalized_set: set[tuple[str, str]] = set()
     work_items: list[tuple[IngestTrack, str, str, str, bool]] = []
@@ -116,7 +118,9 @@ async def reconcile_set_tracks(
     for ingest_track in ingest_tracks:
         display = display_title(ingest_track.title, ingest_track.remix)
         norm_title = catalog_title_key(display)
-        _, norm_artist = normalize_for_matching(display, ingest_track.artist)
+        _, norm_artist = normalize_for_matching(
+            display, catalog_artist(ingest_track.artist)
+        )
         is_version = bool(version_tokens(display))
         pair = (norm_title, norm_artist)
         if pair not in normalized_set:
@@ -266,7 +270,7 @@ async def reconcile_set_tracks(
         if found is None:
             found = catalog_by_pair.get(pair)
         if found is None and is_version:
-            found = await find_version(display, ingest_track.artist)
+            found = await find_version(display, catalog_artist(ingest_track.artist))
         if found is not None and found.owner_id != owner_id:
             new_title = found.title
             new_keys = (found.title_normalized, found.artist_normalized)
@@ -280,7 +284,7 @@ async def reconcile_set_tracks(
             catalog = TrackCatalog(
                 owner_id=owner_id,
                 title=new_title,
-                artist=ingest_track.artist,
+                artist=catalog_artist(ingest_track.artist),
                 title_normalized=new_keys[0],
                 artist_normalized=new_keys[1],
                 source="play_history",

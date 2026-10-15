@@ -48,6 +48,15 @@ _FURTHER_ARTISTS = re.compile(
 )
 
 
+_ARTIST_UNDERSCORE = re.compile(r"(?<!\d)\s*_\s*(?!\d)")
+
+
+def catalog_artist(artist: str) -> str:
+    """The artist as the catalog holds it: set files from 2024 on export a
+    list of artists with "_" for ",". A "_" between digits is left alone."""
+    return _ARTIST_UNDERSCORE.sub(", ", artist)
+
+
 def _compact(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 

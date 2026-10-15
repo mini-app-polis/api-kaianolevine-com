@@ -207,3 +207,13 @@ async def test_a_row_seen_before_files_where_it_did_before(async_engine) -> None
             await session.execute(select(DbTrack).where(DbTrack.set_id == second.id))
         ).scalar_one()
         assert track.catalog_id == redbone.id
+
+
+async def test_underscore_artist_joins_the_comma_spelling(client) -> None:
+    await _ingest(
+        client, "2026-01-09", [_track(1, "Fair Play", "Malaki, Lucy Mcwilliams")]
+    )
+    await _ingest(
+        client, "2026-01-10", [_track(1, "Fair Play", "Malaki_ Lucy Mcwilliams")]
+    )
+    assert await _songs(client) == {"Fair Play": 2}

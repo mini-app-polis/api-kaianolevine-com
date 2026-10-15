@@ -1,4 +1,5 @@
 from kaianolevine_api.services.song_identity import (
+    catalog_artist,
     catalog_title_key,
     display_title,
     is_release_label,
@@ -97,3 +98,10 @@ def test_file_tags_are_not_versions():
     )
     for version in ["AcousticMix", "Piano Acoustic", "Live", "Stripped"]:
         assert not is_release_label(version), version
+
+
+def test_underscore_artist_list_reads_as_commas():
+    assert catalog_artist("Malaki_ Lucy Mcwilliams") == "Malaki, Lucy Mcwilliams"
+    assert catalog_artist("Doja Cat_SZA") == "Doja Cat, SZA"
+    assert catalog_artist("Harmstonsheeks 115_116") == "Harmstonsheeks 115_116"
+    assert catalog_artist("Ash, Naila") == "Ash, Naila"
