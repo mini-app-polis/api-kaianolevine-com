@@ -1,3 +1,10 @@
+## [2.7.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.1...v2.7.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** restore nine plays dropped for a blank artist ([6d94aa3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6d94aa3d8805e3534472211b020ee1a86deea1e1))
+
 ## [2.7.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.0...v2.7.1) (2026-10-15)
 
 
