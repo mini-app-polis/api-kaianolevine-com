@@ -1,3 +1,10 @@
+## [2.9.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.1...v2.9.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge eight songs held under two spellings ([3d3f87c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3d3f87c8f5302c7dae8a21b66f8b3b77cc74ebb5))
+
 ## [2.9.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.0...v2.9.1) (2026-10-15)
 
 
