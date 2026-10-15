@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.8...v2.8.0) (2026-10-15)
+
+
+### Features
+
+* **identity:** declare the db-ops machine ([eeac87d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/eeac87d17e6ff0930ba17bbabb24b51ea5458c21))
+
 ## [2.7.8](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.7...v2.7.8) (2026-10-15)
 
 
