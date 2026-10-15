@@ -250,7 +250,7 @@ async def test_passthrough_event_uses_the_default_github_endpoint(
 async def test_cog_reports_reach_the_runs_webhook(
     client: AsyncClient, channels
 ) -> None:
-    """Every severity, including crashes — a cog's reports stay together."""
+    """A message that is not a failing run report goes to runs and nowhere else."""
     runs = respx.post(RUNS_URL).mock(return_value=Response(204))
     errors = respx.post(ERRORS_URL).mock(return_value=Response(204))
 
@@ -262,6 +262,67 @@ async def test_cog_reports_reach_the_runs_webhook(
     assert resp.status_code == 200
     assert runs.called
     assert not errors.called
+
+
+def _report(severity: str) -> dict:
+    """A run report as mini_app_polis.pipeline_status renders one."""
+    return {
+        "embeds": [
+            {
+                "title": "db-ops · db-backup",
+                "footer": {
+                    "text": f"{severity} · flow_inline · pipeline_reliability · run r1"
+                },
+            }
+        ],
+        "username": "db-ops",
+    }
+
+
+@respx.mock
+@pytest.mark.asyncio
+@pytest.mark.parametrize("severity", ["WARN", "ERROR", "CRITICAL"])
+async def test_failing_run_reports_are_copied_to_errors(
+    client: AsyncClient, channels, severity: str
+) -> None:
+    """Runs keeps the whole record; errors also hears about the failures."""
+    runs = respx.post(RUNS_URL).mock(return_value=Response(204))
+    errors = respx.post(ERRORS_URL).mock(return_value=Response(204))
+
+    resp = await client.post("/v1/notify", json=_report(severity))
+
+    assert resp.status_code == 200
+    assert runs.called
+    assert errors.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_successful_run_reports_stay_in_runs(
+    client: AsyncClient, channels
+) -> None:
+    runs = respx.post(RUNS_URL).mock(return_value=Response(204))
+    errors = respx.post(ERRORS_URL).mock(return_value=Response(204))
+
+    resp = await client.post("/v1/notify", json=_report("SUCCESS"))
+
+    assert resp.status_code == 200
+    assert runs.called
+    assert not errors.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_failed_errors_copy_does_not_fail_the_report(
+    client: AsyncClient, channels
+) -> None:
+    """The report reached runs; losing the copy is not the caller's problem."""
+    respx.post(RUNS_URL).mock(return_value=Response(204))
+    respx.post(ERRORS_URL).mock(return_value=Response(500))
+
+    resp = await client.post("/v1/notify", json=_report("WARN"))
+
+    assert resp.status_code == 200
 
 
 @respx.mock
