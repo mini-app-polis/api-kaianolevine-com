@@ -1,3 +1,10 @@
+## [2.7.8](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.7...v2.7.8) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** split plain plays out of six version entries ([c0f82f6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c0f82f640956582c9f8d6789e47a2c77457bbaf5))
+
 ## [2.7.7](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.6...v2.7.7) (2026-10-15)
 
 
