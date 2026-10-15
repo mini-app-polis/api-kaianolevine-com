@@ -18,7 +18,9 @@ from .normalization import normalize_for_matching
 from .song_identity import (
     catalog_artist,
     catalog_title_key,
+    clean_genre,
     display_title,
+    is_placeholder,
     loose_title_key,
     main_artist_key,
     version_tokens,
@@ -115,6 +117,9 @@ async def reconcile_set_tracks(
     normalized_set: set[tuple[str, str]] = set()
     work_items: list[tuple[IngestTrack, str, str, str, bool]] = []
 
+    ingest_tracks = [
+        t.model_copy(update={"genre": clean_genre(t.genre)}) for t in ingest_tracks
+    ]
     for ingest_track in ingest_tracks:
         display = display_title(ingest_track.title, ingest_track.remix)
         norm_title = catalog_title_key(display)
@@ -264,6 +269,12 @@ async def reconcile_set_tracks(
         )
         db_track.data_quality = _data_quality_for_track(ingest_track)
         session.add(db_track)
+
+        # A placeholder ("---SILENCE---") stays in the set as played but is
+        # not a song: no catalog entry, so the stats never count it.
+        if is_placeholder(ingest_track.title):
+            catalog_unchanged += 1
+            continue
 
         new_title, new_keys = display, pair
         found = await find_precedent(ingest_track)

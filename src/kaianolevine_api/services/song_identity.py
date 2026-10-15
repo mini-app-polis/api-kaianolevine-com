@@ -48,6 +48,46 @@ _FURTHER_ARTISTS = re.compile(
 )
 
 
+# Genre as the set files spell it, cleaned so one genre reads one way: a
+# tempo suffix ("Pop - 100") is dropped, a value that is not a genre ("---",
+# "(148)", "2020s", "Unknown") is cleared, and the known variant spellings
+# take the one used most ("Hip Hop" -> "Hip-Hop").
+_GENRE_TEMPO = re.compile(r"\s+-\s+\d+(\.\d+)?$")
+_NOT_A_GENRE = re.compile(r"^[\W\d_]*$|^\d{4}s$|^unknown$", re.IGNORECASE)
+_GENRE_SPELLING = {
+    "pop": "Pop",
+    "alternativerock": "Alternative Rock",
+    "dancepop": "Dance/Pop",
+    "electropop": "Electropop",
+    "hiphop": "Hip-Hop",
+    "jazzfunk": "Jazz-funk",
+    "singersongwriter": "Singer-Songwriter",
+    "contemporaryrb": "Contemporary R&B",
+    "soundtracks": "Soundtrack",
+    "instrument": "Instrumental",
+}
+
+
+def clean_genre(genre: str | None) -> str | None:
+    """The genre as the catalog holds it, or None when it is not a genre."""
+    if genre is None:
+        return None
+    genre = _GENRE_TEMPO.sub("", genre.strip())
+    if _NOT_A_GENRE.match(genre):
+        return None
+    key = re.sub(r"[^a-z0-9]+", "", genre.lower())
+    return _GENRE_SPELLING.get(key, genre)
+
+
+_PLACEHOLDER = re.compile(r"^-{2,}\s*silence\s*-{2,}$", re.IGNORECASE)
+
+
+def is_placeholder(title: str) -> bool:
+    """A placeholder row, not a song: "---SILENCE---" is logged as played
+    in a set but is never counted."""
+    return bool(_PLACEHOLDER.match(title.strip()))
+
+
 _ARTIST_UNDERSCORE = re.compile(r"(?<!\d)\s*_\s*(?!\d)")
 
 

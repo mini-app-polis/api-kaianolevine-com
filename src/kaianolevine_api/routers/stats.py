@@ -32,6 +32,10 @@ from ..services.year_summaries import (
 
 router = APIRouter()
 
+# A play counts once it is a song: a placeholder ("---SILENCE---") is kept in
+# its set with no catalog entry and never counted.
+counted = DbTrack.catalog_id.is_not(None)
+
 
 @router.get(
     "/stats/overview",
@@ -49,7 +53,7 @@ async def stats_overview(
         await session.execute(select(func.count()).select_from(DbSet))
     ).scalar_one()
     total_plays = (
-        await session.execute(select(func.count()).select_from(DbTrack))
+        await session.execute(select(func.count()).select_from(DbTrack).where(counted))
     ).scalar_one()
 
     songs = song_ids()
@@ -72,6 +76,7 @@ async def stats_overview(
     most_played = (
         await session.execute(
             select(DbTrack.artist, func.count(DbTrack.id))
+            .where(counted)
             .group_by(DbTrack.artist)
             .order_by(func.count(DbTrack.id).desc())
             .limit(1)
@@ -110,7 +115,7 @@ async def stats_by_year(
                 func.count(DbTrack.id).label("track_count"),
             )
             .select_from(DbSet)
-            .outerjoin(DbTrack, DbTrack.set_id == DbSet.id)
+            .outerjoin(DbTrack, (DbTrack.set_id == DbSet.id) & counted)
             .group_by(year_expr)
             .order_by(year_expr.asc())
         )
@@ -145,6 +150,7 @@ async def stats_top_artists(
     rows = (
         await session.execute(
             select(DbTrack.artist, func.count(DbTrack.id))
+            .where(counted)
             .group_by(DbTrack.artist)
             .order_by(func.count(DbTrack.id).desc())
             .limit(10)
@@ -155,7 +161,9 @@ async def stats_top_artists(
         StatsTopArtistItem(artist=artist, play_count=count) for artist, count in rows
     ]
     total = (
-        await session.execute(select(func.count(func.distinct(DbTrack.artist))))
+        await session.execute(
+            select(func.count(func.distinct(DbTrack.artist))).where(counted)
+        )
     ).scalar_one()
     return success_envelope(
         data, count=len(data), total=total, version=settings.API_VERSION
