@@ -2,6 +2,7 @@ from kaianolevine_api.services.song_identity import (
     catalog_artist,
     catalog_title_key,
     display_title,
+    is_placeholder,
     is_release_label,
     loose_title_key,
     main_artist_key,
@@ -105,3 +106,10 @@ def test_underscore_artist_list_reads_as_commas():
     assert catalog_artist("Doja Cat_SZA") == "Doja Cat, SZA"
     assert catalog_artist("Harmstonsheeks 115_116") == "Harmstonsheeks 115_116"
     assert catalog_artist("Ash, Naila") == "Ash, Naila"
+
+
+def test_silence_placeholder():
+    assert is_placeholder("---SILENCE---")
+    assert is_placeholder(" -- silence -- ")
+    assert not is_placeholder("Silence")
+    assert not is_placeholder("Behind Silence and Solitude")

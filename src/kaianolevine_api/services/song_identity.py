@@ -48,6 +48,15 @@ _FURTHER_ARTISTS = re.compile(
 )
 
 
+_PLACEHOLDER = re.compile(r"^-{2,}\s*silence\s*-{2,}$", re.IGNORECASE)
+
+
+def is_placeholder(title: str) -> bool:
+    """A placeholder row, not a song: "---SILENCE---" is logged as played
+    in a set but is never counted."""
+    return bool(_PLACEHOLDER.match(title.strip()))
+
+
 _ARTIST_UNDERSCORE = re.compile(r"(?<!\d)\s*_\s*(?!\d)")
 
 

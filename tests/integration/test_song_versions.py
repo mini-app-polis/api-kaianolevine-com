@@ -217,3 +217,19 @@ async def test_underscore_artist_joins_the_comma_spelling(client) -> None:
         client, "2026-01-10", [_track(1, "Fair Play", "Malaki_ Lucy Mcwilliams")]
     )
     assert await _songs(client) == {"Fair Play": 2}
+
+
+async def test_silence_placeholder_is_played_but_never_counted(client) -> None:
+    await _ingest(
+        client,
+        "2026-06-19",
+        [_track(1, "Temple", "Parson James"), _track(2, "---SILENCE---", "---", "---")],
+    )
+    assert await _songs(client) == {"Temple": 1}
+    summary = (await client.get("/v1/stats/summaries/2026")).json()["data"]
+    assert (summary["songs_played"], summary["unique_songs"]) == (1, 1)
+    overview = (await client.get("/v1/stats/overview")).json()["data"]
+    assert overview["total_plays"] == 1
+    sets = (await client.get("/v1/sets?year=2026")).json()["data"]
+    tracks = (await client.get(f"/v1/sets/{sets[0]['id']}/tracks")).json()["data"]
+    assert [t["title"] for t in tracks] == ["Temple", "---SILENCE---"]

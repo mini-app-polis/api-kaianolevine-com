@@ -77,7 +77,10 @@ async def list_year_summaries(session: AsyncSession) -> list[YearSummaryListItem
                 func.max(DbSet.set_date).label("last_set_date"),
             )
             .select_from(DbSet)
-            .outerjoin(DbTrack, DbTrack.set_id == DbSet.id)
+            .outerjoin(
+                DbTrack,
+                (DbTrack.set_id == DbSet.id) & DbTrack.catalog_id.is_not(None),
+            )
             .outerjoin(songs, songs.c.catalog_id == DbTrack.catalog_id)
             .group_by(year_expr)
             .order_by(year_expr.desc())
@@ -120,7 +123,7 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         select(DbTrack, songs.c.song_id)
         .join(DbSet, DbSet.id == DbTrack.set_id)
         .outerjoin(songs, songs.c.catalog_id == DbTrack.catalog_id)
-        .where(in_year)
+        .where(in_year, DbTrack.catalog_id.is_not(None))
         .subquery()
     )
 
