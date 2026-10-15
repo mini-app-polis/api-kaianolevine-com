@@ -1,3 +1,10 @@
+## [2.7.7](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.6...v2.7.7) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** file version plays from 2022 on under their version ([d70fc0e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d70fc0ed7bb76cc4bbf5e78c81ed1ab4942003b8))
+
 ## [2.7.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.5...v2.7.6) (2026-10-15)
 
 
