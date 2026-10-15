@@ -1,3 +1,16 @@
+# [2.9.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.2...v2.9.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): file a repeated row under the song it was filed under before, fix(catalog:** give the catalog list a stable order ([9a961f3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a961f334c2fd20e24c6960db77f04f4f1854f70))
+* **ingest:** ignore file tags in the Remix column ([4cd685e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4cd685e978b3c14d9f57c17ab933d03185a6894c))
+
+
+### Features
+
+* **notify:** copy failing run reports to the errors channel ([47a74ec](https://github.com/mini-app-polis/api-kaianolevine-com/commit/47a74ec2956d4f778a1f9531d4cf19c305e756c3))
+
 ## [2.8.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.1...v2.8.2) (2026-10-15)
 
 
