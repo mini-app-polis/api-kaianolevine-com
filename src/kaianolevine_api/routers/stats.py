@@ -27,6 +27,7 @@ from ..services.year_summaries import (
     list_collection,
     list_year_songs,
     list_year_summaries,
+    song_ids,
 )
 
 router = APIRouter()
@@ -51,10 +52,11 @@ async def stats_overview(
         await session.execute(select(func.count()).select_from(DbTrack))
     ).scalar_one()
 
+    songs = song_ids()
     unique_tracks = (
         await session.execute(
-            select(func.count(func.distinct(DbTrack.catalog_id))).where(
-                DbTrack.catalog_id.is_not(None)
+            select(func.count(func.distinct(songs.c.song_id))).join(
+                DbTrack, DbTrack.catalog_id == songs.c.catalog_id
             )
         )
     ).scalar_one()
@@ -164,7 +166,8 @@ async def stats_top_artists(
     "/stats/top-tracks",
     response_model=Envelope[list[StatsTopTrackItem]],
     summary="Top tracks",
-    description="Most played tracks ranked by catalog play count.",
+    description="Most played tracks ranked by catalog play count, summed "
+    "across every catalog entry of the same song.",
 )
 async def stats_top_tracks(
     session: AsyncSession = Depends(get_db_session),
@@ -172,27 +175,38 @@ async def stats_top_tracks(
     """Return most-played tracks for the authenticated owner."""
     settings = get_settings()
 
-    rows = (
-        (
-            await session.execute(
-                select(DbCatalog).order_by(DbCatalog.play_count.desc()).limit(10)
-            )
+    songs = song_ids()
+    per_song = (
+        select(
+            songs.c.song_id.label("song_id"),
+            func.sum(DbCatalog.play_count).label("play_count"),
         )
-        .scalars()
-        .all()
+        .join(DbCatalog, DbCatalog.id == songs.c.catalog_id)
+        .group_by(songs.c.song_id)
+        .subquery()
     )
+    rows = (
+        await session.execute(
+            select(DbCatalog, per_song.c.play_count)
+            .join(per_song, per_song.c.song_id == DbCatalog.id)
+            .order_by(per_song.c.play_count.desc(), DbCatalog.id)
+            .limit(10)
+        )
+    ).all()
 
     data = [
         StatsTopTrackItem(
             catalog_id=row.id,
             title=row.title,
             artist=row.artist,
-            play_count=row.play_count,
+            play_count=int(play_count),
         )
-        for row in rows
+        for row, play_count in rows
     ]
     total = (
-        await session.execute(select(func.count()).select_from(DbCatalog))
+        await session.execute(
+            select(func.count(func.distinct(songs.c.song_id))).select_from(songs)
+        )
     ).scalar_one()
     return success_envelope(
         data, count=len(data), total=total, version=settings.API_VERSION
@@ -260,7 +274,7 @@ async def stats_year_songs(
     "/stats/collection",
     response_model=Envelope[list[CollectionSong]],
     summary="Complete collection",
-    description="Every song on record, one row per catalog entry with its "
+    description="Every song on record, one row per song with its "
     "versions merged, most played first, marked with the years it was played. "
     "Grows as sets are ingested.",
 )
