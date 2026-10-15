@@ -22,6 +22,8 @@
 -- those sets and catalog entries. A play already at its set and play_order
 -- is left alone, so re-running changes nothing. The catalog's stored play
 -- count and first/last played move with the rows actually inserted.
+-- tracks.id is generated here: production's column has no default (the ORM
+-- supplies it), unlike a database built fresh from 001_init.sql.
 
 WITH patch (set_id, catalog_id, play_order, title, artist, length_secs) AS (
   VALUES
@@ -37,10 +39,10 @@ WITH patch (set_id, catalog_id, play_order, title, artist, length_secs) AS (
 ),
 inserted AS (
   INSERT INTO tracks (
-    owner_id, set_id, catalog_id, play_order, title, artist, length_secs, data_quality
+    id, owner_id, set_id, catalog_id, play_order, title, artist, length_secs, data_quality
   )
   SELECT
-    s.owner_id, s.id, c.id, p.play_order, p.title, p.artist, p.length_secs,
+    gen_random_uuid(), s.owner_id, s.id, c.id, p.play_order, p.title, p.artist, p.length_secs,
     CASE WHEN p.length_secs IS NULL THEN 'minimal' ELSE 'partial' END
   FROM patch p
   JOIN sets s ON s.id = p.set_id::uuid
