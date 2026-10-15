@@ -1,3 +1,10 @@
+## [2.8.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.1...v2.8.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): file a play under its version from the Remix column and title, fix(data:** key version catalog entries by their full title ([533f43a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/533f43a735f4d0cbeabb37387a5d0c640c84534f))
+
 ## [2.8.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.0...v2.8.1) (2026-10-15)
 
 
