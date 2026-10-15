@@ -30,6 +30,16 @@ _RELEASE_LABEL = re.compile(
     r"|pre release|explicit version|clean version|instrumental)$",
     re.IGNORECASE,
 )
+# File tags left in the Remix column of routine music: a bitrate, a tempo,
+# an intro length, a routine note, a YouTube video id.
+_FILE_TAG = re.compile(
+    r"\d+\s*kbps|\d+\s*(tempo|bpm)\b|\d+\s*sec\s*intro|\broutine\b",
+    re.IGNORECASE,
+)
+_VIDEO_ID = re.compile(r"^(?=.*[a-z])(?=(.*[A-Z]){2})[A-Za-z0-9_-]{11}$")
+_VERSION_WORD = re.compile(
+    r"remix|mix|edit|acoustic|live|version|session|cover|piano", re.IGNORECASE
+)
 _BRACKETED = re.compile(r"[\[(]([^\])]*)[\])]")
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
 _FURTHER_ARTISTS = re.compile(
@@ -43,8 +53,11 @@ def _compact(text: str) -> str:
 
 
 def is_release_label(text: str) -> bool:
-    """True for a label that does not make a different recording."""
-    return bool(_RELEASE_LABEL.match(text.strip()))
+    """True for a label or file tag that does not make a different recording."""
+    text = text.strip()
+    if _RELEASE_LABEL.match(text) or _FILE_TAG.search(text):
+        return True
+    return bool(_VIDEO_ID.match(text)) and not _VERSION_WORD.search(text)
 
 
 def version_tokens(title: str) -> list[str]:

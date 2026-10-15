@@ -82,3 +82,18 @@ def test_loose_keys():
     )
     assert main_artist_key("Katja Krasavice x Leony") == "katjakrasavice"
     assert main_artist_key("Alina Baraz feat. Khalid") == "alinabaraz"
+
+
+def test_file_tags_are_not_versions():
+    for tag in [
+        "320kbps4secIntro",
+        "Drowning 100  tempo",
+        "Abi routine final",
+        "EzjvbGijJVE",
+    ]:
+        assert is_release_label(tag), tag
+    assert display_title("Imagine My Frustration", "Abi routine final") == (
+        "Imagine My Frustration"
+    )
+    for version in ["AcousticMix", "Piano Acoustic", "Live", "Stripped"]:
+        assert not is_release_label(version), version
