@@ -1,3 +1,10 @@
+## [2.7.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.3...v2.7.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge catalog entries that are the same recording ([a7df636](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a7df63661abc1b770da026c95340b17198f64d8d))
+
 ## [2.7.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.2...v2.7.3) (2026-10-15)
 
 
