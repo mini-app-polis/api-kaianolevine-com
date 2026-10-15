@@ -15,6 +15,13 @@ from ..models import Track as DbTrack
 from ..models import TrackCatalog
 from ..schemas import IngestTrack
 from .normalization import normalize_for_matching
+from .song_identity import (
+    catalog_title_key,
+    display_title,
+    loose_title_key,
+    main_artist_key,
+    version_tokens,
+)
 
 log = logger_mod.get_logger()
 
@@ -100,19 +107,22 @@ async def reconcile_set_tracks(
 
     # Prefetch all catalogs matching the normalized (title, artist) pairs in this set.
     # This removes the per-track SELECT and speeds up reconciliation significantly.
+    # A play's song includes its version: the Remix column's when it names one,
+    # and a version in the title is kept in the key (see song_identity).
     normalized_pairs: list[tuple[str, str]] = []
     normalized_set: set[tuple[str, str]] = set()
-    work_items: list[tuple[IngestTrack, str, str]] = []
+    work_items: list[tuple[IngestTrack, str, str, str, bool]] = []
 
     for ingest_track in ingest_tracks:
-        norm_title, norm_artist = normalize_for_matching(
-            ingest_track.title, ingest_track.artist
-        )
+        display = display_title(ingest_track.title, ingest_track.remix)
+        norm_title = catalog_title_key(display)
+        _, norm_artist = normalize_for_matching(display, ingest_track.artist)
+        is_version = bool(version_tokens(display))
         pair = (norm_title, norm_artist)
         if pair not in normalized_set:
             normalized_set.add(pair)
             normalized_pairs.append(pair)
-        work_items.append((ingest_track, norm_title, norm_artist))
+        work_items.append((ingest_track, norm_title, norm_artist, display, is_version))
 
     existing_play_orders: set[int] = set()
     if is_reingestion:
@@ -136,7 +146,38 @@ async def reconcile_set_tracks(
             (c.title_normalized, c.artist_normalized): c for c in catalogs
         }
 
-    for ingest_track, norm_title, norm_artist in work_items:
+    # A version with no exact key match may already be in the catalog under
+    # another spelling or owner ("Cruel - Piano Acoustic" for "Cruel" +
+    # "Piano Acoustic"): match it on title + version and main artist, the way
+    # the catalog clean-up migrations did. Loaded once, only when needed.
+    version_index: dict[tuple[str, str], list[TrackCatalog]] | None = None
+
+    async def find_version(display: str, artist: str) -> TrackCatalog | None:
+        nonlocal version_index
+        if version_index is None:
+            version_index = {}
+            for c in (await session.execute(select(TrackCatalog))).scalars():
+                key = (
+                    loose_title_key(c.title + (f" {c.remix}" if c.remix else "")),
+                    main_artist_key(c.artist),
+                )
+                version_index.setdefault(key, []).append(c)
+        matches = version_index.get(
+            (loose_title_key(display), main_artist_key(artist)), []
+        )
+        if not matches:
+            return None
+        _, norm_artist = normalize_for_matching(display, artist)
+        return sorted(
+            matches,
+            key=lambda c: (
+                c.artist_normalized != norm_artist,
+                -(c.play_count or 0),
+                str(c.id),
+            ),
+        )[0]
+
+    for ingest_track, norm_title, norm_artist, display, is_version in work_items:
         pair = (norm_title, norm_artist)
 
         # Persist missing play_order as 0 (DB constraint). For data_quality,
@@ -171,11 +212,15 @@ async def reconcile_set_tracks(
         session.add(db_track)
 
         catalog = catalog_by_pair.get(pair)
+        if catalog is None and is_version:
+            catalog = await find_version(display, ingest_track.artist)
+            if catalog is not None:
+                catalog_by_pair[pair] = catalog
 
         if catalog is None:
             catalog = TrackCatalog(
                 owner_id=owner_id,
-                title=ingest_track.title,
+                title=display,
                 artist=ingest_track.artist,
                 title_normalized=norm_title,
                 artist_normalized=norm_artist,
