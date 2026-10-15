@@ -1,3 +1,10 @@
+## [2.7.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.2...v2.7.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** generate track ids in the blank-artist restore ([c03429a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c03429ad52be4ccf5120946d1fef93bc0f264712))
+
 ## [2.7.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.1...v2.7.2) (2026-10-15)
 
 
