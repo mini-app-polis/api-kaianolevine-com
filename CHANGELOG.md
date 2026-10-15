@@ -1,3 +1,12 @@
+## [2.9.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.2...v2.9.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): clean genre spellings on ingest, fix(data:** one spelling per genre ([830a5e9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/830a5e937f644a31ee4af0e6b84f84e0b3bd3d24))
+* **stats): never count the silence placeholder, fix(data:** stop counting the silence plays already ingested ([aeea0d3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/aeea0d38daf38afecfbb8b1a2aebf3831597a25c))
+* **stats:** never count the silence placeholder ([7b22706](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7b2270603270911236587cc249956b9fe0e91f0e))
+
 ## [2.9.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.1...v2.9.2) (2026-10-15)
 
 
