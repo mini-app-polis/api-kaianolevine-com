@@ -172,3 +172,25 @@ async def test_sets_get_list_year_and_meta_total(client) -> None:
     detail = detail_resp.json()["data"]
     assert detail["tracks"][0]["play_order"] == 1
     assert detail["tracks"][1]["play_order"] == 2
+
+
+async def test_track_responses_carry_label_remix_and_comment(client) -> None:
+    track = _track(play_order=1, title="Temple", artist="Parson James")
+    track.update(label="E", remix="Niko The Kid Remix", comment="Explicit - edit")
+    set_id = await _ingest_set(
+        client,
+        set_date="2023-02-04",
+        venue="Charlotte Westie Fest",
+        source_file="2023-02-04 remix.csv",
+        tracks=[track],
+    )
+
+    listed = (await client.get(f"/v1/sets/{set_id}/tracks")).json()["data"][0]
+    found = (await client.get("/v1/tracks", params={"year": 2023})).json()["data"][0]
+    detail = (await client.get(f"/v1/tracks/{listed['id']}")).json()["data"]
+    for item in (listed, found, detail):
+        assert (item["label"], item["remix"], item["comment"]) == (
+            "E",
+            "Niko The Kid Remix",
+            "Explicit - edit",
+        )
