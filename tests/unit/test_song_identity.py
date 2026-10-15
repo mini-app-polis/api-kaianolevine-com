@@ -1,6 +1,7 @@
 from kaianolevine_api.services.song_identity import (
     catalog_artist,
     catalog_title_key,
+    clean_genre,
     display_title,
     is_placeholder,
     is_release_label,
@@ -113,3 +114,16 @@ def test_silence_placeholder():
     assert is_placeholder(" -- silence -- ")
     assert not is_placeholder("Silence")
     assert not is_placeholder("Behind Silence and Solitude")
+
+
+def test_genre_spellings_read_one_way():
+    assert clean_genre("Hip Hop") == "Hip-Hop"
+    assert clean_genre("ElectroPop") == "Electropop"
+    assert clean_genre("Dance-pop") == "Dance/Pop"
+    assert clean_genre("Pop - 100") == "Pop"
+    assert clean_genre("Christmas - 102") == "Christmas"
+    assert clean_genre("Contemporary R&b") == "Contemporary R&B"
+    for junk in ["---", "-148", "(148)", "-148.0", "2020s", "Unknown", None]:
+        assert clean_genre(junk) is None, junk
+    assert clean_genre("Rap & Hip-Hop") == "Rap & Hip-Hop"
+    assert clean_genre("R&B/Soul") == "R&B/Soul"
