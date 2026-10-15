@@ -360,3 +360,47 @@ async def test_collection_empty_db(client) -> None:
     resp = await client.get("/v1/stats/collection")
     assert resp.status_code == 200
     assert resp.json()["data"] == []
+
+
+async def test_one_song_under_two_owners_is_one_song(client, db_session) -> None:
+    # Owner on machine-written rows changed at the identity cutovers, so the
+    # same song can have one catalog entry per owner. Simulate that: ingest,
+    # move what's on record to the old owner, then ingest again.
+    from sqlalchemy import text
+
+    await _ingest(client, "2024-06-01", [_track("Song A", "Artist X")])
+    for table in ("sets", "tracks", "track_catalog"):
+        await db_session.execute(text(f"UPDATE {table} SET owner_id = 'old-owner'"))
+    await db_session.commit()
+    await _ingest(
+        client,
+        "2025-03-01",
+        [_track("Song A", "Artist X"), _track("Song B", "Artist Y")],
+    )
+    catalog_rows = (
+        await db_session.execute(text("SELECT count(*) FROM track_catalog"))
+    ).scalar_one()
+    assert catalog_rows == 3
+
+    collection = (await client.get("/v1/stats/collection")).json()
+    assert collection["meta"]["total"] == 2
+    a = collection["data"][0]
+    assert (a["title"], a["play_count"], a["years"]) == ("Song A", 2, [2024, 2025])
+
+    songs_2025 = (await client.get("/v1/stats/summaries/2025/songs")).json()
+    assert songs_2025["meta"]["total"] == 2
+
+    s2025 = (await client.get("/v1/stats/summaries/2025")).json()["data"]
+    assert s2025["unique_songs"] == 2
+    # Song A was first played in 2024 under the old owner — not new in 2025.
+    assert s2025["new_songs"] == 1
+
+    listed = (await client.get("/v1/stats/summaries")).json()["data"]
+    assert {i["year"]: i["unique_songs"] for i in listed} == {2025: 2, 2024: 1}
+
+    overview = (await client.get("/v1/stats/overview")).json()["data"]
+    assert overview["unique_tracks"] == 2
+
+    top = (await client.get("/v1/stats/top-tracks")).json()
+    assert top["meta"]["total"] == 2
+    assert (top["data"][0]["title"], top["data"][0]["play_count"]) == ("Song A", 2)

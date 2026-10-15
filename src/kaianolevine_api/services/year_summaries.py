@@ -6,9 +6,12 @@ summary therefore moves on its own as sets are ingested — including a late
 set for a dance earlier in the year — and a past year's stays put because
 its sets do. There is no summary table to keep in step with the sets.
 
-**Songs are catalog entries.** Unique, once-played and new counts, the
-year's song list and the complete collection all key on ``catalog_id``, so versions the reconciler already
-matched count as one song — the same identity ``/v1/stats/top-tracks`` uses.
+**Songs are normalized title + artist.** Unique, once-played and new
+counts, the year's song list and the complete collection all key on the
+song a catalog entry is (see ``song_ids``), not on ``catalog_id``. The
+catalog is unique per owner, and the owner on machine-written rows changed
+at the identity cutovers, so one song can sit under several catalog
+entries; they are the same song and count as one.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import datetime as dt
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Integer, Row, distinct, func, select
+from sqlalchemy import Integer, Row, Subquery, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Set as DbSet
@@ -30,6 +33,23 @@ from ..schemas import (
     YearSummarySong,
     YearSummaryStatus,
 )
+
+
+def song_ids() -> Subquery:
+    """Every catalog entry mapped to the song it is: ``catalog_id`` →
+    ``song_id``, where ``song_id`` is the oldest catalog entry with the same
+    normalized title and artist, whatever its owner. That entry also stands
+    for the song wherever one catalog row is shown.
+    """
+    return select(
+        DbCatalog.id.label("catalog_id"),
+        func.first_value(DbCatalog.id)
+        .over(
+            partition_by=(DbCatalog.title_normalized, DbCatalog.artist_normalized),
+            order_by=(DbCatalog.created_at, DbCatalog.id),
+        )
+        .label("song_id"),
+    ).subquery("song_ids")
 
 
 def today() -> dt.date:
@@ -45,18 +65,20 @@ def status_for(year: int) -> YearSummaryStatus:
 async def list_year_summaries(session: AsyncSession) -> list[YearSummaryListItem]:
     """Headline numbers for every year with at least one set, newest first."""
     year_expr = func.extract("year", DbSet.set_date).cast(Integer).label("year")
+    songs = song_ids()
     rows = (
         await session.execute(
             select(
                 year_expr,
                 func.count(DbSet.id.distinct()).label("set_count"),
                 func.count(DbTrack.id).label("songs_played"),
-                func.count(DbTrack.catalog_id.distinct()).label("unique_songs"),
+                func.count(songs.c.song_id.distinct()).label("unique_songs"),
                 func.min(DbSet.set_date).label("first_set_date"),
                 func.max(DbSet.set_date).label("last_set_date"),
             )
             .select_from(DbSet)
             .outerjoin(DbTrack, DbTrack.set_id == DbSet.id)
+            .outerjoin(songs, songs.c.catalog_id == DbTrack.catalog_id)
             .group_by(year_expr)
             .order_by(year_expr.desc())
         )
@@ -93,9 +115,11 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
     if not set_count:
         return None
 
+    songs = song_ids()
     plays = (
-        select(DbTrack)
+        select(DbTrack, songs.c.song_id)
         .join(DbSet, DbSet.id == DbTrack.set_id)
+        .outerjoin(songs, songs.c.catalog_id == DbTrack.catalog_id)
         .where(in_year)
         .subquery()
     )
@@ -104,7 +128,7 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         await session.execute(
             select(
                 func.count(plays.c.id),
-                func.count(plays.c.catalog_id.distinct()),
+                func.count(plays.c.song_id.distinct()),
                 func.count(plays.c.length_secs),
                 func.sum(plays.c.length_secs),
             )
@@ -115,11 +139,11 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
 
     per_song = (
         select(
-            plays.c.catalog_id.label("catalog_id"),
+            plays.c.song_id.label("song_id"),
             func.count().label("play_count"),
         )
-        .where(plays.c.catalog_id.is_not(None))
-        .group_by(plays.c.catalog_id)
+        .where(plays.c.song_id.is_not(None))
+        .group_by(plays.c.song_id)
         .subquery()
     )
     songs_played_once = (
@@ -135,8 +159,8 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
         select(func.min(DbSet.set_date).label("first_played"))
         .select_from(DbTrack)
         .join(DbSet, DbSet.id == DbTrack.set_id)
-        .where(DbTrack.catalog_id.is_not(None))
-        .group_by(DbTrack.catalog_id)
+        .join(songs, songs.c.catalog_id == DbTrack.catalog_id)
+        .group_by(songs.c.song_id)
         .subquery()
     )
     new_songs = (
@@ -173,17 +197,19 @@ async def get_year_summary(session: AsyncSession, year: int) -> YearSummary | No
 async def _song_rows(
     session: AsyncSession, start: dt.date | None = None, end: dt.date | None = None
 ) -> Sequence[Row[Any]]:
-    """One row per catalog song played between start and end (all time when
-    both are None), most played first: the catalog entry, then play count,
+    """One row per song played between start and end (all time when both
+    are None), most played first: the song's catalog entry, then play count,
     longest known length, summed length, years played, first and last set.
 
-    Metadata comes from the catalog, which keeps the first non-empty value
-    seen for each field; everything else comes from the plays in range.
+    Metadata comes from the song's oldest catalog entry, which keeps the
+    first non-empty value seen for each field; everything else comes from the
+    plays in range, across every catalog entry of the song.
     """
     year_expr = func.extract("year", DbSet.set_date).cast(Integer)
+    songs = song_ids()
     stmt = (
         select(
-            DbTrack.catalog_id.label("catalog_id"),
+            songs.c.song_id.label("catalog_id"),
             func.count().label("play_count"),
             func.max(DbTrack.length_secs).label("length_secs"),
             func.sum(DbTrack.length_secs).label("total_play_secs"),
@@ -192,8 +218,8 @@ async def _song_rows(
             func.max(DbSet.set_date).label("last_played"),
         )
         .join(DbSet, DbSet.id == DbTrack.set_id)
-        .where(DbTrack.catalog_id.is_not(None))
-        .group_by(DbTrack.catalog_id)
+        .join(songs, songs.c.catalog_id == DbTrack.catalog_id)
+        .group_by(songs.c.song_id)
     )
     if start is not None and end is not None:
         stmt = stmt.where(DbSet.set_date.between(start, end))
@@ -237,7 +263,7 @@ def _song_fields(c: DbCatalog, count: int, length: int | None, total) -> dict:
 async def list_year_songs(
     session: AsyncSession, year: int
 ) -> list[YearSummarySong] | None:
-    """Every song played in a year, one row per catalog entry, most played
+    """Every song played in a year, one row per song, most played
     first. None when no set falls in the year."""
     start, end = dt.date(year, 1, 1), dt.date(year, 12, 31)
     has_sets = (
@@ -255,8 +281,8 @@ async def list_year_songs(
 
 
 async def list_collection(session: AsyncSession) -> list[CollectionSong]:
-    """The complete collection: every song on record, one row per catalog
-    entry, most played first, marked with the years it was played. It grows
+    """The complete collection: every song on record, one row per song,
+    most played first, marked with the years it was played. It grows
     on its own as sets are ingested — a new song adds a row, a song played
     in a new year gains that year."""
     rows = await _song_rows(session)
