@@ -68,7 +68,6 @@ const SHARED = [
   // Machine principals' keys (identity_registry.MACHINES).
   "CI_VALIDATOR_API_KEY",
   "DB_OPS_API_KEY",
-  "DB_OPS_API_KEY",
   "DEEJAY_COG_API_KEY",
   "ECOSYSTEM_STANDARDS_API_KEY",
   "EVALUATOR_COG_API_KEY",
