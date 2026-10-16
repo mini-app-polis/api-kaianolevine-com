@@ -1,20 +1,14 @@
-# Plans afresh and applies .railway/railway.ts on every push that changes
-# it, or by hand (Actions → Railway apply → Run workflow, on main or dev).
-# The steps live in the shared workflow in mini-app-polis/.github, modelled
-# on mini-app-polis/infra's terraform.yml. MINI-69.
-#
-#   push to dev  → development. Work is committed straight to dev, so there
-#                  is no pull request to review or label: destructive
-#                  changes apply, and development is where a mistake in the
-#                  file shows up first.
-#   push to main → production. The dev → main pull request carries the
-#                  plan (railway-plan.yml), and removing a service or a
-#                  variable applies only if it is labelled allow-destroy.
+# Plans afresh and applies .railway/railway.ts to production on every push
+# to main that changes it, or by hand (Actions → Railway apply → Run
+# workflow). Removing a service or a variable is destructive and applies
+# only if the pull request the commit came from is labelled allow-destroy.
+# The steps live in the shared workflow in mini-app-polis/.github,
+# modelled on mini-app-polis/infra's terraform.yml. MINI-69.
 name: Railway apply
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
     paths: [".railway/**", ".github/workflows/railway-apply.yml"]
   workflow_dispatch:
 
@@ -25,19 +19,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  production:
+  apply:
     if: github.ref_name == 'main'
     uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
     secrets:
-      # A project token for the ecosystem project's production environment.
       railway-token: ${{ secrets.RAILWAY_TOKEN }}
-
-  development:
-    if: github.ref_name == 'dev'
-    uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
-    with:
-      environment: development
-      allow-destroy: always
-    secrets:
-      # A project token for the ecosystem project's development environment.
-      railway-token: ${{ secrets.RAILWAY_TOKEN_DEVELOPMENT }}

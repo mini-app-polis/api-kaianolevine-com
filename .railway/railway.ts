@@ -1,12 +1,19 @@
-// api-kaianolevine-com as Railway Infrastructure as Code, applied by CI
-// (.github/workflows/railway-apply.yml): a push to dev that changes .railway/
-// applies it to development; the dev → main pull request is planned
-// against production (.github/workflows/railway-plan.yml), and merging it
-// applies to production, refusing to remove anything unless the pull request
-// is labelled allow-destroy. As mini-app-polis/infra applies Terraform.
-// Nothing is applied from a workstation, and Railway itself does not read
-// this file when it deploys. Replaces
-// railway.json, which Railway stops reading on 2026-12-01. MINI-69.
+// api-kaianolevine-com as Railway Infrastructure as Code, applied by CI: a pull
+// request into main that changes .railway/ is planned
+// (.github/workflows/railway-plan.yml), and merging it plans again and
+// applies (railway-apply.yml), refusing to remove anything unless the pull
+// request is labelled allow-destroy. As mini-app-polis/infra applies
+// Terraform. Nothing is applied from a workstation, and Railway itself does
+// not read this file when it deploys. Replaces railway.json, which Railway
+// stops reading on 2026-12-01. MINI-69.
+//
+// Production only. Planned against any other environment it declares
+// nothing, and a partial that owns nothing there changes nothing; the
+// development service keeps the settings its dashboard holds. Development
+// is not managed here because Railway refuses `railway config plan` with a
+// development-scoped project token ("Unauthorized", even for a file that
+// declares nothing) while the same plan works with a production one
+// (Oct 2026). Add it back when Railway fixes that.
 //
 // A named partial: the ecosystem project holds services from several
 // repositories, so this file manages api-kaianolevine-com and nothing else.
@@ -28,12 +35,6 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
 export const partial = "api-kaianolevine-com";
 
 const REGION = "us-east4-eqdc4a";
-
-const BRANCH: Record<string, string> = { production: "main", development: "dev" };
-const DOMAIN: Record<string, string> = {
-  production: "api.kaianolevine.com",
-  development: "dev-api.kaianolevine.com",
-};
 
 const SHARED = [
   "ANTHROPIC_API_KEY",
@@ -73,30 +74,26 @@ const SHARED = [
   "TRANSCRIPTION_COG_API_KEY",
   "WATCHER_COG_API_KEY",
   "WIKI_CURATOR_COG_API_KEY",
+  // Production's names: the API base URL is suffixed _DEV outside production
+  // (mini_app_polis.environment.env_var), and the Spotify re-auth runs
+  // against prd only.
+  "KAIANO_API_BASE_URL",
+  "DOPPLER_SPOTIFY_WRITE_TOKEN",
+  "SPOTIFY_OWNER_USER_ID",
 ];
 
-// Read in one environment only. The API base URL is suffixed outside
-// production (mini_app_polis.environment.env_var); the Spotify re-auth runs
-// against prd only; contract-suite is a development-only machine.
-const ONLY: Record<string, string[]> = {
-  production: ["KAIANO_API_BASE_URL", "DOPPLER_SPOTIFY_WRITE_TOKEN", "SPOTIFY_OWNER_USER_ID"],
-  development: ["KAIANO_API_BASE_URL_DEV", "CONTRACT_SUITE_API_KEY"],
-};
-
 export default defineRailway((ctx) => {
-  const environment = ctx.environment ?? "";
   const name = ctx.projectName ?? "mini-app-polis ecosystem";
-  if (!(environment in BRANCH)) {
+  if (ctx.environment !== "production") {
     return project(name, { resources: [] });
   }
 
-  const names = [...SHARED, ...ONLY[environment]];
   const api = service("api-kaianolevine-com", {
-    source: github("mini-app-polis/api-kaianolevine-com", { branch: BRANCH[environment] }),
+    source: github("mini-app-polis/api-kaianolevine-com", { branch: "main" }),
     // Root Dockerfile with digest-pinned bases and a non-root user (CD-021).
     build: { builder: "DOCKERFILE" as const, dockerfilePath: "Dockerfile" },
     replicas: { [REGION]: 1 },
-    domains: [{ domain: DOMAIN[environment], port: 8080 }],
+    domains: [{ domain: "api.kaianolevine.com", port: 8080 }],
     // Its private hostname, courteous-purpose.railway.internal.
     networking: { privateNetworkEndpoint: "courteous-purpose" },
     deploy: {
@@ -107,7 +104,7 @@ export default defineRailway((ctx) => {
       limitOverride: { containers: { cpu: 4, memoryBytes: 4294967296 } },
     },
     env: {
-      ...Object.fromEntries(names.map((n) => [n, ctx.shared[n]])),
+      ...Object.fromEntries(SHARED.map((n) => [n, ctx.shared[n]])),
       DATABASE_URL: preserve(),
     },
   });
