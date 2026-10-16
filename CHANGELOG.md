@@ -1,3 +1,575 @@
+## [2.9.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.3...v2.9.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.4 ([945e0ab](https://github.com/mini-app-polis/api-kaianolevine-com/commit/945e0ab6a761095d40398e33c820da26f5ca8b8c))
+
+## [2.9.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.2...v2.9.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): clean genre spellings on ingest, fix(data:** one spelling per genre ([830a5e9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/830a5e937f644a31ee4af0e6b84f84e0b3bd3d24))
+* **stats): never count the silence placeholder, fix(data:** stop counting the silence plays already ingested ([aeea0d3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/aeea0d38daf38afecfbb8b1a2aebf3831597a25c))
+* **stats:** never count the silence placeholder ([7b22706](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7b2270603270911236587cc249956b9fe0e91f0e))
+
+## [2.9.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.1...v2.9.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge eight songs held under two spellings ([3d3f87c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3d3f87c8f5302c7dae8a21b66f8b3b77cc74ebb5))
+
+## [2.9.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.0...v2.9.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge five songs held under two spellings ([3021f39](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3021f393d932f44b591a8e61daea4fdb6e745972))
+* **ingest): read an underscore artist list as commas, fix(data:** merge songs split by underscore artists and two versions ([2e4555d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2e4555d0ca90568237dec2a44dec6be1f93da423))
+
+# [2.9.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.2...v2.9.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): file a repeated row under the song it was filed under before, fix(catalog:** give the catalog list a stable order ([9a961f3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a961f334c2fd20e24c6960db77f04f4f1854f70))
+* **ingest:** ignore file tags in the Remix column ([4cd685e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4cd685e978b3c14d9f57c17ab933d03185a6894c))
+
+
+### Features
+
+* **notify:** copy failing run reports to the errors channel ([47a74ec](https://github.com/mini-app-polis/api-kaianolevine-com/commit/47a74ec2956d4f778a1f9531d4cf19c305e756c3))
+
+## [2.8.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.1...v2.8.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ingest): file a play under its version from the Remix column and title, fix(data:** key version catalog entries by their full title ([533f43a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/533f43a735f4d0cbeabb37387a5d0c640c84534f))
+
+## [2.8.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.8.0...v2.8.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** file the last 43 misfiled version plays ([ab655bd](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ab655bdaad1d7d15a121d98149e467d3294d1093))
+
+# [2.8.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.8...v2.8.0) (2026-10-15)
+
+
+### Features
+
+* **identity:** declare the db-ops machine ([eeac87d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/eeac87d17e6ff0930ba17bbabb24b51ea5458c21))
+
+## [2.7.8](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.7...v2.7.8) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** split plain plays out of six version entries ([c0f82f6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c0f82f640956582c9f8d6789e47a2c77457bbaf5))
+
+## [2.7.7](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.6...v2.7.7) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** file version plays from 2022 on under their version ([d70fc0e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d70fc0ed7bb76cc4bbf5e78c81ed1ab4942003b8))
+
+## [2.7.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.5...v2.7.6) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data): restore the 2023-02-04 Charlotte Westie Fest set, fix(api:** return label, remix and comment on track responses ([767cd13](https://github.com/mini-app-polis/api-kaianolevine-com/commit/767cd13cc863eb4bbd49d2d70765cca05113508b))
+* **data:** correct the 2022-11-19 DCSX Saturday song lengths ([8cf7309](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8cf730978d7d5a9b8254b1c963f254d5280e9ba4))
+* **data:** count Coke Henny Pt 2 as Coke & Henny Pt. 2 ([0abe98f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0abe98f38c467dbc457a49c92bdd89e171bbdf56))
+* **data:** restore two 2023 plays dropped for a blank artist ([4f0e098](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4f0e098f275392267cc0857afeabbfc7914a1613))
+
+## [2.7.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.4...v2.7.5) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** count DJ Don't (Remix) as DJ Don't ([d37dd08](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d37dd08437ab0115bd2ae48c9e00b30b02e6f71e))
+* **data:** honour the Remix column on plays from 2022 on ([65e6bdf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/65e6bdfe1f15e4b346024d6c4fc20b7854fc00f4))
+
+## [2.7.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.3...v2.7.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** merge catalog entries that are the same recording ([a7df636](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a7df63661abc1b770da026c95340b17198f64d8d))
+
+## [2.7.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.2...v2.7.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** generate track ids in the blank-artist restore ([c03429a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c03429ad52be4ccf5120946d1fef93bc0f264712))
+
+## [2.7.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.1...v2.7.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **data:** restore nine plays dropped for a blank artist ([6d94aa3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6d94aa3d8805e3534472211b020ee1a86deea1e1))
+
+## [2.7.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.7.0...v2.7.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **stats:** count one song once across catalog owners ([5ebe5cf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5ebe5cf28ed3e4db49ca04053f8fd700d21eb0b1))
+
+# [2.7.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.4...v2.7.0) (2026-10-13)
+
+
+### Features
+
+* **cogs:** make the deejay and transcription queues FIFO ([900f2e3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/900f2e3b239db9bf4fab7b81152d86aaa241721a))
+
+## [2.6.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.3...v2.6.4) (2026-10-13)
+
+
+### Bug Fixes
+
+* **github-status:** warm the snapshot at boot so deploys never land on a visitor ([beff4b3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/beff4b37d76f92a09d1b3cf3d5955efad073be67))
+
+## [2.6.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.2...v2.6.3) (2026-10-12)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.3 ([9ca70f2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9ca70f26c25dd2f7e52f2eb85b9851fa2ad364e0))
+
+## [2.6.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.1...v2.6.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 4 updates ([851b3a6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/851b3a6b2d8b8cf9d4ba13ee2fb77cf440499e6a))
+
+## [2.6.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.6.0...v2.6.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-identity to 2.1.4 ([145c58c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/145c58c451abf23a44c57777ebff17cc8bae61cf))
+
+# [2.6.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.5.0...v2.6.0) (2026-10-11)
+
+
+### Bug Fixes
+
+* **stats:** derive year summaries only from the database ([05a98e8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/05a98e85d4f0827a3a16fff2aa8ed40455345622))
+* **stats:** type the collection query for mypy ([fca07b3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fca07b3312609f91bf4f0dae4177171df5e62e37))
+
+
+### Features
+
+* **stats:** complete collection endpoint ([ca22158](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ca22158e2cafe8bdc586718b8a641cc9bb2331a5))
+
+# [2.5.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.1...v2.5.0) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.1 ([6fee416](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fee4163b4425f2f63b2e90d6a8bd8271ce5e32e))
+* **deps:** bump miniapppolis-common-utils to 5.25.2 ([5028478](https://github.com/mini-app-polis/api-kaianolevine-com/commit/50284788351965afecda261583c79da7eb30ed79))
+
+
+### Features
+
+* **stats:** annual DJ summaries with curated layer ([a4e643b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a4e643b3150709102353f30ba66c9a0464374989))
+
+# [2.5.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.1...v2.5.0) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.1 ([6fee416](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fee4163b4425f2f63b2e90d6a8bd8271ce5e32e))
+
+
+### Features
+
+* **stats:** annual DJ summaries with curated layer ([a4e643b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a4e643b3150709102353f30ba66c9a0464374989))
+
+## [2.4.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.4.0...v2.4.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **spotify:** declare response_model=None on the re-auth routes ([18ac962](https://github.com/mini-app-polis/api-kaianolevine-com/commit/18ac962dfcf3ccc2bff5d2c0724ef24562ed4e54))
+
+# [2.4.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.18...v2.4.0) (2026-10-09)
+
+
+### Bug Fixes
+
+* **spotify:** show fixed text on re-auth failure pages, never exception detail ([7457829](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7457829ac295e7f62d5853a595e26c1aa41f3e1e))
+
+
+### Features
+
+* **spotify:** one-click re-auth and expiry reminders for deejay-cog's token ([dc74d2f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dc74d2f068f5cee1c040acfc7fef81e894ab563f))
+
+## [2.3.18](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.17...v2.3.18) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.0 ([836ad98](https://github.com/mini-app-polis/api-kaianolevine-com/commit/836ad98c600eaea81b83f594a603f7f78a11c52d))
+
+## [2.3.17](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.16...v2.3.17) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.24.1 ([47cdba9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/47cdba9db1fad3e1fc238de7901e17735376cf08))
+
+## [2.3.16](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.15...v2.3.16) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** keep GitHub deliveries inside GitHub's timeout on Discord rate limits ([0770e16](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0770e1649f60058e556d7bf0e0221dc2e5a1bbc6))
+
+## [2.3.15](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.14...v2.3.15) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** keep evaluation findings out of the change feed ([e8b42c6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e8b42c6e7cfde6a5f71da8012400b694699494d7))
+
+## [2.3.14](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.13...v2.3.14) (2026-10-09)
+
+
+### Bug Fixes
+
+* **notifications:** report a dropped dispatch once, labelled, without exception text ([18a58a2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/18a58a2fc578c1faa1a1c32e62efccbfe7e86616))
+
+## [2.3.13](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.12...v2.3.13) (2026-10-08)
+
+
+### Bug Fixes
+
+* **observability:** read Sentry DSN from SENTRY_DSN_APIS and tag service ([66dc9d8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/66dc9d88487d20f72a8ec6e883043d90584a7b6a))
+
+## [2.3.12](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.11...v2.3.12) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils ([29d60a0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/29d60a0484d46fe92b2e7956e838e526f751e1fa))
+
+## [2.3.11](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.10...v2.3.11) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 4 updates ([754030d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/754030db6b53c585398ebcf62d92518a05ccebd5))
+
+## [2.3.10](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.9...v2.3.10) (2026-10-07)
+
+
+### Bug Fixes
+
+* **wcs:** apply metadata corrections, 404 unknown sources, follow name corrections on instructor pages ([820decb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/820decb13d31fb0da4bed22f9fde8ef05a02d931))
+
+## [2.3.9](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.8...v2.3.9) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group with 3 updates ([2b6e86c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2b6e86cf048bece52c776cd3d690f35e03a5fa0a))
+
+## [2.3.8](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.7...v2.3.8) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils ([454d100](https://github.com/mini-app-polis/api-kaianolevine-com/commit/454d100972fc3b5bf58caabe7e3d5be386a664a5))
+
+## [2.3.7](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.6...v2.3.7) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils ([bb8cf7b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bb8cf7b6f6b84ae9ddd12a7f9e295e54c074aaf2))
+* **deps:** bump the minor-and-patch group with 3 updates ([49a352c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/49a352c5157be0dfa9dc2acd16f0eef68bd711f4))
+
+## [2.3.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.5...v2.3.6) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** bump boto3 ([8332be7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8332be731fbf07796f1d5dbe5919c539ccc439c6))
+* **deps:** bump miniapppolis-common-utils ([180e69d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/180e69daaa238b2ec552dae25c22274c5d764c03))
+
+## [2.3.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.4...v2.3.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **github-status:** serve the expired snapshot and refresh behind it ([f80ec04](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f80ec044c0862b59026801e3d7366dd567480fe3))
+
+## [2.3.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.3...v2.3.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** common-utils 5.17.0 for slow-request logging ([5c51a42](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5c51a42ad2d6742c224003b81c699df39cfb0160))
+* **deps:** common-utils 5.17.0 for slow-request logging ([f4e1ec6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f4e1ec613e4c69241c01b548386c78d56e643337))
+
+## [2.3.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.2...v2.3.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils ([4696d34](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4696d34051e45314277d0594d140c139efeea43a))
+
+## [2.3.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.1...v2.3.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** bump urllib3 to 2.8.0 for CVE-2026-97687, CVE-2026-97688 and CVE-2026-97689 ([b134499](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b134499136a5b9ecee0750912e0b6d29b350757d))
+* **deps:** bump virtualenv to 21.14.1 for PYSEC-2026-4011, PYSEC-2026-4012, PYSEC-2026-4013 and PYSEC-2026-4014 ([2a7c4ef](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2a7c4ef66f00944df2f4c7a784fa113187c5178c))
+
+## [2.3.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.3.0...v2.3.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils in the commons group ([aceeb12](https://github.com/mini-app-polis/api-kaianolevine-com/commit/aceeb12f66358b4b635ad973ed3a985df1156c20))
+
+# [2.3.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.2.0...v2.3.0) (2026-09-29)
+
+
+### Features
+
+* **metrics:** per-route latency for the standards catalog and evaluation writes ([037a163](https://github.com/mini-app-polis/api-kaianolevine-com/commit/037a163748a9a8095976904142a60e5bcb082758))
+
+# [2.2.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.2...v2.2.0) (2026-09-29)
+
+
+### Bug Fixes
+
+* **deps:** bump oauthlib to 4.0.0 and pyjwt to 2.15.1 for CVE-2026-49265 and CVE-2026-102274 ([9c4d894](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9c4d894d3d07b27029a7fa79f9b76c0ceef94423))
+
+
+### Features
+
+* **metrics:** publish request latency and error counts to CloudWatch ([ed8487e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ed8487e84c175d8ce06573b34041308b5df41642))
+
+## [2.1.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.1...v2.1.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils in the commons group ([8a2aa9e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8a2aa9e0dbf3dc26ca77b5c3399e6489248bebef))
+
+## [2.1.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.1.0...v2.1.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 4 updates ([8bfebe6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8bfebe6f12d0141920365c7a9a6ad54bea3e6fdf))
+
+# [2.1.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.5...v2.1.0) (2026-09-26)
+
+
+### Features
+
+* **dispatch:** claim Drive files so repeated asks become one job ([56bc05f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/56bc05f49011d91f3faab596a5a535b4e8bc18c1))
+
+## [2.0.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.4...v2.0.5) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** require common-utils 5.12.1 for webhook token redaction ([7b09198](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7b091984c289492ae3c635358429ce044130748b))
+* **deps:** require common-utils 5.13.1 ([60fd7e0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/60fd7e0bb45cce7733ab396d40ba72c022603ec9))
+
+## [2.0.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.3...v2.0.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* **discord:** hold sends through a 429 instead of posting through it ([314686b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/314686b451eafc68ca690ca719fa1f72f5f4c00e))
+
+## [2.0.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.2...v2.0.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* **discord:** hold sends through a 429 and redact webhook tokens in httpx logs ([fdc13ea](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fdc13ea2148ac77a571fbc418de2db38331cbbef))
+
+## [2.0.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.1...v2.0.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **contact:** report a missing Turnstile secret as a config error ([f15fae8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f15fae8f18b6dd588664ad11e30c995454f7bf6d))
+
+## [2.0.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.0.0...v2.0.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **config:** drop env keys for settings that no longer exist ([9a37b8c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a37b8c6f02cec2c13e6aef67d1bde71384f07c6))
+
+# [2.0.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.68.0...v2.0.0) (2026-09-23)
+
+
+* refactor!: remove the Prefect flow-state webhook ([d88e92f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d88e92f858e5fa981893cccfc96cca820f28152f))
+
+
+### BREAKING CHANGES
+
+* POST /v1/prefect-webhook is gone, and
+PREFECT_WEBHOOK_SECRET and PREFECT_NOTIFY_STATES are no longer read.
+
+# [1.68.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.67.0...v1.68.0) (2026-09-22)
+
+
+### Features
+
+* adding transcription endpoint for aws trigger ([976f7d7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/976f7d7b977f4044115829e3a9ed9607b9c26a15))
+
+# [1.67.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.1...v1.67.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* **dispatch:** derive each cog's queue from its name and the environment ([ceba53b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ceba53b9d3303e8ebe4eb8664d1d8cb987b32f71))
+
+
+### Features
+
+* **deejay:** enqueue deejay-cog runs via POST /v1/deejay/runs ([779320e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/779320e4123b34b73ebe44d436d1177faa76a4ba))
+
+## [1.66.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.66.0...v1.66.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 4 updates ([241b981](https://github.com/mini-app-polis/api-kaianolevine-com/commit/241b981ec1c44c57c7ef67094172127404db5ceb))
+
+# [1.66.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.1...v1.66.0) (2026-09-19)
+
+
+### Features
+
+* **evaluations:** record the evaluator version on each finding ([d79f256](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d79f25644efa385ef54f10c294c3832095b24d66))
+
+## [1.65.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.65.0...v1.65.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* Fixing error message found in production ([5932f34](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5932f342507c295f209026709e7bc1af16f01b8b))
+
+# [1.65.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.64.0...v1.65.0) (2026-09-16)
+
+
+### Features
+
+* **evaluations:** dispatch the fleet-scoped checks with the pass ([48f1d6b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/48f1d6ba95f7e67863ae7f46be6d656e708a54ec))
+
+# [1.64.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.63.0...v1.64.0) (2026-09-16)
+
+
+### Features
+
+* **evaluations:** add POST /v1/evaluations/introspection ([1911403](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1911403f37d9367466954e158ef8db3598edfdeb))
+
+# [1.63.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.1...v1.63.0) (2026-09-16)
+
+
+### Features
+
+* **evaluate:** route fleet scope to the fan-out endpoint ([7af606f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7af606fbdda7183e40611bbdc554ce5d629ea8f2))
+* **evaluations:** fan the fleet out to one job per repository ([59462d7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/59462d72e3c9834b2aef170564fa5df1384c0e53))
+
+## [1.62.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.62.0...v1.62.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **evaluations:** name the queue credentials for their caller ([9434aa5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9434aa5be3dfb9484a8709a2f0f8a1772f589436))
+
+# [1.62.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.61.0...v1.62.0) (2026-09-15)
+
+
+### Features
+
+* **evaluations:** enqueue evaluation jobs on SQS ([739a119](https://github.com/mini-app-polis/api-kaianolevine-com/commit/739a119a76b5204cc0bf04e69289ade77daf2b2f))
+
+# [1.61.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.1...v1.61.0) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 3 updates ([5bfcae2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5bfcae2ec3ee2c6209021844fa0c83e36c31fbf5))
+
+
+### Features
+
+* **evaluations:** server-side idempotency for findings (PIPE-002) ([a49c062](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a49c062de197fd68ac99ead28f5713abde71ae62))
+
+## [1.60.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.60.0...v1.60.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* pin evaluate.yml to [@v3](https://github.com/v3) ([a594d8d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a594d8d68f7b01b8ff6faf202193ad986805611d))
+
+# [1.60.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.59.0...v1.60.0) (2026-09-13)
+
+
+### Features
+
+* a shared workflow for asking that a repo be evaluated ([214ddf6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/214ddf6a2916e30a24e359db3c45a3586ed7f714))
+
+# [1.59.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.58.0...v1.59.0) (2026-09-13)
+
+
+### Features
+
+* accept evaluation requests and hand them to the evaluator ([53b7b3f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/53b7b3fd495982b47e084e910e165a5aac158eb5))
+* accept fleet sweep requests ([e7d3445](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e7d34457f1f21048b5fa576bcad7144bcdde5887))
+
+# [1.58.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.57.0...v1.58.0) (2026-09-11)
+
+
+### Features
+
+* serve the standards catalog as versioned data ([61c0b0e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/61c0b0e8e3fc48fedac11475f32c8eeb3a381f90))
+
+# [1.57.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.56.0...v1.57.0) (2026-09-11)
+
+
+### Features
+
+* route discord notifications to separate channels ([ef4ca3e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ef4ca3ebe5c35b35571d00c7ffb4b7105ea107fa))
+
+# [1.56.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.55.1...v1.56.0) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** bump the python-minor-and-patch group with 2 updates ([e40f263](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e40f263072084dcec46e943664baacf704205e79))
+* moving to common 5.7.1 ([304a036](https://github.com/mini-app-polis/api-kaianolevine-com/commit/304a0362c81060bd3c77d44efc417fb93e0666e7))
+* test setup ([57dbdc8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/57dbdc837395aa100d3b3eaa3a4a22167bf1b5b4))
+
+
+### Features
+
+* **environment:** mark non-production Discord messages built by the API ([78afbe9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/78afbe93df0ab87b00f0578868df39262542e7c7))
+
 ## [1.55.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v1.55.0...v1.55.1) (2026-09-09)
 
 

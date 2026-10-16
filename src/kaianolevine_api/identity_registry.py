@@ -168,6 +168,16 @@ MACHINES: tuple[Machine, ...] = (
         roles=("deejay-trigger", "transcription-trigger", "notifier"),
         notes="Polls Drive. POST /v1/deejay/runs, /v1/transcription/runs, /v1/notify.",
     ),
+    # db-ops runs Postgres operations for both production databases as
+    # Railway cron services: db-backup's nightly dumps now, the poller and the
+    # restore drills next. It reads and writes nothing through this API; the
+    # key exists so each run can report itself to the runs channel under its
+    # own name rather than borrowing a cog's.
+    Machine(
+        name="db-ops",
+        roles=("notifier",),
+        notes="POST /v1/notify. Run reports from db-backup, db-poller and db-drill.",
+    ),
     # The contract suite in common-python-utils (ADR-012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
     # API. Its key is set in development configuration only (CD-033), so in

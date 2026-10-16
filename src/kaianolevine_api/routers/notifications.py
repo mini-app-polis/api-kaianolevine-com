@@ -2,7 +2,10 @@
 
 Two callers, two admission rules, and three channels between them: failed CI
 goes to ``errors``, cog run reports to ``runs``, everything else to
-``default``. ``services.discord`` resolves a channel name to a webhook.
+``default``. A run report that says something went wrong (WARN or worse) is
+also copied to ``errors``, so ``runs`` stays the complete record and
+``errors`` is still the one channel to watch. ``services.discord`` resolves a
+channel name to a webhook.
 
 ``POST /v1/webhooks/github`` is the org-level webhook for both GitHub orgs. It
 is public in the sense that no bearer token reaches it, and gated instead by
@@ -486,6 +489,34 @@ async def github_webhook(
     )
 
 
+#: Run-report severities that are copied to the errors channel as well as
+#: posted to runs. SUCCESS and INFO stay in runs only.
+COPY_TO_ERRORS: frozenset[str] = frozenset({"WARN", "ERROR", "CRITICAL"})
+
+_REPORT_SEVERITIES: frozenset[str] = COPY_TO_ERRORS | {"SUCCESS", "INFO"}
+
+
+def report_severity(payload: NotifyRequest) -> str | None:
+    """The severity a run report declares, or None for any other message.
+
+    Read from the embed footer, which ``mini_app_polis.pipeline_status``
+    writes as ``"<SEVERITY> · <source> · <dimension> · run <id>"``. Parsing
+    the footer rather than adding a field to ``NotifyRequest`` keeps this a
+    change to one service: every cog already sends it. A message whose footer
+    does not start with a known severity is not a run report, and is treated
+    as one with nothing to say about severity.
+    """
+    for embed in payload.embeds or []:
+        footer = embed.get("footer")
+        text = footer.get("text") if isinstance(footer, dict) else None
+        if not isinstance(text, str):
+            continue
+        head = text.split("·", 1)[0].strip().upper()
+        if head in _REPORT_SEVERITIES:
+            return head
+    return None
+
+
 @router.post(
     "/notify",
     response_model=Envelope[NotificationResult],
@@ -494,10 +525,11 @@ async def github_webhook(
         "First-party notification path for cogs and scripts. Takes a Discord "
         "message body (content and/or embeds) and posts it to the runs "
         "channel, whatever the severity — a cog's reports stay together so "
-        "that channel is a complete record of the fleet's runs. A run that "
-        "died too hard to report itself is caught by its own cog's backstop "
-        "— a dead-letter-queue alarm, or a Healthchecks grace period. "
-        "Requires notify.messages.send."
+        "that channel is a complete record of the fleet's runs. A run report "
+        "whose footer declares WARN, ERROR or CRITICAL is also copied to the "
+        "errors channel. A run that died too hard to report itself is caught "
+        "by its own cog's backstop — a dead-letter-queue alarm, or a "
+        "Healthchecks grace period. Requires notify.messages.send."
     ),
 )
 async def notify(
@@ -519,14 +551,27 @@ async def notify(
         )
     )
 
+    message = payload.to_discord()
     sent = await discord.send_message(
         settings=settings,
-        payload=payload.to_discord(),
+        payload=message,
         channel=discord.CHANNEL_RUNS,
         context="notify",
     )
     if not sent:
         raise api_error(502, "notify_failed", "Discord rejected the notification")
+
+    # The copy is best-effort. The report reached runs, which is the record;
+    # a missed copy is logged by send_message and is not worth a 502 that
+    # would tell the caller its report was lost when it was not.
+    severity = report_severity(payload)
+    if severity in COPY_TO_ERRORS:
+        await discord.send_message(
+            settings=settings,
+            payload=message,
+            channel=discord.CHANNEL_ERRORS,
+            context=f"notify/{severity.lower()}",
+        )
 
     return _result(
         settings, event="notify", outcome=None, reason="forwarded", forwarded=True
