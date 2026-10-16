@@ -1,0 +1,9 @@
+{
+  "name": "api-kaianolevine-com-railway",
+  "private": true,
+  "description": "The Railway IaC SDK that the Railway CLI evaluates railway.ts with. Not part of the Python package.",
+  "type": "module",
+  "dependencies": {
+    "railway": "3.16.0"
+  }
+}

@@ -6,9 +6,10 @@
 # as db-ops. To move to a newer patch, look up the tag's current digest and
 # replace it here, in a commit of its own.
 #
-# The start command stays in railway.json. Railway runs a Dockerfile
-# service's start command in exec form, with no shell, so it is wrapped in
-# /bin/sh -c for the `&&` and $PORT.
+# The start command is the image's CMD, and only here: .railway/railway.ts,
+# which declares the rest of the service's settings, deliberately does not
+# repeat it (CD-017 accepts either, not both). It is wrapped in /bin/sh -c
+# for the `&&` and $PORT.
 
 FROM python:3.11-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
 
@@ -34,3 +35,5 @@ RUN uv sync --locked --no-dev
 # CD-023: the final stage runs unprivileged. Writes nothing to disk outside /tmp.
 RUN useradd --system --uid 10001 --no-create-home --home-dir /app kaianolevine-api
 USER kaianolevine-api
+
+CMD ["/bin/sh", "-c", "python scripts/apply_migrations.py && exec uvicorn src.kaianolevine_api.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

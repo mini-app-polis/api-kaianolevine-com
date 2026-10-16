@@ -144,7 +144,12 @@ Use flags for safe rollout and fast rollback without redeploying:
 
 ## Deployment Target
 
-Designed for Railway.
+Designed for Railway. The image is the root Dockerfile, whose CMD applies
+migrations and starts uvicorn. The service's settings — builder,
+healthcheck, restart policy, limits, and the variables it reads — are
+declared in `.railway/railway.ts` and applied by CI: a pull request into
+`dev` or `main` that changes `.railway/` gets a plan comment, and merging it
+applies that plan to development or production (`.railway/README.md`).
 
 ## Authentication and authorization
 
