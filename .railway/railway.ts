@@ -1,9 +1,11 @@
-// api-kaianolevine-com as Railway Infrastructure as Code, applied by CI: a
-// pull request that changes .railway/ gets a plan comment, and merging it
-// applies exactly that plan (.github/workflows/railway-plan.yml,
-// railway-apply.yml). Pull requests into dev plan and apply in development;
-// into main, in production. Nothing is applied from a workstation, and
-// Railway itself does not read this file when it deploys. Replaces
+// api-kaianolevine-com as Railway Infrastructure as Code, applied by CI
+// (.github/workflows/railway-apply.yml): a push to dev that changes .railway/
+// applies it to development; the dev → main pull request is planned
+// against production (.github/workflows/railway-plan.yml), and merging it
+// applies to production, refusing to remove anything unless the pull request
+// is labelled allow-destroy. As mini-app-polis/infra applies Terraform.
+// Nothing is applied from a workstation, and Railway itself does not read
+// this file when it deploys. Replaces
 // railway.json, which Railway stops reading on 2026-12-01. MINI-69.
 //
 // A named partial: the ecosystem project holds services from several

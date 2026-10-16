@@ -1,21 +1,27 @@
-# Applies the plan railway-plan.yml pinned on the pull request when it lands:
-# on dev, to development; on main, to production. It applies exactly the
-# reviewed change set, and fails if the environment or .railway/ moved since
-# the plan. A push that did not come through a pull request has no plan and
-# fails by design. The steps live in the shared workflow in
-# mini-app-polis/.github. MINI-69.
+# Plans afresh and applies .railway/railway.ts on every push that changes
+# it, or by hand (Actions → Railway apply → Run workflow, on main or dev).
+# The steps live in the shared workflow in mini-app-polis/.github, modelled
+# on mini-app-polis/infra's terraform.yml. MINI-69.
+#
+#   push to dev  → development. Work is committed straight to dev, so there
+#                  is no pull request to review or label: destructive
+#                  changes apply, and development is where a mistake in the
+#                  file shows up first.
+#   push to main → production. The dev → main pull request carries the
+#                  plan (railway-plan.yml), and removing a service or a
+#                  variable applies only if it is labelled allow-destroy.
 name: Railway apply
 
 on:
   push:
     branches: [main, dev]
-    paths: [".railway/**"]
+    paths: [".railway/**", ".github/workflows/railway-apply.yml"]
+  workflow_dispatch:
 
-# pull-requests: read lets the action find the merged pull request, and
-# actions: read lets it download that pull request's plan.
+# pull-requests: read finds the pull request a commit came from, for its
+# allow-destroy label.
 permissions:
   contents: read
-  actions: read
   pull-requests: read
 
 jobs:
@@ -23,6 +29,7 @@ jobs:
     if: github.ref_name == 'main'
     uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
     secrets:
+      # A project token for the ecosystem project's production environment.
       railway-token: ${{ secrets.RAILWAY_TOKEN }}
 
   development:
@@ -30,5 +37,7 @@ jobs:
     uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
     with:
       environment: development
+      allow-destroy: always
     secrets:
+      # A project token for the ecosystem project's development environment.
       railway-token: ${{ secrets.RAILWAY_TOKEN_DEVELOPMENT }}

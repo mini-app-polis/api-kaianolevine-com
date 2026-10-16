@@ -5,10 +5,18 @@ Infrastructure as Code. It is a named partial (`api-kaianolevine-com`): it
 manages that service and nothing else in the `mini-app-polis ecosystem`
 project, in production and in development.
 
-It is applied by CI, never from a workstation: a pull request that changes
-`.railway/` gets the plan as a comment (`.github/workflows/railway-plan.yml`),
-and merging it applies exactly that plan (`railway-apply.yml`). A pull
-request into `dev` plans development; into `main`, production. Both call the
+It is applied by CI, never from a workstation, as mini-app-polis/infra
+applies Terraform (`.github/workflows/railway-apply.yml`):
+
+- A push to `dev` that changes `.railway/` plans and applies to
+  development, removals included — there is no pull request to label, and
+  development is where a mistake in the file should show up first.
+- The `dev` → `main` pull request is planned against production, with the
+  plan in the job summary (`railway-plan.yml`). Merging it plans again and
+  applies to production. Removing a service or a variable is destructive
+  and applies only if the pull request is labelled **`allow-destroy`**.
+
+Actions → Railway apply → Run workflow re-applies either branch by hand. Both call the
 shared workflows in `mini-app-polis/.github`. Railway itself does not read
 this directory at deploy time.
 

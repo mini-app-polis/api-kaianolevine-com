@@ -1,33 +1,21 @@
-# Plans .railway/railway.ts on every pull request that changes it and pins
-# that plan for the apply on merge (railway-apply.yml). Into dev, against
-# development; into main, against production — the token decides which. The
-# plan is posted to the pull request as a comment; reading it is the review,
-# and merging is the approval. The steps live in the shared workflow in
-# mini-app-polis/.github. MINI-69.
+# Plans .railway/railway.ts against production on every pull request into
+# main that changes it; the plan is the job summary. Reading it is the
+# review, and merging is the approval. The steps live in the shared
+# workflow in mini-app-polis/.github, modelled on mini-app-polis/infra's
+# terraform.yml. MINI-69.
 name: Railway plan
 
 on:
   pull_request:
-    branches: [main, dev]
-    paths: [".railway/**"]
+    branches: [main]
+    paths: [".railway/**", ".github/workflows/railway-plan.yml"]
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  production:
-    if: github.base_ref == 'main'
+  plan:
     uses: mini-app-polis/.github/.github/workflows/railway-plan.yml@v3
     secrets:
       # A project token for the ecosystem project's production environment.
       railway-token: ${{ secrets.RAILWAY_TOKEN }}
-
-  development:
-    if: github.base_ref == 'dev'
-    uses: mini-app-polis/.github/.github/workflows/railway-plan.yml@v3
-    with:
-      environment: development
-    secrets:
-      # A project token for the ecosystem project's development environment.
-      railway-token: ${{ secrets.RAILWAY_TOKEN_DEVELOPMENT }}
