@@ -1,3 +1,11 @@
+## [2.9.7](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.6...v2.9.7) (2026-10-16)
+
+
+### Bug Fixes
+
+* **railway:** pass DB_OPS_API_KEY to the API service ([df203f3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/df203f36d29886ba944f94080480eb6dc0fb3619))
+* **railway:** pass DB_OPS_API_KEY to the API service ([b54278b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b54278bad9c824fd7ec801d440c42901954439eb))
+
 ## [2.9.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.5...v2.9.6) (2026-10-16)
 
 
