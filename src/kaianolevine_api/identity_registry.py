@@ -104,7 +104,7 @@ MACHINES: tuple[Machine, ...] = (
     Machine(
         name="evaluator-cog",
         roles=("pipeline-writer", "catalog-ingest", "wcs-writer", "notifier"),
-        notes="POST /v1/pipeline, /v1/evaluations, /v1/catalog, /v1/wcs/admin/notes.",
+        notes="POST /v1/evaluations, /v1/catalog, /v1/wcs/admin/notes.",
     ),
     Machine(
         name="wiki-curator-cog",
@@ -159,10 +159,9 @@ MACHINES: tuple[Machine, ...] = (
         notes="POST /v1/standards/catalog from the release job.",
     ),
     # watcher-cog polls Drive and turns a change in a watched folder into a
-    # run of the cog that owns it. It did that through Prefect's
-    # create_flow_run; it now asks the API, which enqueues onto that cog's
-    # queue. One trigger role per downstream cog, so a watcher key can start
-    # exactly the work watcher starts and nothing else.
+    # run of the cog that owns it by asking the API, which enqueues onto
+    # that cog's queue. One trigger role per downstream cog, so a watcher
+    # key can start exactly the work watcher starts and nothing else.
     Machine(
         name="watcher-cog",
         roles=("deejay-trigger", "transcription-trigger", "notifier"),

@@ -1,9 +1,8 @@
 """Handing DJ-set work to deejay-cog.
 
-This replaces watcher-cog calling Prefect's ``create_flow_run`` on the
-``deejay-cog`` deployment. The parameters it passed — ``{"mode": ...}`` —
-become this message's payload unchanged, so watcher's folder-to-mode map
-is the routing table as it stands, and the cog's ``deejay_router(mode)``
+watcher-cog asks for a run with ``{"mode": ...}``, and that becomes this
+message's payload unchanged, so watcher's folder-to-mode map is the
+routing table as it stands, and the cog's ``deejay_router(mode)``
 reads the same thing it always did.
 
 A deejay job is a folder sweep, not a file: ``process-new-files`` lists

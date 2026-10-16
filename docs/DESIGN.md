@@ -6,7 +6,7 @@
 SQLAlchemy async ORM with `asyncpg` against PostgreSQL. Integration tests run against a
 local PostgreSQL `*_test` database built from `migrations/`; unit tests need no database.
 
-Write traffic is intentionally constrained: Prefect cogs are the only intended write
+Write traffic is intentionally constrained: cogs are the only intended write
 clients for ingest and automation pathways. User-facing read APIs expose sets, tracks,
 catalog, notes, and stats. Runtime write surfaces for ingest and live plays are gated by
 feature flags so ingestion can be paused without redeploying. Sentry is enabled in API

@@ -20,23 +20,29 @@ Route groups:
 - `/v1/tracks`, `/v1/tracks/{id}` — track catalog
 - `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
+- `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
+- `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
+- `/v1/standards/catalog`, `/v1/standards/versions` — published standards catalog
+- `/v1/github/status` — public repository status board
+- `/v1/identity/whoami` — what verify and resolve saw for the caller
 - `/v1/flags`, `/v1/flags/{name}` — feature flags
 - `/v1/stats/overview`, `/v1/stats/by-year`, `/v1/stats/top-artists`, `/v1/stats/top-tracks` — aggregate stats
 - `/v1/stats/summaries`, `/v1/stats/summaries/{year}`, `/v1/stats/summaries/{year}/songs` — annual DJ summaries and each year's full song list, computed from the year's sets (the current year updates as sets land)
 - `/v1/stats/collection` — the complete collection: every song on record, versions merged, marked with the years it was played
 - `/v1/spotify/playlists` — Spotify playlist catalog
+- `/v1/spotify/authorize`, `/v1/spotify/callback` — deejay-cog Spotify token re-authorisation
 - `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
 - `/v1/ingest` — set ingestion endpoint
-- `/v1/prefect-webhook` — Prefect flow-state webhook; notifies Discord on failing states (shared-secret authenticated)
 - `/v1/webhooks/github` — GitHub org webhook; filters deliveries by event, action and branch before forwarding to Discord (signature-verified)
 - `/v1/notify` — ad-hoc Discord notifications for cogs and scripts
 - `/v1/contact` — public contact form (CORS + Turnstile gated)
 - `/v1/resume` — resume PDF proxy (Google Drive)
 - `/v1/wcs/transcripts`, `/v1/wcs/notes`, `/v1/wcs/notes/all`, `/v1/wcs/notes/{id}` — WCS notes pipeline (legacy)
 - `/v1/wcs/sources` — ingest WCS lesson extractions
-- `/v1/wcs/wiki/concepts|techniques|patterns|drills/{slug}` — entity views
-- `/v1/wcs/wiki/instructors/{slug}` — instructor views
-- `/v1/wcs/wiki/sources/{id}` — source views
+- `/v1/wcs/ask`, `/v1/wcs/embeddings/refresh` — WCS Q&A agent (`docs/wcs-qa-agent.md`)
+- `/v1/wcs/wiki/concepts|techniques|patterns|drills`, `…/{slug}` — entity views
+- `/v1/wcs/wiki/instructors`, `/v1/wcs/wiki/instructors/{slug}` — instructor views
+- `/v1/wcs/wiki/sources`, `/v1/wcs/wiki/sources/{id}`, `/v1/wcs/wiki/admin/sources[/{id}]` — source views
 - `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog)
 - `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
 - `/v1/wcs/admin/corrections/*`, `/v1/wcs/admin/additions/*` — input-layer overrides
@@ -108,11 +114,11 @@ uv run mypy src/
 uv run pre-commit run --all-files
 ```
 
-Hooks run on every `git commit`: ruff lint, ruff format, mock method checks, type annotation checks. If a hook fails the commit is blocked — ruff will auto-fix in place, then `git add .` and re-commit.
+Hooks run on every `git commit`: ruff lint, ruff format, gitleaks. If a hook fails the commit is blocked — ruff will auto-fix in place, then `git add .` and re-commit.
 
 ## CI/CD
 
-Every push to `main` runs CI (lint + tests).
+Every push and pull request to `main` or `dev` runs CI (security scan, lint, type check, tests).
 Railway auto-deploys on push to `main`.
 Feature flags control activation without deployment.
 Flags are managed via `PATCH /v1/flags/{name}`.
@@ -196,7 +202,7 @@ row inserted by hand.
 
 Every route is in exactly one of three states:
 
-- **Scope-guarded** (52) — `Depends(require_scope("<domain>.<resource>.<action>"))`.
+- **Scope-guarded** (58) — `Depends(require_scope("<domain>.<resource>.<action>"))`.
   Roles are named bundles of scopes; a suspended principal is denied
   before roles are consulted.
 - **Authenticated-only** (3) — a verified credential, no scope. This is
@@ -204,7 +210,7 @@ Every route is in exactly one of three states:
   so it cannot require a principal in order to grant one), `GET /v1/wcs/me`
   (reads only the caller's own profile), and `GET /v1/identity/whoami`
   (reports what verify and resolve saw, and authorizes nothing).
-- **Public** (27) — see below.
+- **Public** (31) — see below.
 
 Every decision is audited, allow and deny alike, with the enforcement
 point, principal, scope, outcome and reason.
@@ -220,8 +226,10 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/evaluations`, `/v1/evaluations/summary`, `/v1/flags` | Pipeline Health and feature flags — read-only, no per-owner content. |
 | `POST /v1/contact` | Contact form. CORS + Turnstile gated rather than credential gated. |
 | `GET /v1/resume` | Public resume proxy. |
+| `GET /v1/github/status` | Public repo status board; same response for every caller, only what the committed config permits. |
+| `GET /v1/standards/catalog`, `/v1/standards/versions` | Standards rule text, already public; reads stay off the credential path every evaluation depends on. |
+| `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
 | `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. |
-| `POST /v1/prefect-webhook` | Prefect flow-state callbacks. Reviewed and accepted as unauthenticated; optional shared secret when `PREFECT_WEBHOOK_SECRET` is set. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,
@@ -243,8 +251,8 @@ Three-layer observability, aligned with the ecosystem standard:
 
 ### Notifications
 
-Five producers reach Discord and `services.discord` is the only module
-that calls it. GitHub payloads go to a webhook URL's `/github` suffix so
+Every producer reaches Discord through `services.discord`, the only
+module that calls it. GitHub payloads go to a webhook URL's `/github` suffix so
 Discord renders its own embed from the bytes GitHub signed; everything
 else goes to the bare URL as an ordinary message.
 
@@ -253,7 +261,7 @@ because that is the last place that knows what a message means:
 
 | Channel | What lands there |
 |---|---|
-| `errors` | failed CI on the default branch, every Prefect crash callback, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
+| `errors` | failed CI on the default branch, `/v1/notify` run reports declaring WARN or worse (copied from `runs`), jobs dropped before reaching a queue, the last Spotify token-expiry reminder, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
 | `activity` | the running list of committed data changes, from the request middleware |
 | `runs` | cog run reports through `/v1/notify`, every severity |
 | `default` | everything else — pushes, pull requests, issues, releases, green CI |
@@ -270,11 +278,12 @@ the original webhook instead of vanishing. The corollary is that an unset
 variable is a silent no-op that looks exactly like an unsplit channel, so
 every send logs `channel=` and the producer that chose it.
 
-Cog crashes are the one case that reaches `errors` without the cog
-choosing it. A cog's own reports all go to `runs` so that channel is a
-complete record of the fleet's runs; the crash reaches `errors` through
-Prefect's webhook instead. That is what the two overlapping crash reports
-are now for, rather than being redundant.
+A cog's own reports all go to `runs` so that channel is a complete
+record of the fleet's runs; a report whose footer declares WARN, ERROR or
+CRITICAL is also copied to `errors`. A run that died too hard to report
+itself is caught by its own cog's backstop where it has one — a queue-fed
+Lambda cog's dead-letter-queue and queue-stalled alarms, or watcher-cog's
+failing-ticks alarm and Healthchecks check — not by this service.
 
 The GitHub route exists because GitHub's webhooks filter by event type and
 nothing else. "Pushes to main", "new pull requests" and "releases, but not
@@ -309,25 +318,6 @@ Two known gaps, both deliberate. Workflow runs off the default branch are
 dropped, so a pull request whose CI fails is silent until it merges. And
 rebase-and-merge cannot be told apart from a direct push, so a rebase
 merge is announced twice — once by the PR closing, once by the push.
-
-`POST /v1/prefect-webhook` notifies the `errors` channel when Prefect
-Cloud reports a flow run in a failing state, and writes no rows: a crashed
-flow was never graded against the standards catalog. It exists even
-though cogs report their own failures, because
-`make_failure_hook` runs *inside the cog process* — when that process is
-OOM-killed or SIGKILL'd the hook never fires and Prefect Cloud is the
-only witness left. The overlap on ordinary failures is accepted: a crash
-nobody hears about is worse than a crash mentioned twice, and the two
-are told apart by `source`. `PREFECT_NOTIFY_STATES` narrows it.
-
-That route stays public. What a stranger could do with the URL is
-bounded — the message is embeds-only, so nothing in it can mention
-anyone, the display name comes from the flow map rather than the
-payload, and there is no read or write behind it. A required header
-would meanwhile be a new way for the crash backstop to fail silently,
-which costs more than the nuisance it prevents.
-`PREFECT_WEBHOOK_SECRET` is honoured in `X-Prefect-Token` when set and
-skipped when not, so turning it on later needs no code change.
 
 `/v1/notify` posts to the `runs` channel and requires
 `notify.messages.send`, carried by the `notifier` role. Every declared machine holds it: the scope posts a message and does

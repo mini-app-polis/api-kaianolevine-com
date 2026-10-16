@@ -528,8 +528,10 @@ def report_severity(payload: NotifyRequest) -> str | None:
         "that channel is a complete record of the fleet's runs. A run report "
         "whose footer declares WARN, ERROR or CRITICAL is also copied to the "
         "errors channel. A run that died too hard to report itself is caught "
-        "by its own cog's backstop — a dead-letter-queue alarm, or a "
-        "Healthchecks grace period. Requires notify.messages.send."
+        "by its own cog's backstop where it has one — a queue-fed Lambda "
+        "cog's dead-letter-queue and queue-stalled alarms, or watcher-cog's "
+        "failing-ticks alarm and Healthchecks check. Requires "
+        "notify.messages.send."
     ),
 )
 async def notify(

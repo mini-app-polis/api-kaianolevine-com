@@ -11,7 +11,10 @@ Date: 2026-06-07
 
 ## Status
 
-Proposed.
+Superseded by named machine API keys verified locally
+(`identity.apikey`; machines are declared in
+[`identity_registry.py`](../../src/kaianolevine_api/identity_registry.py)).
+No successor ADR. Never implemented as proposed.
 
 ## Context
 

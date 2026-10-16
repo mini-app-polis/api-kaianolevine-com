@@ -9,6 +9,14 @@ Accepted. Supersedes the operational mechanism described in ADR-0001's
 hook"). The substance of ADR-0001 — raw numbered SQL migrations, hand-
 maintained alongside SQLAlchemy models, no Alembic — remains in force.
 
+> **Amended (Oct 2026).** The Consequences note that the test suite runs
+> on SQLite and can only exercise this runner through mocks no longer
+> holds. Tests run against real Postgres (TEST-015; see
+> `tests/integration/conftest.py` and the `postgres` service in
+> `.github/workflows/ci.yml`), and the integration suite builds its
+> schema from `migrations/` with this runner, so every CI run validates
+> it against a real database.
+
 ## Context
 
 ADR-0001 chose raw numbered SQL migration files over Alembic and stated
@@ -40,7 +48,8 @@ a tracking table that records what has been applied.
 
 Add `scripts/apply_migrations.py`. The script:
 
-1. Connects to the database via `DATABASE_URL`.
+1. Connects to the database via `DATABASE_URL_MIGRATIONS`, falling back to
+   `DATABASE_URL` when it is unset (OPS-002).
 2. Acquires a Postgres advisory lock (`pg_advisory_lock(728304917)`) so
    concurrent deploys serialize cleanly.
 3. Ensures a `schema_migrations(filename TEXT PRIMARY KEY, applied_at
@@ -63,9 +72,10 @@ When the marker is present, the body runs outside a transaction and the
 tracking row is written in a separate explicit transaction afterward.
 No existing migrations use this; the convention exists for future needs.
 
-The runner is wired into Railway's `startCommand` in `railway.json`:
+The runner is wired into the image's `CMD` in the root `Dockerfile`
+(originally Railway's `startCommand` in `railway.json`, since removed):
 
-    python scripts/apply_migrations.py && uvicorn ...
+    python scripts/apply_migrations.py && exec uvicorn ...
 
 Migrations therefore run on every deploy, before the API process starts.
 If they fail, the API does not start, the deploy is marked failed in

@@ -22,8 +22,8 @@ choice. Reasons:
 
 # When to revisit
 
-Move composition to a background task (Prefect flow, FastAPI BackgroundTask,
-or a deferred queue) if any of these become true:
+Move composition to a background task (FastAPI BackgroundTask or a
+deferred queue) if any of these become true:
 
   - Composition for a single source exceeds ~2 seconds, making the POST
     feel slow to transcription-cog's flow.
