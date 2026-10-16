@@ -1,7 +1,7 @@
 # ADR-0003 — Versioned extractions and corrections
 
 **Date:** 2026-05-19
-**Status:** Accepted
+**Status:** Accepted; immutability boundary refined by [ADR-0006](./ADR-0006-operator-direct-edits.md)
 **Related:** ADR-0002 (entity substrate)
 
 ## Context

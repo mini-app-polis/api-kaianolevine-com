@@ -1,8 +1,7 @@
 """Handing transcript and voice-note work to transcription-cog.
 
-This replaces watcher-cog calling Prefect's ``create_flow_run`` on the
-``transcription-cog`` router deployment. The ``mode`` it passed carries
-over unchanged.
+watcher-cog asks for a run with a ``mode``, which becomes this message's
+payload unchanged.
 
 **A job is one file, not a folder sweep.** deejay-cog's job is a sweep, but
 transcription-cog's work does not fit one: a single transcript's extraction

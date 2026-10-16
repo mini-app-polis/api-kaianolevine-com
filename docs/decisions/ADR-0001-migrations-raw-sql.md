@@ -4,7 +4,11 @@ Date: 2026-04-20
 
 ## Status
 
-Accepted
+Accepted. The application mechanism in Decision (Railway's deploy hook)
+is superseded by
+[ADR-0005](./ADR-0005-automated-migration-application.md): migrations
+are applied by `scripts/apply_migrations.py` when the container starts.
+The rest of this decision stands.
 
 ## Context
 

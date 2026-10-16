@@ -32,9 +32,9 @@ The ADRs that ground this pipeline:
               ▼
        watcher-cog (polls Drive)
               │
-              │ signals new file
+              │ POST /v1/transcription/runs → SQS (one job per file)
               ▼
-       transcription-cog.process_transcript flow
+       transcription-cog.process_transcript (Lambda worker)
        ┌────────────────────────────────────────────────┐
        │ 1. parse filename → ParsedFilename             │
        │ 2. read transcript text                        │
@@ -89,11 +89,11 @@ A filename that doesn't parse cleanly is skipped by the cog with a `Sentry` warn
 
 ### 2. Drive watch
 
-`watcher-cog` polls the configured WCS notes folder on a schedule. When new files appear, it signals `transcription-cog` (via the existing inter-cog mechanism). `watcher-cog` itself is generic — it watches multiple folders for multiple cogs and is not WCS-specific.
+`watcher-cog` polls the configured WCS notes folder on a schedule. For each file it finds, it calls `POST /v1/transcription/runs`; the API claims the file and enqueues one job per file on `transcription-cog`'s SQS queue. `watcher-cog` itself is generic — it watches multiple folders for multiple cogs and is not WCS-specific.
 
 ### 3. Ingest pipeline
 
-`transcription-cog` runs the `process_transcript` Prefect flow per detected file. The flow is single-instance (concurrency slot of 1) and processes files sequentially. Per file:
+`transcription-cog`'s Lambda worker runs `process_transcript` once per queued file; jobs run one at a time (the queue consumer's concurrency setting). Per file:
 
 #### 3a. Parse filename
 
@@ -284,7 +284,7 @@ Used by the website's `/notes/*` pages.
 
 - `GET /v1/wcs/wiki/sources` — list visible sources for the caller.
 - `GET /v1/wcs/wiki/sources/{id}` — one source view (visibility-checked).
-- `GET /v1/wcs/wiki/entities/{slug}`, `/instructors/{slug}` — entity and instructor read views.
+- `GET /v1/wcs/wiki/{concepts|techniques|patterns|drills}/{slug}`, `/instructors/{slug}` (and their unslugged list forms) — entity and instructor read views.
 
 Visibility is computed by `visible_source_ids_for_user`: a source is visible to the caller iff it is `is_default_visible=true` or the caller has an explicit grant on it via `wcs_source_grants`.
 
@@ -322,11 +322,11 @@ Authenticated via Clerk session JWT.
 
 ### Wiki renderer (`wiki-curator-cog`)
 
-Stateless Prefect flow (per `wiki-curator-cog` ADR-002). One job: read the substrate, write markdown. Triggered on schedule or on demand.
+Stateless one-shot process (per `wiki-curator-cog` ADR-002), run on Railway: each start renders once and exits. One job: read the substrate, write markdown.
 
 Flow:
 
-1. Authenticate to the API with the cog's own named API key (e.g. `TRANSCRIPTION_COG_API_KEY`); the key identifies the cog.
+1. Authenticate to the API with the cog's own named API key (`WIKI_CURATOR_COG_API_KEY`); the key identifies the cog.
 2. Clone or refresh the `wcs-wiki` repo.
 3. `GET /v1/wcs/wiki/export` — fetch the full canonical graph.
 4. Build in-memory indexes (entities by id and slug, instructors by id, sources by id, attributions grouped by entity and source, etc.).
@@ -339,9 +339,9 @@ Given the same canonical state at the same render-spec version, output is byte-i
 
 The markdown projection of the canonical state. Browsable in Obsidian or on GitHub. Operator-readable, not operator-writable: hand-edits to derived pages are overwritten on next render. The editable surfaces are `CLAUDE.md` (the render spec), `README.md`, and the canonical store (via the API's admin endpoints).
 
-### Q&A agent (future)
+### Q&A agent
 
-A retrieval-based agent at `wcs.kaianolevine.com/notes/ask`, designed in earlier sessions, currently paused. When built, it will read from canonical state via dedicated retrieval endpoints. Not part of the current pipeline but on the roadmap.
+A retrieval-based agent behind `POST /v1/wcs/ask`, surfaced at `wcs.kaianolevine.com/notes/ask` (see `docs/wcs-qa-agent.md`). It currently reads the legacy notes and transcript tables, not the canonical layer; moving it onto canonical state is still future work.
 
 ---
 
@@ -413,7 +413,7 @@ After recompose, the synthetic `kaiano-amy` instructor row is orphan. `DELETE` i
 ### Re-render the wiki after corrections
 
 **Tool:** trigger the renderer.
-**Calls:** invoke the `export` Prefect flow on `wiki-curator-cog`. (Or wait for the next scheduled run.)
+**Calls:** run `wiki-curator-cog` (`python -m wiki_curator_cog.main export`; starting its Railway service runs one export).
 **Effect:** the markdown bundle in `wcs-wiki` regenerates from current canonical state.
 
 ---
