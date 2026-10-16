@@ -1,3 +1,10 @@
+## [2.9.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.5...v2.9.6) (2026-10-16)
+
+
+### Bug Fixes
+
+* **deps:** require miniapppolis-common-utils 6 (>=6.0.1) ([c6c44eb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c6c44ebbcb65fbf0894d3dcb8e3b836252c5c3f2))
+
 ## [2.9.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.4...v2.9.5) (2026-10-16)
 
 
