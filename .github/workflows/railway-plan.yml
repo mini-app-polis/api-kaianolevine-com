@@ -1,13 +1,16 @@
 # Plans .railway/railway.ts against production on every pull request into
 # main that changes it; the plan is the job summary. Reading it is the
-# review, and merging is the approval. The steps live in the shared
-# workflow in mini-app-polis/.github, modelled on mini-app-polis/infra's
-# terraform.yml. MINI-69.
+# review, and merging is the approval. A plan that destroys anything fails
+# unless the pull request is labelled allow-destroy. The steps live in the
+# shared workflow in mini-app-polis/.github, modelled on
+# mini-app-polis/infra's terraform.yml. MINI-69.
 name: Railway plan
 
 on:
   pull_request:
     branches: [main]
+    # labeled/unlabeled: adding or removing allow-destroy re-runs the check.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths: [".railway/**", ".github/workflows/railway-plan.yml"]
 
 permissions:
