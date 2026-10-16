@@ -1,3 +1,10 @@
+## [2.9.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.4...v2.9.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 5.25.5 ([f951686](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f951686f571a669e230fdac3c84e2dd047450a62))
+
 ## [2.9.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.3...v2.9.4) (2026-10-15)
 
 
