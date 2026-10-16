@@ -1,0 +1,21 @@
+# Plans .railway/railway.ts against production on every pull request into
+# main that changes it; the plan is the job summary. Reading it is the
+# review, and merging is the approval. The steps live in the shared
+# workflow in mini-app-polis/.github, modelled on mini-app-polis/infra's
+# terraform.yml. MINI-69.
+name: Railway plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths: [".railway/**", ".github/workflows/railway-plan.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    uses: mini-app-polis/.github/.github/workflows/railway-plan.yml@v3
+    secrets:
+      # A project token for the ecosystem project's production environment.
+      railway-token: ${{ secrets.RAILWAY_TOKEN }}

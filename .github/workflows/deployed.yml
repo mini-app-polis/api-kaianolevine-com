@@ -12,7 +12,8 @@ name: deployed
 # first waits until /version reports the deployment's own commit, and
 # confirms it again after the checks, so every probe in between is known to
 # have met the new deploy. Railway only switches traffic once /health
-# answers (healthcheckPath in railway.json), which keeps that wait short.
+# answers (healthcheckPath in .railway/railway.ts), which keeps that wait
+# short.
 #
 # After a dev deploy it also asks every consumer that keeps a live contract
 # suite to run it against the new API (TEST-016, ADR-012):

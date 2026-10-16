@@ -20,3 +20,10 @@
 # that would diverge — git reads the attribute from the merge base.
 
 uv.lock            -merge
+
+# .railway/ holds railway.ts, a config file the Railway CLI evaluates — not
+# shipped code. Without this, GitHub's language detection counts it as
+# TypeScript, CodeQL default setup tries to enable javascript-typescript,
+# and the extractor (which skips dot-directories) finds nothing to analyse,
+# so every scan fails with "could not process any of it".
+.railway/**        linguist-vendored

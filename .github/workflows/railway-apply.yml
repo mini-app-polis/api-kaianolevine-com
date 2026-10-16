@@ -1,0 +1,26 @@
+# Plans afresh and applies .railway/railway.ts to production on every push
+# to main that changes it, or by hand (Actions → Railway apply → Run
+# workflow). Removing a service or a variable is destructive and applies
+# only if the pull request the commit came from is labelled allow-destroy.
+# The steps live in the shared workflow in mini-app-polis/.github,
+# modelled on mini-app-polis/infra's terraform.yml. MINI-69.
+name: Railway apply
+
+on:
+  push:
+    branches: [main]
+    paths: [".railway/**", ".github/workflows/railway-apply.yml"]
+  workflow_dispatch:
+
+# pull-requests: read finds the pull request a commit came from, for its
+# allow-destroy label.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  apply:
+    if: github.ref_name == 'main'
+    uses: mini-app-polis/.github/.github/workflows/railway-apply.yml@v3
+    secrets:
+      railway-token: ${{ secrets.RAILWAY_TOKEN }}
