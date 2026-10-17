@@ -51,14 +51,14 @@ logger = get_logger()
 AWS_ACCOUNT_ID = "400200465748"
 
 #: Cogs whose queue is FIFO (``fifo = true`` in infra's cog-worker module).
-#: Both run one job at a time. On a standard queue that took a reservation
+#: Each runs one job at a time. On a standard queue that took a reservation
 #: of 1, and every message the trigger pulled while the one run was busy was
 #: throttled, spent a delivery and hid for the visibility timeout — a burst
 #: of more files than ``max_receive_count`` dead-lettered good ones. A FIFO
 #: queue with a single message group hands the trigger one message at a time
 #: instead, so waiting costs nothing. Must match infra; a mismatch sends to a
 #: queue that does not exist, which fails as a drop and releases the claim.
-FIFO_COGS: frozenset[str] = frozenset({"deejay", "transcription"})
+FIFO_COGS: frozenset[str] = frozenset({"deejay", "transcription", "wiki-curator"})
 
 
 def message_group(cog: str) -> str | None:

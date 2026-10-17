@@ -57,6 +57,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services import wiki_dispatch
 from ..services.wcs_sources import SourceIngestError, ingest_source
 from ..services.wcs_wiki import _source_item
 
@@ -115,6 +116,12 @@ async def create_source(
         LOG_SUCCESS,
         source.id,
         composition.attributions_written,
+    )
+    # Into the wiki, when that is switched on. After the commit, so the job
+    # finds the composed source; and never failing the ingest — a dropped job
+    # is reported, and the source waits for the next local run.
+    await wiki_dispatch.link_source_if_enabled(
+        source.id, session=session, settings=settings
     )
     data = _source_item(source)
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
