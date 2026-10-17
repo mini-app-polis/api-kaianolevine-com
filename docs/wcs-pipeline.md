@@ -7,7 +7,7 @@ The pipeline spans five repositories:
 - **`watcher-cog`** — polls Google Drive for new files and signals downstream.
 - **`transcription-cog`** — the ingest pipeline: transcribes audio, runs LLM extraction, registers the source via the API.
 - **`api-kaianolevine-com`** — owns the substrate (Postgres), runs the Composition Service, exposes read/write/admin endpoints.
-- **`wiki-curator-cog`** — the stateless renderer that projects the canonical entity graph into markdown.
+- **`wiki-curator-cog`** — the wiki: LLM passes that link, fold and write prose over the canonical graph (their state held by this API), a Lambda worker that runs them per composed source, and a deterministic renderer into markdown.
 - **`website-astro-wcs`** — the SSR site that surfaces per-lesson notes and operator admin pages.
 - **`wcs-wiki`** — the markdown projection of the canonical entity graph, browsable in Obsidian and on GitHub.
 
@@ -18,6 +18,7 @@ The ADRs that ground this pipeline:
 - **`api-kaianolevine-com` ADR-0004** — rebuild from scratch (the migration that produced the current substrate).
 - **`api-kaianolevine-com` ADR-0006** — operator direct edits on canonical state.
 - **`wiki-curator-cog` ADR-002** — repurpose curator as a renderer over canonical entities.
+- **`wiki-curator-cog` ADR-005 / ADR-006** — the self-generating wiki, and its state, jobs and worker in this pipeline.
 - **`wcs-wiki/CLAUDE.md`** — the render spec (v1.0).
 
 ---
@@ -132,6 +133,8 @@ The output is the **extraction**.
 4. Returns the refreshed `WcsSourceItem` only after all canonical rows are committed.
 
 There is **no eventual consistency**. The canonical layer is current the instant the API call returns.
+
+Then, if `flags.wcs.wiki_jobs_enabled` is on (seeded off, migration 055), the API enqueues a wiki `link` job for the source on `wiki-curator-jobs.fifo` (`services/wiki_dispatch.py`). A dropped job is reported to the errors channel and never fails the ingest.
 
 The output is the **canonical state** of the substrate for that source.
 
@@ -303,7 +306,10 @@ Used by the wiki renderer.
 
 - `GET /v1/wcs/wiki/export` — bulk export of the entire canonical graph in one response.
 
-Gated on `require_scope("wcs.corpus.read")`, held by the `corpus-reader` role. Not visibility-filtered — the renderer needs the full corpus to project the canonical graph as markdown, which is exactly why it does not map to `wcs.notes.read`: every `wcs-reader` holds that scope, and this endpoint bypasses per-source visibility. It replaced `require_wcs_service`, a token-type gate that granted access to any caller merely for being a machine.
+- `GET` / `POST /v1/wcs/wiki/state/{links,facets,prose}` — the curator's state (references, facet decisions, prose and revisions), keyed as its files were; read with `wcs.corpus.read`, written with `wcs.wiki.write` (role `wiki-writer`).
+- `POST /v1/wcs/wiki/jobs` — enqueue wiki jobs; the worker sends a job's follow-ons here (`wcs.wiki.write`).
+
+The export is gated on `require_scope("wcs.corpus.read")`, held by the `corpus-reader` role. Not visibility-filtered — the renderer needs the full corpus to project the canonical graph as markdown, which is exactly why it does not map to `wcs.notes.read`: every `wcs-reader` holds that scope, and this endpoint bypasses per-source visibility. It replaced `require_wcs_service`, a token-type gate that granted access to any caller merely for being a machine.
 
 ---
 
@@ -334,6 +340,10 @@ Flow:
 6. Overwrite the wiki's derived pages wholesale, append one `log.md` entry, commit once (`render: <date> (<N> entities, <S> sources)`), push.
 
 Given the same canonical state at the same render-spec version, output is byte-identical.
+
+### Wiki worker (`wiki-curator-cog`, ADR-006)
+
+A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer above retires once the worker has run on real lessons.
 
 ### Wiki repo (`wcs-wiki`)
 

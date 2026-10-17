@@ -304,9 +304,6 @@ async def export_wiki(
 # which only the curator holds. A POST upserts the entries it carries and
 # leaves the rest alone, so an import is sent in chunks and can be re-sent.
 
-_STATE_READ = "wcs.corpus.read"
-_STATE_WRITE = "wcs.wiki.write"
-
 
 @router.get(
     "/wcs/wiki/state/links",
@@ -315,7 +312,7 @@ _STATE_WRITE = "wcs.wiki.write"
     description="Every statement the linker has read and what it refers to.",
 )
 async def get_wiki_links(
-    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    _caller: Principal = Depends(require_scope("wcs.corpus.read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiLinksState]:
     """Return the whole links document."""
@@ -332,7 +329,7 @@ async def get_wiki_links(
 )
 async def put_wiki_links(
     payload: WcsWikiLinksState,
-    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiStateWriteResult]:
     """Upsert the statements in ``payload``; leave the others alone."""
@@ -356,7 +353,7 @@ async def put_wiki_links(
     description="Every entity decided, its parent or none, and why.",
 )
 async def get_wiki_facets(
-    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    _caller: Principal = Depends(require_scope("wcs.corpus.read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiFacetsState]:
     """Return the whole facets document."""
@@ -373,7 +370,7 @@ async def get_wiki_facets(
 )
 async def put_wiki_facets(
     payload: WcsWikiFacetsState,
-    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiStateWriteResult]:
     """Upsert the decisions in ``payload``; leave the others alone."""
@@ -397,7 +394,7 @@ async def put_wiki_facets(
     description="Every entity's prose, integration watermark and revisions.",
 )
 async def get_wiki_prose(
-    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    _caller: Principal = Depends(require_scope("wcs.corpus.read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiProseState]:
     """Return the whole prose document."""
@@ -414,7 +411,7 @@ async def get_wiki_prose(
 )
 async def put_wiki_prose(
     payload: WcsWikiProseState,
-    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[WcsWikiStateWriteResult]:
     """Upsert the entities in ``payload``; leave the others alone."""
@@ -450,7 +447,7 @@ async def put_wiki_prose(
 async def enqueue_wiki_jobs(
     payload: WcsWikiJobsRequest,
     request: Request,
-    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
 ) -> Envelope[WcsWikiJobsAccepted]:
     """Enqueue every job given; a drop is a 502 naming what was dropped.
 
