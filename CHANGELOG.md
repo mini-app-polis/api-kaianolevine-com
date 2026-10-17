@@ -1,3 +1,15 @@
+# [2.11.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.10.0...v2.11.0) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.4.0 ([c864e96](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c864e9615112083e5fa49683312409f3493a5f55))
+
+
+### Features
+
+* **wcs:** wiki jobs — dispatch to wiki-curator, behind a flag (MINI-95) ([9251b06](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9251b064b6dcc7481287906f42ea8f2d3dcdfd0a))
+
 # [2.10.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.9...v2.10.0) (2026-10-17)
 
 
