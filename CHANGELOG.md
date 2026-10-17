@@ -1,3 +1,15 @@
+# [2.10.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.9...v2.10.0) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.3.0 ([d97193f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d97193f52edb6acc556b6c4de7033e32c15ddb5d))
+
+
+### Features
+
+* **wcs:** wiki curator state tables and endpoints (MINI-89) ([499c4be](https://github.com/mini-app-polis/api-kaianolevine-com/commit/499c4be38f8343485fec1c91c9766fa85e8e451c))
+
 ## [2.9.9](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.9.8...v2.9.9) (2026-10-17)
 
 
