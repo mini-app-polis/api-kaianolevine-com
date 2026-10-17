@@ -25,10 +25,15 @@ from ..schemas import (
     WcsSourceItem,
     WcsSourceViewItem,
     WcsWikiExportItem,
+    WcsWikiFacetsState,
+    WcsWikiLinksState,
+    WcsWikiProseState,
+    WcsWikiStateWriteResult,
     api_error,
     success_envelope,
 )
 from ..services import wcs_wiki as wiki_svc
+from ..services import wcs_wiki_state as state_svc
 
 router = APIRouter()
 log = logger_mod.get_logger()
@@ -286,3 +291,138 @@ async def export_wiki(
         len(data.instructors),
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+# ---------------------------------------------------------------------------
+# The curator's state (wiki-curator-cog ADR-006, MINI-89)
+# ---------------------------------------------------------------------------
+# One document per pass, shaped as the file it replaces. Read with the corpus
+# scope — statements quote private sources — and written with wcs.wiki.write,
+# which only the curator holds. A POST upserts the entries it carries and
+# leaves the rest alone, so an import is sent in chunks and can be re-sent.
+
+_STATE_READ = "wcs.corpus.read"
+_STATE_WRITE = "wcs.wiki.write"
+
+
+@router.get(
+    "/wcs/wiki/state/links",
+    response_model=Envelope[WcsWikiLinksState],
+    summary="The linking pass's references (cog-only)",
+    description="Every statement the linker has read and what it refers to.",
+)
+async def get_wiki_links(
+    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiLinksState]:
+    """Return the whole links document."""
+    doc = await state_svc.get_links(session)
+    n = len(doc.statements)
+    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.post(
+    "/wcs/wiki/state/links",
+    response_model=Envelope[WcsWikiStateWriteResult],
+    summary="Upsert linked statements (cog-only)",
+    description="Each statement given replaces its stored row and references.",
+)
+async def put_wiki_links(
+    payload: WcsWikiLinksState,
+    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiStateWriteResult]:
+    """Upsert the statements in ``payload``; leave the others alone."""
+    result = await state_svc.put_links(session, payload)
+    log.info(
+        "%s wiki state links written=%d total=%d caller=%s",
+        LOG_SUCCESS,
+        result.written,
+        result.total,
+        caller.subject,
+    )
+    return success_envelope(
+        result, count=1, total=1, version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/wcs/wiki/state/facets",
+    response_model=Envelope[WcsWikiFacetsState],
+    summary="The consolidation pass's facet decisions (cog-only)",
+    description="Every entity decided, its parent or none, and why.",
+)
+async def get_wiki_facets(
+    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiFacetsState]:
+    """Return the whole facets document."""
+    doc = await state_svc.get_facets(session)
+    n = len(doc.entities)
+    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.post(
+    "/wcs/wiki/state/facets",
+    response_model=Envelope[WcsWikiStateWriteResult],
+    summary="Upsert facet decisions (cog-only)",
+    description="Each decision given replaces the stored one for that entity.",
+)
+async def put_wiki_facets(
+    payload: WcsWikiFacetsState,
+    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiStateWriteResult]:
+    """Upsert the decisions in ``payload``; leave the others alone."""
+    result = await state_svc.put_facets(session, payload)
+    log.info(
+        "%s wiki state facets written=%d total=%d caller=%s",
+        LOG_SUCCESS,
+        result.written,
+        result.total,
+        caller.subject,
+    )
+    return success_envelope(
+        result, count=1, total=1, version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/wcs/wiki/state/prose",
+    response_model=Envelope[WcsWikiProseState],
+    summary="The generation pass's prose and its history (cog-only)",
+    description="Every entity's prose, integration watermark and revisions.",
+)
+async def get_wiki_prose(
+    _caller: Principal = Depends(require_scope(_STATE_READ)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiProseState]:
+    """Return the whole prose document."""
+    doc = await state_svc.get_prose(session)
+    n = len(doc.entities)
+    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.post(
+    "/wcs/wiki/state/prose",
+    response_model=Envelope[WcsWikiStateWriteResult],
+    summary="Upsert entities' prose (cog-only)",
+    description="Each entity given replaces its stored prose and revisions.",
+)
+async def put_wiki_prose(
+    payload: WcsWikiProseState,
+    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiStateWriteResult]:
+    """Upsert the entities in ``payload``; leave the others alone."""
+    result = await state_svc.put_prose(session, payload)
+    log.info(
+        "%s wiki state prose written=%d total=%d caller=%s",
+        LOG_SUCCESS,
+        result.written,
+        result.total,
+        caller.subject,
+    )
+    return success_envelope(
+        result, count=1, total=1, version=get_settings().API_VERSION
+    )

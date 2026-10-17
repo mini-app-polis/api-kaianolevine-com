@@ -22,6 +22,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY as PgARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -1576,3 +1577,134 @@ class StandardsCatalog(Base):
     published_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# ---------------------------------------------------------------------------
+# The wiki curator's state (migration 054, wiki-curator-cog ADR-006)
+# ---------------------------------------------------------------------------
+# Keyed as the curator keys it — statement keys and entity slugs — with no
+# foreign keys into the substrate: proposed concepts have no entity row, and
+# a decision outlives the source row it was made about.
+
+
+class WcsWikiStateMeta(Base):
+    """A state document's header: its version(s) and model as of the last run."""
+
+    __tablename__ = "wcs_wiki_state_meta"
+
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
+    header: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiStatement(Base):
+    """One statement the linker has read, under a linker version."""
+
+    __tablename__ = "wcs_wiki_statements"
+
+    statement_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    subject_slug: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    session_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    linker_version: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiReference(Base):
+    """A concept one statement refers to, or denies referring to."""
+
+    __tablename__ = "wcs_wiki_references"
+
+    statement_key: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("wcs_wiki_statements.statement_key", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    target_slug: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    target_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    polarity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class WcsWikiFacet(Base):
+    """Whether one entity folds into a broader one."""
+
+    __tablename__ = "wcs_wiki_facets"
+
+    slug: Mapped[str] = mapped_column(Text, primary_key=True)
+    parent_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    same: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    version: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    decided_at: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiProse(Base):
+    """One entity's current prose and its integration watermark."""
+
+    __tablename__ = "wcs_wiki_prose"
+
+    slug: Mapped[str] = mapped_column(Text, primary_key=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    generator_version: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    generated_at: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    definition: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    context: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    integrated: Mapped[list[str]] = mapped_column(
+        PgARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiProseRevision(Base):
+    """One revision of an entity's prose, generated or found edited."""
+
+    __tablename__ = "wcs_wiki_prose_revisions"
+
+    slug: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("wcs_wiki_prose.slug", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    author: Mapped[str] = mapped_column(Text, nullable=False)
+    at: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    statements: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    definition: Mapped[str | None] = mapped_column(Text, nullable=True)
+    context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prose: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -108,11 +108,11 @@ MACHINES: tuple[Machine, ...] = (
     ),
     Machine(
         name="wiki-curator-cog",
-        roles=("corpus-reader", "pipeline-writer", "notifier"),
+        roles=("corpus-reader", "wiki-writer", "pipeline-writer", "notifier"),
         notes=(
-            "GET /v1/wcs/wiki/export (full corpus, unfiltered) and POST "
-            "/v1/evaluations. Reads everything, but reading is not admin: no "
-            "wcs.grants.write."
+            "GET /v1/wcs/wiki/export (full corpus, unfiltered), GET and POST "
+            "/v1/wcs/wiki/state/* (its own state), POST /v1/evaluations. "
+            "Reads everything, but reading is not admin: no wcs.grants.write."
         ),
     ),
     # The identity for notifications that belong to no cog — a shell script, a
@@ -195,6 +195,7 @@ MACHINES: tuple[Machine, ...] = (
             "catalog-ingest",
             "wcs-writer",
             "corpus-reader",
+            "wiki-writer",
             "pipeline-writer",
             "notifier",
         ),
@@ -202,7 +203,8 @@ MACHINES: tuple[Machine, ...] = (
             "Development only. The catalog in mini_app_polis.api.contract: "
             "POST /v1/ingest, /v1/live-plays, /v1/spotify/playlists, "
             "/v1/wcs/transcripts, /v1/wcs/sources, /v1/evaluations, /v1/notify; "
-            "GET /v1/wcs/wiki/export, /v1/evaluations."
+            "GET /v1/wcs/wiki/export, /v1/evaluations; GET and POST "
+            "/v1/wcs/wiki/state/*."
         ),
     ),
 )
