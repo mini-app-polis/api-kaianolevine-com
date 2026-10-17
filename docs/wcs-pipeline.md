@@ -289,7 +289,9 @@ Used by the website's `/notes/*` pages.
 - `GET /v1/wcs/wiki/sources/{id}` — one source view (visibility-checked).
 - `GET /v1/wcs/wiki/{concepts|techniques|patterns|drills}/{slug}`, `/instructors/{slug}` (and their unslugged list forms) — entity and instructor read views.
 
-Visibility is computed by `visible_source_ids_for_user`: a source is visible to the caller iff it is `is_default_visible=true` or the caller has an explicit grant on it via `wcs_source_grants`.
+- `GET /v1/wcs/wiki/pages` and `/v1/wcs/wiki/pages/{slug}` — the wiki's page documents (wiki-curator-cog ADR-006, MINI-96), filtered to the evidence the caller can see. Statements, mistakes, skills and relations from a hidden source are dropped and a link to one keeps only its label; a page built only from hidden sources is a 404.
+
+Visibility is computed by `visible_source_ids_for_user`: a source is visible to the caller iff it is `is_default_visible=true` or the caller has an explicit grant on it via `wcs_source_grants`. For the wiki pages it is read on every request, never from the stored document, so a source made private disappears from its pages at once.
 
 ### Admin-scoped (full corpus, human admin)
 
@@ -297,6 +299,7 @@ Used by the admin portal pages.
 
 - `GET /v1/wcs/wiki/admin/sources` — full source list, no visibility filter.
 - `GET /v1/wcs/wiki/admin/sources/{id}` — one source view, no visibility filter.
+- `GET /v1/wcs/wiki/admin/pages` and `/v1/wcs/wiki/admin/pages/{slug}` — the wiki's page documents whole, each citation marked with its source's current visibility; `?as=public` shows what a reader with no grants would see.
 
 Gated on `require_scope("wcs.corpus.read")`, held by `wcs-admin` and `corpus-reader`. Deliberately not `wcs.notes.read`: that is the only scope in `wcs-reader`, the default role every human is provisioned with, so guarding a visibility-bypassing route on it grants the full corpus — private sources included — to every signed-in user.
 
@@ -308,6 +311,7 @@ Used by the wiki renderer.
 
 - `GET` / `POST /v1/wcs/wiki/state/{links,facets,prose}` — the curator's state (references, facet decisions, prose and revisions), keyed as its files were; read with `wcs.corpus.read`, written with `wcs.wiki.write` (role `wiki-writer`).
 - `POST /v1/wcs/wiki/jobs` — enqueue wiki jobs; the worker sends a job's follow-ons here (`wcs.wiki.write`).
+- `POST /v1/wcs/wiki/pages` — the curator's `materialise` step stores page documents here and removes pages folded away (`wcs.wiki.write`). The API stores, filters and serves them; it never recomputes a page.
 
 The export is gated on `require_scope("wcs.corpus.read")`, held by the `corpus-reader` role. Not visibility-filtered — the renderer needs the full corpus to project the canonical graph as markdown, which is exactly why it does not map to `wcs.notes.read`: every `wcs-reader` holds that scope, and this endpoint bypasses per-source visibility. It replaced `require_wcs_service`, a token-type gate that granted access to any caller merely for being a machine.
 
@@ -343,7 +347,7 @@ Given the same canonical state at the same render-spec version, output is byte-i
 
 ### Wiki worker (`wiki-curator-cog`, ADR-006)
 
-A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer above retires once the worker has run on real lessons.
+A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched, and after each `generate` a `materialise` that stores the changed pages' documents — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer above retires next: it renders the bare export, without the worker's links, folds or prose, and the `wcs-wiki` repo stays only as a local export written from the same page documents (wiki-curator-cog MINI-99).
 
 ### Wiki repo (`wcs-wiki`)
 

@@ -6,7 +6,8 @@ Two producers' worth of requests, one queue, the API sending for both:
   composed, the API asks the curator to ``link`` it. That is the start of
   every lesson's or note's way into the wiki.
 - **A job's follow-ons.** Each wiki job names the jobs that should follow it
-  (``consolidate`` for new entities, ``generate`` for the pages it touched).
+  (``consolidate`` for new entities, ``generate`` for the pages it touched,
+  ``materialise`` for the pages a ``generate`` was asked about).
   The curator's worker posts them to ``POST /v1/wcs/wiki/jobs`` and the API
   enqueues them, so the API stays the fleet's one producer.
 

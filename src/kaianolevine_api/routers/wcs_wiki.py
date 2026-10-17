@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
@@ -29,6 +29,10 @@ from ..schemas import (
     WcsWikiJobsAccepted,
     WcsWikiJobsRequest,
     WcsWikiLinksState,
+    WcsWikiPage,
+    WcsWikiPageSummary,
+    WcsWikiPagesWrite,
+    WcsWikiPagesWriteResult,
     WcsWikiProseState,
     WcsWikiStateWriteResult,
     api_error,
@@ -36,6 +40,7 @@ from ..schemas import (
 )
 from ..services import job_queue, wiki_dispatch
 from ..services import wcs_wiki as wiki_svc
+from ..services import wcs_wiki_pages as pages_svc
 from ..services import wcs_wiki_state as state_svc
 
 router = APIRouter()
@@ -426,6 +431,131 @@ async def put_wiki_prose(
     return success_envelope(
         result, count=1, total=1, version=get_settings().API_VERSION
     )
+
+
+# ---------------------------------------------------------------------------
+# Page documents (wiki-curator-cog ADR-006, MINI-96)
+# ---------------------------------------------------------------------------
+# The curator posts one document per entity page; readers get it filtered to
+# the sources they can see. Same split as sources: the plain routes filter
+# by the caller's visibility under wcs.notes.read; the admin routes return
+# everything under wcs.corpus.read, and ?as=public shows what a reader with
+# no grants would see.
+
+AsPublic = Annotated[
+    Literal["public"] | None,
+    Query(alias="as", description="'public': the page as a reader with no grants."),
+]
+
+
+@router.post(
+    "/wcs/wiki/pages",
+    response_model=Envelope[WcsWikiPagesWriteResult],
+    summary="Upsert page documents (cog-only)",
+    description=(
+        "Each page given replaces the stored one; each slug in remove is "
+        "deleted. Written by wiki-curator-cog's materialise step."
+    ),
+)
+async def put_wiki_pages(
+    payload: WcsWikiPagesWrite,
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiPagesWriteResult]:
+    """Store the pages in ``payload`` and delete the ones it names as gone."""
+    result = await pages_svc.put_pages(session, payload)
+    log.info(
+        "%s wiki pages written=%d removed=%d total=%d caller=%s",
+        LOG_SUCCESS,
+        result.written,
+        result.removed,
+        result.total,
+        caller.subject,
+    )
+    return success_envelope(
+        result, count=1, total=1, version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/wcs/wiki/pages",
+    response_model=Envelope[list[WcsWikiPageSummary]],
+    summary="List wiki pages",
+    description="Every page with evidence the caller can see, by name.",
+)
+async def list_wiki_pages(
+    principal: Principal = Depends(require_scope("wcs.notes.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[WcsWikiPageSummary]]:
+    """Index of the pages visible to the caller."""
+    visible = await pages_svc.visible_for_user(session, principal.subject)
+    items = await pages_svc.list_pages(session, visible)
+    n = len(items)
+    return success_envelope(items, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.get(
+    "/wcs/wiki/pages/{slug}",
+    response_model=Envelope[WcsWikiPage],
+    summary="Get one wiki page",
+    description=(
+        "The page's document with only the evidence the caller can see. 404 "
+        "when there is no such page, or none of its evidence is visible."
+    ),
+)
+async def get_wiki_page(
+    slug: str,
+    principal: Principal = Depends(require_scope("wcs.notes.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiPage]:
+    """One page, filtered to the caller's sources."""
+    visible = await pages_svc.visible_for_user(session, principal.subject)
+    page = await pages_svc.get_page(session, slug, visible)
+    if page is None:
+        raise api_error(404, "page_not_found", "Wiki page not found")
+    return success_envelope(page, count=1, total=1, version=get_settings().API_VERSION)
+
+
+@router.get(
+    "/wcs/wiki/admin/pages",
+    response_model=Envelope[list[WcsWikiPageSummary]],
+    summary="List all wiki pages (admin)",
+    description="Every page regardless of visibility; ?as=public for the public set.",
+)
+async def list_wiki_pages_admin(
+    as_: AsPublic = None,
+    _admin: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[WcsWikiPageSummary]]:
+    """Index of every page, or of the public ones."""
+    visible = await pages_svc.public_sources(session) if as_ == "public" else None
+    items = await pages_svc.list_pages(session, visible)
+    n = len(items)
+    return success_envelope(items, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.get(
+    "/wcs/wiki/admin/pages/{slug}",
+    response_model=Envelope[WcsWikiPage],
+    summary="Get one wiki page (admin)",
+    description=(
+        "The whole document, private citations included and each marked by "
+        "its source's current visibility; ?as=public strips what a reader "
+        "with no grants would not see."
+    ),
+)
+async def get_wiki_page_admin(
+    slug: str,
+    as_: AsPublic = None,
+    _admin: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiPage]:
+    """One page, whole or as the public would see it."""
+    visible = await pages_svc.public_sources(session) if as_ == "public" else None
+    page = await pages_svc.get_page(session, slug, visible)
+    if page is None:
+        raise api_error(404, "page_not_found", "Wiki page not found")
+    return success_envelope(page, count=1, total=1, version=get_settings().API_VERSION)
 
 
 # ---------------------------------------------------------------------------

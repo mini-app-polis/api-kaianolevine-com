@@ -38,6 +38,8 @@ CORPUS_ROUTES = [
     "/v1/wcs/wiki/state/links",
     "/v1/wcs/wiki/state/facets",
     "/v1/wcs/wiki/state/prose",
+    # Page documents unfiltered, private citations included (MINI-96).
+    "/v1/wcs/wiki/admin/pages",
     # The gaps endpoints enumerate the whole substrate and discard the
     # principal entirely (`_ = admin_id_principal.subject`), so there is no
     # per-caller filtering behind the scope check.
