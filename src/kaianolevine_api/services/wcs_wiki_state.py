@@ -108,6 +108,7 @@ async def _count(session: AsyncSession, table: Any) -> int:
 
 
 async def get_links(session: AsyncSession) -> WcsWikiLinksState:
+    """Assemble the whole links document: every statement with its references, in order."""
     header = await _header(session, "links")
     refs: dict[str, list[WcsWikiReference]] = defaultdict(list)
     for r in (
@@ -151,6 +152,7 @@ async def get_links(session: AsyncSession) -> WcsWikiLinksState:
 async def put_links(
     session: AsyncSession, doc: WcsWikiLinksState
 ) -> WcsWikiStateWriteResult:
+    """Upsert the statements in ``doc``, replacing each one's references, and record the header."""
     keys = sorted(doc.statements)
     if keys:
         await _upsert(
@@ -201,6 +203,7 @@ async def put_links(
 
 
 async def get_facets(session: AsyncSession) -> WcsWikiFacetsState:
+    """Assemble the whole facets document: every entity's consolidation decision."""
     header = await _header(session, "facets")
     entities = {
         f.slug: WcsWikiFacetDecision(
@@ -225,6 +228,7 @@ async def get_facets(session: AsyncSession) -> WcsWikiFacetsState:
 async def put_facets(
     session: AsyncSession, doc: WcsWikiFacetsState
 ) -> WcsWikiStateWriteResult:
+    """Upsert the facet decisions in ``doc`` and record the header."""
     slugs = sorted(doc.entities)
     if slugs:
         await _upsert(
@@ -259,6 +263,7 @@ async def put_facets(
 
 
 async def get_prose(session: AsyncSession) -> WcsWikiProseState:
+    """Assemble the whole prose document: every entity's prose with its revisions, in order."""
     header = await _header(session, "prose")
     revisions: dict[str, list[WcsWikiProseRevision]] = defaultdict(list)
     for r in (
@@ -304,6 +309,7 @@ async def get_prose(session: AsyncSession) -> WcsWikiProseState:
 async def put_prose(
     session: AsyncSession, doc: WcsWikiProseState
 ) -> WcsWikiStateWriteResult:
+    """Upsert the prose entries in ``doc``, replacing each one's revisions, and record the header."""
     slugs = sorted(doc.entities)
     if slugs:
         await _upsert(
