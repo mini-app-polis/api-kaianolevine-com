@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
 from mini_app_polis import logger as logger_mod
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS
@@ -26,12 +26,15 @@ from ..schemas import (
     WcsSourceViewItem,
     WcsWikiExportItem,
     WcsWikiFacetsState,
+    WcsWikiJobsAccepted,
+    WcsWikiJobsRequest,
     WcsWikiLinksState,
     WcsWikiProseState,
     WcsWikiStateWriteResult,
     api_error,
     success_envelope,
 )
+from ..services import job_queue, wiki_dispatch
 from ..services import wcs_wiki as wiki_svc
 from ..services import wcs_wiki_state as state_svc
 
@@ -426,3 +429,53 @@ async def put_wiki_prose(
     return success_envelope(
         result, count=1, total=1, version=get_settings().API_VERSION
     )
+
+
+# ---------------------------------------------------------------------------
+# Wiki jobs (wiki-curator-cog ADR-006, MINI-95)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/wcs/wiki/jobs",
+    response_model=Envelope[WcsWikiJobsAccepted],
+    status_code=202,
+    summary="Put wiki jobs on the curator's queue (cog-only)",
+    description=(
+        "Enqueues each job, in order, on wiki-curator-cog's queue: the "
+        "follow-on jobs a wiki job named, or any job an operator sends by "
+        "hand. Answers 502 if one did not land; the ones before it did."
+    ),
+)
+async def enqueue_wiki_jobs(
+    payload: WcsWikiJobsRequest,
+    request: Request,
+    caller: Principal = Depends(require_scope(_STATE_WRITE)),
+) -> Envelope[WcsWikiJobsAccepted]:
+    """Enqueue every job given; a drop is a 502 naming what was dropped.
+
+    Not behind the wiki jobs flag: the flag stops the source hook starting
+    work nobody asked for, and a caller here is asking.
+    """
+    settings = get_settings()
+    message_ids: list[str] = []
+    for job in payload.jobs:
+        try:
+            accepted = await wiki_dispatch.dispatch_wiki_job(job, settings=settings)
+        except wiki_dispatch.DispatchError as exc:
+            job_queue.record_drop(request, exc)
+            raise api_error(
+                502,
+                "dispatch_failed",
+                f"{len(message_ids)} of {len(payload.jobs)} wiki jobs enqueued; "
+                f"the next was not: {exc}",
+            ) from exc
+        message_ids.append(str(accepted.get("message_id") or ""))
+    log.info(
+        "%s wiki jobs enqueued=%d caller=%s",
+        LOG_SUCCESS,
+        len(message_ids),
+        caller.subject,
+    )
+    data = WcsWikiJobsAccepted(message_ids=message_ids)
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
