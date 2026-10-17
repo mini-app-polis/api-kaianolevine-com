@@ -1,3 +1,15 @@
+# [2.12.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.11.1...v2.12.0) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.5.0 ([47c7e6e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/47c7e6ee1a111800798bf109f1302bee6260c349))
+
+
+### Features
+
+* **wcs:** wiki page documents — stored, filtered by source visibility, served (MINI-96) ([082e44f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/082e44fb1233fe056218cb6ee9971053c45594e7))
+
 ## [2.11.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.11.0...v2.11.1) (2026-10-17)
 
 
