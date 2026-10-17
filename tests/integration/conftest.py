@@ -237,6 +237,7 @@ _DEV_ROLES = {
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
+    "wiki-writer": ["wcs.wiki.write"],
     "pipeline-writer": ["pipeline.evaluations.write", "pipeline.findings.write"],
     "catalog-ingest": [
         "catalog.sets.write",

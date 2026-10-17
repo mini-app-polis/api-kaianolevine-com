@@ -56,6 +56,15 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     WcsTranscriptCreate,
     WcsTranscriptItem,
     WcsWikiExportItem,
+    WcsWikiFacetDecision,
+    WcsWikiFacetsState,
+    WcsWikiLinkedStatement,
+    WcsWikiLinksState,
+    WcsWikiProseEntry,
+    WcsWikiProseRevision,
+    WcsWikiProseState,
+    WcsWikiReference,
+    WcsWikiStateWriteResult,
 )
 from pydantic import (
     BaseModel,
