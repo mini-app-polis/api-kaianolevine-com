@@ -1,3 +1,10 @@
+## [2.11.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.11.0...v2.11.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **wcs-wiki:** declare literal scopes on wiki state routes and document state service ([f1e601c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f1e601c50a3d35696f22ea1326ce9cda538b801b))
+
 # [2.11.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.10.0...v2.11.0) (2026-10-17)
 
 
