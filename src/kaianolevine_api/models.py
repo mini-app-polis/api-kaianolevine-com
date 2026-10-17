@@ -1708,3 +1708,23 @@ class WcsWikiProseRevision(Base):
     definition: Mapped[str | None] = mapped_column(Text, nullable=True)
     context: Mapped[str | None] = mapped_column(Text, nullable=True)
     prose: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class WcsWikiPageRow(Base):
+    """One entity page's document, as materialise built it (MINI-96)."""
+
+    __tablename__ = "wcs_wiki_pages"
+
+    slug: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    document: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    evidence_sources: Mapped[list[uuid.UUID]] = mapped_column(
+        PgARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'"),
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

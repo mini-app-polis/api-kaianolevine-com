@@ -63,6 +63,10 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     WcsWikiJobsRequest,
     WcsWikiLinkedStatement,
     WcsWikiLinksState,
+    WcsWikiPage,
+    WcsWikiPageCitation,
+    WcsWikiPagesWrite,
+    WcsWikiPagesWriteResult,
     WcsWikiProseEntry,
     WcsWikiProseRevision,
     WcsWikiProseState,
@@ -1485,3 +1489,18 @@ class EvaluationFleetAccepted(BaseModel):
     failed: list[str] = Field(
         default_factory=list, description="Repositories that did not."
     )
+
+
+class WcsWikiPageSummary(BaseModel):
+    """One wiki page in the index: enough to search, list and sort by change.
+
+    The page documents themselves are the fleet contract's ``WcsWikiPage``;
+    this summary is web-facing only (wiki-curator-cog ADR-006, MINI-96).
+    """
+
+    slug: str = Field(..., description="The page's slug.")
+    name: str = Field(..., description="Display name.")
+    kind: str = Field(..., description="concept, technique, pattern or drill.")
+    aliases: list[str] = Field(default_factory=list, description="Other names.")
+    definition: str = Field("", description="The page's first section.")
+    updated_at: dt.datetime = Field(..., description="When it was last materialised.")
