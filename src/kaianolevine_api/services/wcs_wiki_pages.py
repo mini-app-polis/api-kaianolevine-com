@@ -57,7 +57,14 @@ _SOURCE_LINK = re.compile(
 async def put_pages(
     session: AsyncSession, write: WcsWikiPagesWrite
 ) -> WcsWikiPagesWriteResult:
-    """Upsert the pages given and delete the slugs named as gone."""
+    """Upsert the pages given and delete the slugs named as gone.
+
+    Every page sent is written, an identical one included, so its updated_at
+    moves and the /admin/wiki panel can count a rebuild's progress. Which of
+    them is new or different is read from the rows they replace, in the same
+    transaction, so a run report can say what changed and not only what was
+    processed.
+    """
     rows = [
         {
             "slug": page.slug,
@@ -69,7 +76,29 @@ async def put_pages(
         }
         for page in write.pages
     ]
+    created: list[str] = []
+    changed: list[str] = []
     if rows:
+        stored = {
+            r.slug: (r.kind, r.name, r.document)
+            for r in (
+                await session.execute(
+                    select(
+                        WcsWikiPageRow.slug,
+                        WcsWikiPageRow.kind,
+                        WcsWikiPageRow.name,
+                        WcsWikiPageRow.document,
+                    ).where(WcsWikiPageRow.slug.in_([row["slug"] for row in rows]))
+                )
+            ).all()
+        }
+        for row in rows:
+            slug = str(row["slug"])
+            before = stored.get(slug)
+            if before is None:
+                created.append(slug)
+            elif before != (row["kind"], row["name"], row["document"]):
+                changed.append(slug)
         stmt = insert(WcsWikiPageRow).values(rows)
         await session.execute(
             stmt.on_conflict_do_update(
@@ -85,21 +114,28 @@ async def put_pages(
         )
     # A page both written and named as gone is kept: the write is the newer word.
     gone = sorted(set(write.remove) - {page.slug for page in write.pages})
-    removed = 0
+    removed_slugs: list[str] = []
     if gone:
         deleted = await session.execute(
             delete(WcsWikiPageRow)
             .where(WcsWikiPageRow.slug.in_(gone))
             .returning(WcsWikiPageRow.slug)
         )
-        removed = len(deleted.scalars().all())
+        removed_slugs = sorted(deleted.scalars().all())
     await session.commit()
     total = int(
         (
             await session.execute(select(func.count()).select_from(WcsWikiPageRow))
         ).scalar_one()
     )
-    return WcsWikiPagesWriteResult(written=len(rows), removed=removed, total=total)
+    return WcsWikiPagesWriteResult(
+        written=len(rows),
+        removed=len(removed_slugs),
+        total=total,
+        created=sorted(created),
+        changed=sorted(changed),
+        removed_slugs=removed_slugs,
+    )
 
 
 # ── Who sees what ──
