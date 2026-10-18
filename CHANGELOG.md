@@ -1,3 +1,10 @@
+# [2.15.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.14.0...v2.15.0) (2026-10-18)
+
+
+### Features
+
+* **wcs:** wiki jobs run side by side where they write different state (MINI-105) ([4f661b6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4f661b6c115035acac2d1e2a87fc1144dde8a53c))
+
 # [2.14.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.13.0...v2.14.0) (2026-10-18)
 
 
