@@ -103,12 +103,12 @@ async def test_cloudflare_1015_holds_every_webhook_for_the_default(
 @respx.mock
 async def test_retry_after_header_sets_the_cooldown(settings) -> None:
     respx.post(RUNS_URL).mock(
-        return_value=Response(429, text="slow down", headers={"Retry-After": "120"})
+        return_value=Response(429, text="slow down", headers={"Retry-After": "45"})
     )
 
     await _send(settings, discord.CHANNEL_RUNS)
 
-    assert 110 < transport._cooldown_remaining(RUNS_URL) <= 120
+    assert 40 < transport._cooldown_remaining(RUNS_URL) <= 45
 
 
 @respx.mock
