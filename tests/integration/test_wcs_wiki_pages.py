@@ -144,12 +144,47 @@ def _texts(page: dict[str, Any]) -> list[str]:
     return [s["text"] for t in page["by_teacher"] for s in t["statements"]]
 
 
+async def test_a_write_says_which_pages_are_new_changed_or_gone(
+    client, sources
+) -> None:
+    """A rebuild reports what it changed, not only what it rewrote."""
+    ids = [sources["public"]]
+    await _put(
+        client,
+        {"pages": [_page("anchor", ids), _page("frame", ids), _page("old", ids)]},
+    )
+
+    result = await _put(
+        client,
+        {
+            "pages": [
+                _page("anchor", ids),  # identical
+                _page("frame", ids, definition="Reworded."),  # changed
+                _page("stretch", ids),  # new
+            ],
+            "remove": ["old", "never-was"],
+        },
+    )
+
+    assert result == {
+        "written": 3,
+        "removed": 1,
+        "total": 3,
+        "created": ["stretch"],
+        "changed": ["frame"],
+        "removed_slugs": ["old"],
+    }
+
+
 async def test_a_page_comes_back_whole_to_the_admin(client, sources) -> None:
     ids = [sources["public"], sources["private"]]
     assert await _put(client, {"pages": [_page("anchor", ids)]}) == {
         "written": 1,
         "removed": 0,
         "total": 1,
+        "created": ["anchor"],
+        "changed": [],
+        "removed_slugs": [],
     }
     resp = await client.get("/v1/wcs/wiki/admin/pages/anchor")
     assert resp.status_code == 200, resp.text
@@ -227,6 +262,9 @@ async def test_a_rewrite_replaces_and_a_removal_deletes(client, sources) -> None
         "written": 1,
         "removed": 1,
         "total": 1,
+        "created": [],
+        "changed": ["anchor"],
+        "removed_slugs": ["folded"],
     }
     page = (await client.get("/v1/wcs/wiki/admin/pages/anchor")).json()["data"]
     assert page["definition"] == "Rewritten."
