@@ -85,7 +85,7 @@ async def test_it_goes_to_the_curators_fifo_queue_in_one_group(monkeypatch) -> N
 
 async def test_jobs_are_enqueued_in_order(client, monkeypatch) -> None:
     _settings(monkeypatch)
-    ids = iter(["m-1", "m-2"])
+    ids = iter(["m-1", "m-2", "m-3"])
     with patch.object(
         wiki_dispatch,
         "dispatch_wiki_job",
@@ -97,12 +97,18 @@ async def test_jobs_are_enqueued_in_order(client, monkeypatch) -> None:
                 "jobs": [
                     {"job": "consolidate", "entities": ["stationary-anchor"]},
                     {"job": "generate", "entities": ["anchor", "frame"]},
+                    # generate's follow-on (MINI-96)
+                    {"job": "materialise", "entities": ["anchor", "frame"]},
                 ]
             },
         )
     assert resp.status_code == 202, resp.text
-    assert resp.json()["data"] == {"message_ids": ["m-1", "m-2"]}
-    assert [c.args[0].job for c in sent.await_args_list] == ["consolidate", "generate"]
+    assert resp.json()["data"] == {"message_ids": ["m-1", "m-2", "m-3"]}
+    assert [c.args[0].job for c in sent.await_args_list] == [
+        "consolidate",
+        "generate",
+        "materialise",
+    ]
 
 
 async def test_a_dropped_job_is_a_502_saying_how_far_it_got(
