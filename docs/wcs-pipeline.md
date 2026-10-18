@@ -311,7 +311,7 @@ Used by the wiki renderer.
 
 - `GET` / `POST /v1/wcs/wiki/state/{links,facets,prose}` — the curator's state (references, facet decisions, prose and revisions), keyed as its files were; read with `wcs.corpus.read`, written with `wcs.wiki.write` (role `wiki-writer`).
 - `POST /v1/wcs/wiki/jobs` — enqueue wiki jobs; the worker sends a job's follow-ons here (`wcs.wiki.write`).
-- `POST /v1/wcs/wiki/admin/jobs` — the /admin/wiki panel starts a free operation: rebuild every page, or named pages (`wcs.wiki.operate`, held by `wcs-admin`; MINI-103).
+- `POST /v1/wcs/wiki/admin/jobs` — the /admin/wiki panel starts a free operation: rebuild every page, or named pages (`wcs.wiki.operate`, held by `wcs-admin`; MINI-103). The same request again within five minutes queues nothing, because SQS drops it as a duplicate. The response then says `deduplicated: true` and gives the first send's `queued_at`, so the panel watches the job that is already running.
 - `POST /v1/wcs/wiki/pages` — the curator's `materialise` step stores page documents here and removes pages folded away (`wcs.wiki.write`). The API stores, filters and serves them; it never recomputes a page.
 
 The export is gated on `require_scope("wcs.corpus.read")`, held by the `corpus-reader` role. Not visibility-filtered — the renderer needs the full corpus to project the canonical graph as markdown, which is exactly why it does not map to `wcs.notes.read`: every `wcs-reader` holds that scope, and this endpoint bypasses per-source visibility. It replaced `require_wcs_service`, a token-type gate that granted access to any caller merely for being a machine.

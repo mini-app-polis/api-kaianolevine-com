@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 import uuid
 from typing import Annotated, Literal
@@ -716,15 +717,23 @@ async def start_wiki_operation(
     except wiki_dispatch.DispatchError as exc:
         job_queue.record_drop(request, exc)
         raise api_error(502, "dispatch_failed", f"Not queued: {exc}") from exc
+    message_id = str(accepted.get("message_id") or "")
+    now = dt.datetime.now(dt.UTC)
+    earlier = wiki_dispatch.first_queued(message_id, now)
+    if earlier is not None:
+        summary = "Already queued less than five minutes ago; this joins that job."
     log.info(
-        "%s wiki admin operation %s caller=%s",
+        "%s wiki admin operation %s caller=%s deduplicated=%s",
         LOG_SUCCESS,
         payload.action,
         admin.subject,
+        earlier is not None,
     )
     data = WcsWikiAdminJobAccepted(
         action=payload.action,
-        message_ids=[str(accepted.get("message_id") or "")],
+        message_ids=[message_id],
         summary=summary,
+        deduplicated=earlier is not None,
+        queued_at=earlier or now,
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)

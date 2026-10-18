@@ -6,6 +6,7 @@ own follow-on jobs — and one FIFO queue out.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,6 +28,13 @@ from tests.integration.test_wcs_sources_endpoint import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(autouse=True)
+def forget_queued_ids() -> None:
+    """Each test starts with no message ids remembered from another."""
+    wiki_dispatch._first_queued.clear()
+
 
 SOURCE = uuid.UUID("03405b47-ded5-461f-aa9b-8b19ca0c903f")
 
@@ -304,13 +312,44 @@ async def test_the_admin_rebuilds_every_page(client) -> None:
         )
     assert resp.status_code == 202, resp.text
     data = resp.json()["data"]
+    assert data.pop("queued_at")
     assert data == {
         "action": "rebuild_every_page",
         "message_ids": ["m"],
         "summary": "Queued a rebuild of every page.",
+        "deduplicated": False,
     }
     [call] = sent.await_args_list
     assert call.args[0] == WcsWikiJob(job="materialise")
+
+
+async def test_a_second_click_inside_the_dedup_window_joins_the_first(client) -> None:
+    """SQS answers a deduplicated send with the kept message's id and nothing
+    else; the panel waited forever on such a click (2026-10-18)."""
+    with patch.object(
+        wiki_dispatch,
+        "dispatch_wiki_job",
+        AsyncMock(return_value={"message_id": "m-dup"}),
+    ):
+        first = await client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+        second = await client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+    a, b = first.json()["data"], second.json()["data"]
+    assert a["deduplicated"] is False
+    assert b["deduplicated"] is True
+    assert b["queued_at"] == a["queued_at"]
+    assert "Already queued" in b["summary"]
+
+
+def test_an_id_is_forgotten_after_the_dedup_window() -> None:
+    t0 = dt.datetime(2026, 10, 18, 21, 44, tzinfo=dt.UTC)
+    assert wiki_dispatch.first_queued("m-old", t0) is None
+    assert wiki_dispatch.first_queued("m-old", t0 + dt.timedelta(minutes=4)) == t0
+    later = t0 + dt.timedelta(minutes=6)
+    assert wiki_dispatch.first_queued("m-old", later) is None
 
 
 async def test_the_admin_rebuilds_named_pages(client) -> None:
