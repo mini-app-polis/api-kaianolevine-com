@@ -1,3 +1,16 @@
+# [2.16.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.15.0...v2.16.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.7.0 ([8e15852](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8e15852f839209ca0f44b7e825eff338669d065b))
+* **deps:** common-utils 6.7.1, so a Discord 429 holds sends for at most a minute ([195f6f8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/195f6f81ceb37592c73094b5670ec3ab97495b5a))
+
+
+### Features
+
+* **wcs:** the wiki export is built once per corpus revision, with ETag, 304 and a 503 when busy (MINI-106) ([2307118](https://github.com/mini-app-polis/api-kaianolevine-com/commit/23071184bef9bc03eb4dc7c69c157dafa82b0423))
+
 # [2.15.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.14.0...v2.15.0) (2026-10-18)
 
 
