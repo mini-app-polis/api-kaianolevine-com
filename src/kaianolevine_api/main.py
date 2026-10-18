@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version as pkg_version
 from typing import Any
 
-import sentry_sdk
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +19,7 @@ from mini_app_polis.logger import (
     with_log_prefix,
 )
 from mini_app_polis.request_metrics import RequestMetricsMiddleware
+from mini_app_polis.sentry import init_sentry
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from .config import get_settings
@@ -63,27 +63,22 @@ logger = get_logger()
 async def lifespan(_app: FastAPI):
     """Initialize and tear down process-level app resources."""
     settings = get_settings()
-    if settings.SENTRY_DSN_APIS:
-        sentry_sdk.init(
-            dsn=settings.SENTRY_DSN_APIS,
-            integrations=[FastApiIntegration()],
-            environment=settings.ENVIRONMENT,
-            traces_sample_rate=1.0,
+    # An empty DSN in production logs an ERROR rather than passing silently
+    # (CD-038).
+    sentry_on = init_sentry(
+        "api-kaianolevine-com",
+        dsn_var="SENTRY_DSN_APIS",
+        dsn=settings.SENTRY_DSN_APIS or "",
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=1.0,
+    )
+    logger.info(
+        with_log_prefix(
+            LOG_START,
+            f"kaianolevine-api starting (env={settings.ENVIRONMENT}, "
+            f"sentry={'on' if sentry_on else 'off'})",
         )
-        sentry_sdk.get_global_scope().set_tag("service", "api-kaianolevine-com")
-        logger.info(
-            with_log_prefix(
-                LOG_START,
-                f"kaianolevine-api starting (env={settings.ENVIRONMENT}, sentry=on)",
-            )
-        )
-    else:
-        logger.info(
-            with_log_prefix(
-                LOG_START,
-                f"kaianolevine-api starting (env={settings.ENVIRONMENT}, sentry=off)",
-            )
-        )
+    )
     await _reconcile_identity_registry()
     # Before /health answers, so no visitor meets an empty status snapshot.
     await github_dashboard.warm(settings)
