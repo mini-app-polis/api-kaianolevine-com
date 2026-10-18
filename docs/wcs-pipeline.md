@@ -307,7 +307,7 @@ Gated on `require_scope("wcs.corpus.read")`, held by `wcs-admin` and `corpus-rea
 
 Used by the wiki renderer.
 
-- `GET /v1/wcs/wiki/export` — bulk export of the entire canonical graph in one response.
+- `GET /v1/wcs/wiki/export` — bulk export of the entire canonical graph in one response. Built once per revision of the corpus and kept in memory (below).
 
 - `GET` / `POST /v1/wcs/wiki/state/{links,facets,prose}` — the curator's state (references, facet decisions, prose and revisions), keyed as its files were; read with `wcs.corpus.read`, written with `wcs.wiki.write` (role `wiki-writer`).
 - `POST /v1/wcs/wiki/jobs` — enqueue wiki jobs; the worker sends a job's follow-ons here (`wcs.wiki.write`).
@@ -315,6 +315,15 @@ Used by the wiki renderer.
 - `POST /v1/wcs/wiki/pages` — the curator's `materialise` step stores page documents here and removes pages folded away (`wcs.wiki.write`). The API stores, filters and serves them; it never recomputes a page.
 
 The export is gated on `require_scope("wcs.corpus.read")`, held by the `corpus-reader` role. Not visibility-filtered — the renderer needs the full corpus to project the canonical graph as markdown, which is exactly why it does not map to `wcs.notes.read`: every `wcs-reader` holds that scope, and this endpoint bypasses per-source visibility. It replaced `require_wcs_service`, a token-type gate that granted access to any caller merely for being a machine.
+
+**Built once per revision.** The export is about 30 MB and takes 15–20 s to build, and every curator job reads it. On 2026-10-18, five jobs read it at once, each building its own copy on the one process that serves every route, and the API stopped answering. Running fewer jobs at once made that less likely but didn't make a read any cheaper. Now:
+
+- Migration 058 keeps a corpus revision in `wcs_corpus_revision`. Triggers on every table the export reads bump it once per writing transaction, at commit, whatever the write path.
+- The response carries an ETag made from that revision and the deployed commit, so a deploy that changes the output never answers 304 for the old body. A caller that sends it back as `If-None-Match` gets a 304 for one small query, even right after a restart.
+- The serialised body is kept in memory per revision (`services/wcs_wiki_export.py`). Readers that arrive during a build wait for it instead of starting another. Past a few waiting, the answer is 503 with `Retry-After`.
+- `KaianoApiClient.export_wcs_wiki()` sends the ETag and keeps the last body, so a warm curator Lambda gets 304s while the corpus is unchanged. It backs off before retrying.
+
+Before adding curator concurrency that would read the export in parallel, check that these still hold: one build per revision, and parallel readers wait on it.
 
 ---
 

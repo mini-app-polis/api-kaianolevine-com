@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import JSONResponse
 from identity.types import Principal
 from mini_app_polis import logger as logger_mod
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS
@@ -18,6 +20,8 @@ from ..config import get_settings
 from ..database import get_db_session
 from ..schemas import (
     Envelope,
+    ErrorDetail,
+    ErrorEnvelope,
     WcsEntityItem,
     WcsEntityViewItem,
     WcsInstructorItem,
@@ -43,6 +47,7 @@ from ..schemas import (
 )
 from ..services import job_queue, wiki_dispatch
 from ..services import wcs_wiki as wiki_svc
+from ..services import wcs_wiki_export as export_svc
 from ..services import wcs_wiki_pages as pages_svc
 from ..services import wcs_wiki_state as state_svc
 
@@ -282,26 +287,79 @@ async def get_source_admin(
         "humans, not one machine from another — every cog still shares one "
         "machine secret, so any cog can call this. Once the principal store "
         "is seeded per cog, this should move to a scope check, which is the "
-        "first gate here that would actually be per-caller."
+        "first gate here that would actually be per-caller.\n\n"
+        "Built once per revision of the corpus and kept in memory. The "
+        "response carries an ETag; send it back as If-None-Match and an "
+        "unchanged corpus answers 304 with no body. While a build is under "
+        "way, further readers wait for it, and past a few waiting the answer "
+        "is 503 with Retry-After."
     ),
+    responses={
+        304: {"description": "The corpus has not changed since that ETag."},
+        503: {"description": "A build is under way; retry after Retry-After."},
+    },
 )
 async def export_wiki(
+    request: Request,
     caller_id_principal: Principal = Depends(require_scope("wcs.corpus.read")),
     session: AsyncSession = Depends(get_db_session),
-) -> Envelope[WcsWikiExportItem]:
+) -> Response:
     """Return the full WCS corpus (cog-only, not visibility-filtered)."""
     caller_id = caller_id_principal.subject
-    log.info("%s wiki export caller=%s", LOG_START, caller_id)
     settings = get_settings()
-    data = await wiki_svc.export_wiki_corpus(session)
-    log.info(
-        "%s wiki export entities=%d sources=%d instructors=%d",
-        LOG_SUCCESS,
-        len(data.entities),
-        len(data.sources),
-        len(data.instructors),
+    etag = await export_svc.corpus_etag(session)
+    if export_svc.etag_matches(request.headers.get("if-none-match"), etag):
+        log.info(
+            "%s wiki export unchanged caller=%s etag=%s", LOG_SUCCESS, caller_id, etag
+        )
+        return Response(status_code=304, headers={"ETag": etag})
+    # Hand the connection back while this request may wait on a build.
+    await session.rollback()
+    log.info("%s wiki export caller=%s etag=%s", LOG_START, caller_id, etag)
+
+    async def build() -> bytes:
+        started = time.monotonic()
+        data = await wiki_svc.export_wiki_corpus(session)
+        read_s = time.monotonic() - started
+        envelope = success_envelope(
+            data, count=1, total=1, version=settings.API_VERSION
+        )
+        body = envelope.model_dump_json(by_alias=True).encode()
+        log.info(
+            "wiki export entities=%d sources=%d instructors=%d "
+            "read_seconds=%.1f serialise_seconds=%.1f",
+            len(data.entities),
+            len(data.sources),
+            len(data.instructors),
+            read_s,
+            time.monotonic() - started - read_s,
+        )
+        return body
+
+    try:
+        built = await export_svc.cache.get(
+            etag, lambda: export_svc.corpus_etag(session), build
+        )
+    except export_svc.ExportBusy:
+        log.warning("wiki export busy caller=%s; answered 503", caller_id)
+        # Built here, not raised: the app's HTTPException handler drops
+        # headers, and Retry-After is the point of this answer.
+        return JSONResponse(
+            status_code=503,
+            content=ErrorEnvelope(
+                error=ErrorDetail(
+                    code="export_busy",
+                    message="The export is being built; retry shortly",
+                )
+            ).model_dump(),
+            headers={"Retry-After": str(export_svc.RETRY_AFTER_S)},
+        )
+    log.info("%s wiki export caller=%s etag=%s", LOG_SUCCESS, caller_id, built.etag)
+    return Response(
+        content=built.body,
+        media_type="application/json",
+        headers={"ETag": built.etag},
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 
 
 # ---------------------------------------------------------------------------
