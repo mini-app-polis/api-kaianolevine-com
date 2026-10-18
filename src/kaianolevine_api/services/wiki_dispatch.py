@@ -11,11 +11,22 @@ Two producers' worth of requests, one queue, the API sending for both:
   The curator's worker posts them to ``POST /v1/wcs/wiki/jobs`` and the API
   enqueues them, so the API stays the fleet's one producer.
 
-Each message is one job; the curator runs one at a time (a FIFO queue, one
-message group), so two jobs never race on the same state. A repeated job is
-a no-op on the curator's side — every pass is watermarked — so the
-duplicates the queue's five-minute deduplication does not catch cost a read,
-not a model call.
+Each message is one job. The queue is FIFO, and each job's message group
+says what it may run alongside (:func:`group_for`); SQS delivers different
+groups in parallel, up to the curator's reserved concurrency in infra.
+The curator writes back only the state entries a job changed, so jobs that
+write different entries can overlap:
+
+- ``link`` writes one source's statements: a group per source, so lessons
+  link side by side.
+- ``materialise`` reads state and writes page documents: spread over
+  :data:`PAGE_GROUPS` groups, so a rebuild runs batches side by side.
+- ``consolidate`` and ``generate`` name entities that overlap between jobs,
+  so two at once could pay twice for one entity: one group, one at a time.
+
+A repeated job is a no-op on the curator's side — every pass is watermarked
+— so the duplicates the queue's five-minute deduplication does not catch
+cost a read, not a model call.
 
 **Off until switched on.** Every job costs model calls, so the source hook
 checks ``flags.wcs.wiki_jobs_enabled``, seeded off (migration 055). A
@@ -29,6 +40,7 @@ with every dispatcher; see :mod:`.job_queue`.
 from __future__ import annotations
 
 import uuid
+import zlib
 from typing import Any
 
 from sqlalchemy import select
@@ -60,6 +72,11 @@ COG = "wiki-curator"
 MESSAGE_VERSION = 1
 TYPE_JOB = "wiki.job"
 
+#: Message groups the page rebuilds spread over. How many actually run at
+#: once is the smaller of this and the curator's reserved concurrency (infra
+#: cogs.tf); groups beyond it just wait their turn.
+PAGE_GROUPS = 5
+
 #: Whether a composed source is sent to the curator. Seeded off.
 FLAG = "flags.wcs.wiki_jobs_enabled"
 
@@ -90,6 +107,18 @@ def as_message(job: WcsWikiJob) -> dict[str, Any]:
     }
 
 
+def group_for(job: WcsWikiJob) -> str:
+    """The FIFO message group this job runs in; see the module docstring."""
+    if job.job == "link":
+        return f"{COG}-link-{job.source_id}"
+    if job.job == "materialise":
+        # Stable across processes (unlike hash()), so a re-sent job lands in
+        # the group it was in.
+        key = ",".join(sorted(job.entities or []))
+        return f"{COG}-pages-{zlib.crc32(key.encode()) % PAGE_GROUPS}"
+    return COG
+
+
 def describe(job: WcsWikiJob) -> str:
     """How a job reads in a log line or a drop report."""
     if job.job == "link":
@@ -109,6 +138,7 @@ async def dispatch_wiki_job(job: WcsWikiJob, *, settings: Settings) -> dict:
         label=_LABEL,
         heading="Wiki job not dispatched",
         settings=settings,
+        group=group_for(job),
     )
 
 

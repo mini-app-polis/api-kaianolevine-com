@@ -76,7 +76,7 @@ async def test_it_goes_to_the_curators_fifo_queue_in_one_group(monkeypatch) -> N
     assert out == {"message_id": "m-1"}
     kwargs = sqs.send_message.call_args.kwargs
     assert kwargs["QueueUrl"].endswith("/wiki-curator-jobs.fifo")
-    assert kwargs["MessageGroupId"] == "wiki-curator"
+    assert kwargs["MessageGroupId"] == f"wiki-curator-link-{SOURCE}"
     assert kwargs["MessageAttributes"]["type"]["StringValue"] == "wiki.job"
 
 
@@ -240,6 +240,50 @@ async def test_a_dropped_link_job_never_fails_the_ingest(
         resp = await client.post("/v1/wcs/sources", json=_source_payload(transcript_id))
     assert resp.status_code == 200
     reported.assert_awaited_once()
+
+
+# ── Which jobs may run side by side ──
+
+
+def test_links_of_different_sources_run_in_parallel_groups() -> None:
+    other = uuid.UUID("9b2f3c1e-0d4a-4e8b-9a61-3f5c7d2e1b40")
+    a = wiki_dispatch.group_for(WcsWikiJob(job="link", source_id=SOURCE))
+    b = wiki_dispatch.group_for(WcsWikiJob(job="link", source_id=other))
+    assert a != b
+
+
+@pytest.mark.parametrize("kind", ["consolidate", "generate"])
+def test_jobs_that_write_entity_state_share_one_group(kind) -> None:
+    # Their entity lists overlap between jobs: one at a time, never paying twice.
+    first = WcsWikiJob(job=kind, entities=["anchor"])
+    second = WcsWikiJob(job=kind, entities=["frame"])
+    assert wiki_dispatch.group_for(first) == wiki_dispatch.group_for(second)
+    assert wiki_dispatch.group_for(first) == wiki_dispatch.COG
+
+
+def test_page_rebuilds_spread_over_a_few_stable_groups() -> None:
+    jobs = [WcsWikiJob(job="materialise", entities=[f"p{i}"]) for i in range(50)]
+    groups = {wiki_dispatch.group_for(j) for j in jobs}
+    assert 1 < len(groups) <= wiki_dispatch.PAGE_GROUPS
+    assert wiki_dispatch.COG not in groups
+    # The same pages always land in the same group, in any order.
+    assert wiki_dispatch.group_for(
+        WcsWikiJob(job="materialise", entities=["b", "a"])
+    ) == wiki_dispatch.group_for(WcsWikiJob(job="materialise", entities=["a", "b"]))
+
+
+async def test_a_standard_queue_refuses_a_message_group(monkeypatch) -> None:
+    settings = _settings(monkeypatch)
+    with pytest.raises(ValueError, match="standard queue"):
+        await job_queue.enqueue(
+            {"type": "x"},
+            "x",
+            cog="evaluator",
+            label="t",
+            heading="t",
+            settings=settings,
+            group="g",
+        )
 
 
 # ── Admin operations (MINI-103) ──

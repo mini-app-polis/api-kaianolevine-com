@@ -65,7 +65,10 @@ def message_group(cog: str) -> str | None:
     """The FIFO message group for ``cog``'s jobs, or None for a standard queue.
 
     One group per queue, so the queue is strictly serial: the next job is
-    not delivered until the one before it is done or dead-lettered.
+    not delivered until the one before it is done or dead-lettered. A
+    dispatcher whose jobs need not all wait on each other passes a group per
+    job instead (``enqueue(group=...)``); SQS delivers different groups in
+    parallel, up to the consumer's concurrency.
     """
     return cog if cog in FIFO_COGS else None
 
@@ -182,13 +185,18 @@ async def enqueue(
     label: str,
     heading: str,
     settings: Settings,
+    group: str | None = None,
 ) -> dict:
     """Put one job on ``cog``'s queue and insist that it landed.
 
     ``label`` is how the dispatcher appears in logs. ``heading`` leads the
     ``detail`` of the :class:`DispatchError` raised for a drop ("Deejay run
-    not dispatched"), which the route's 502 fault report carries.
+    not dispatched"), which the route's 502 fault report carries. ``group``
+    is this job's FIFO message group, for a FIFO cog whose jobs are not all
+    serial; by default every job of the cog shares one (:func:`message_group`).
     """
+    if group is not None and cog not in FIFO_COGS:
+        raise ValueError(f"{cog} has a standard queue; it takes no message group")
     url = queue_url(cog, settings=settings)
     name = queue_name(cog)
 
@@ -198,7 +206,7 @@ async def enqueue(
             message,
             queue_url=url,
             settings=settings,
-            message_group=message_group(cog),
+            message_group=group or message_group(cog),
         )
     except (ClientError, BotoCoreError) as exc:
         # BotoCoreError covers the credential cases too — the producer's
