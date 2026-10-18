@@ -43,7 +43,7 @@ Route groups:
 - `/v1/wcs/wiki/concepts|techniques|patterns|drills`, `…/{slug}` — entity views
 - `/v1/wcs/wiki/instructors`, `/v1/wcs/wiki/instructors/{slug}` — instructor views
 - `/v1/wcs/wiki/sources`, `/v1/wcs/wiki/sources/{id}`, `/v1/wcs/wiki/admin/sources[/{id}]` — source views
-- `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog)
+- `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog); built once per corpus revision, ETag/304, 503 + `Retry-After` when busy
 - `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
 - `/v1/wcs/admin/corrections/*`, `/v1/wcs/admin/additions/*` — input-layer overrides
 - `/v1/wcs/admin/recompose/{source_id}` — manual composition trigger
