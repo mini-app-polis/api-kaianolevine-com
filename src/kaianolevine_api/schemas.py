@@ -1517,6 +1517,16 @@ class WcsWikiAdminJobAccepted(BaseModel):
     action: str = Field(..., description="The operation started.")
     message_ids: list[str] = Field(..., description="SQS message ids.")
     summary: str = Field(..., description="What was queued, in a sentence.")
+    deduplicated: bool = Field(
+        default=False,
+        description="The queue already held this exact job, sent within its "
+        "five-minute dedup window; nothing new was queued.",
+    )
+    queued_at: dt.datetime = Field(
+        ...,
+        description="When the job was queued: now, or the earlier send's time "
+        "when deduplicated. Progress is the pages written since then.",
+    )
 
 
 class WcsWikiPageSummary(BaseModel):

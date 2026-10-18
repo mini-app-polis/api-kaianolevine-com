@@ -40,6 +40,7 @@ with every dispatcher; see :mod:`.job_queue`.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 import zlib
 from typing import Any
@@ -106,6 +107,40 @@ def as_message(job: WcsWikiJob) -> dict[str, Any]:
         "version": MESSAGE_VERSION,
         "payload": job.model_dump(mode="json", exclude_none=True),
     }
+
+
+#: How long SQS treats an identical message body as the same message: the
+#: queue's content-based deduplication window.
+DEDUP_WINDOW = dt.timedelta(minutes=5)
+
+#: Message id -> when this process first got it back from the queue.
+_first_queued: dict[str, dt.datetime] = {}
+
+
+def first_queued(message_id: str, now: dt.datetime | None = None) -> dt.datetime | None:
+    """When ``message_id`` was first queued, if this send was a duplicate of it.
+
+    SQS answers a send it deduplicated with the id of the message it kept,
+    and with no other sign that nothing new was queued. Two clicks of
+    "Rebuild every page" five minutes apart are one job, and a panel waiting
+    on the second would wait for work that already happened (2026-10-18). So
+    each id is remembered for the dedup window: seen again inside it, the
+    send was a duplicate and the original time is returned; otherwise the id
+    is recorded and ``None`` returned.
+
+    One process's memory: after a restart inside the window a duplicate reads
+    as new, and the panel's stalled warning is the backstop.
+    """
+    now = now or dt.datetime.now(dt.UTC)
+    for mid, at in list(_first_queued.items()):
+        if now - at > DEDUP_WINDOW:
+            del _first_queued[mid]
+    earlier = _first_queued.get(message_id)
+    if earlier is not None:
+        return earlier
+    if message_id:
+        _first_queued[message_id] = now
+    return None
 
 
 def group_for(job: WcsWikiJob) -> str:
