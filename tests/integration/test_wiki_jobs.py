@@ -240,3 +240,86 @@ async def test_a_dropped_link_job_never_fails_the_ingest(
         resp = await client.post("/v1/wcs/sources", json=_source_payload(transcript_id))
     assert resp.status_code == 200
     reported.assert_awaited_once()
+
+
+# ── Admin operations (MINI-103) ──
+
+
+def test_every_page_is_a_materialise_job_with_no_entities() -> None:
+    job = WcsWikiJob(job="materialise")
+    assert wiki_dispatch.as_message(job)["payload"] == {"job": "materialise"}
+    assert wiki_dispatch.describe(job) == "wiki materialise of every page"
+
+
+async def test_the_admin_rebuilds_every_page(client) -> None:
+    with patch.object(
+        wiki_dispatch, "dispatch_wiki_job", AsyncMock(return_value={"message_id": "m"})
+    ) as sent:
+        resp = await client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+    assert resp.status_code == 202, resp.text
+    data = resp.json()["data"]
+    assert data == {
+        "action": "rebuild_every_page",
+        "message_ids": ["m"],
+        "summary": "Queued a rebuild of every page.",
+    }
+    [call] = sent.await_args_list
+    assert call.args[0] == WcsWikiJob(job="materialise")
+
+
+async def test_the_admin_rebuilds_named_pages(client) -> None:
+    with patch.object(
+        wiki_dispatch, "dispatch_wiki_job", AsyncMock(return_value={"message_id": "m"})
+    ) as sent:
+        resp = await client.post(
+            "/v1/wcs/wiki/admin/jobs",
+            json={"action": "rebuild_pages", "slugs": ["frame", " anchor ", "frame"]},
+        )
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["data"]["summary"] == "Queued a rebuild of 2 pages."
+    assert sent.await_args.args[0] == WcsWikiJob(
+        job="materialise", entities=["anchor", "frame"]
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"action": "rebuild_pages", "slugs": []},
+        {"action": "rebuild_pages", "slugs": ["  "]},
+        {"action": "generate"},
+        {"action": "rebuild_pages", "slugs": [f"s{i}" for i in range(26)]},
+    ],
+)
+async def test_an_operation_it_cannot_start_is_refused(client, body) -> None:
+    with patch.object(wiki_dispatch, "dispatch_wiki_job", AsyncMock()) as sent:
+        resp = await client.post("/v1/wcs/wiki/admin/jobs", json=body)
+    assert resp.status_code == 422
+    sent.assert_not_awaited()
+
+
+async def test_a_dropped_operation_is_a_502(client) -> None:
+    with (
+        patch.object(
+            wiki_dispatch,
+            "dispatch_wiki_job",
+            AsyncMock(side_effect=wiki_dispatch.DispatchError("down", detail="d")),
+        ),
+        patch.object(job_queue, "report_dropped", AsyncMock()),
+    ):
+        resp = await client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+    assert resp.status_code == 502
+
+
+async def test_operations_take_the_operate_scope(reader_only_client) -> None:
+    # The curator's own wiki.write and reading the corpus do not start work.
+    with patch.object(wiki_dispatch, "dispatch_wiki_job", AsyncMock()) as sent:
+        resp = await reader_only_client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+    assert resp.status_code == 403
+    sent.assert_not_awaited()

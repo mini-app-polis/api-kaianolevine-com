@@ -234,6 +234,7 @@ _DEV_ROLES = {
         "wcs.embeddings.write",
         "config.flags.write",
         "wcs.corpus.read",
+        "wcs.wiki.operate",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],

@@ -24,8 +24,11 @@ from ..schemas import (
     WcsInstructorViewItem,
     WcsSourceItem,
     WcsSourceViewItem,
+    WcsWikiAdminJob,
+    WcsWikiAdminJobAccepted,
     WcsWikiExportItem,
     WcsWikiFacetsState,
+    WcsWikiJob,
     WcsWikiJobsAccepted,
     WcsWikiJobsRequest,
     WcsWikiLinksState,
@@ -605,4 +608,66 @@ async def enqueue_wiki_jobs(
         caller.subject,
     )
     data = WcsWikiJobsAccepted(message_ids=message_ids)
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+# ---------------------------------------------------------------------------
+# Admin operations (MINI-103)
+# ---------------------------------------------------------------------------
+#
+# The /admin/wiki panel starts curator work here, as the signed-in admin,
+# rather than through a terminal command. The jobs go on the curator's queue
+# like any other and run on its worker; the API stays the only producer
+# (ecosystem-standards CD-006). Only operations that call no model are
+# accepted: the paid passes need a cost estimate confirmed first.
+
+
+@router.post(
+    "/wcs/wiki/admin/jobs",
+    response_model=Envelope[WcsWikiAdminJobAccepted],
+    status_code=202,
+    summary="Start a free wiki operation (admin)",
+    description=(
+        "rebuild_every_page queues one job that names every page, in "
+        "follow-on jobs the worker sends; rebuild_pages queues the pages in "
+        "slugs. Both rebuild page documents from the curator's state and call "
+        "no model. Answers 502 if the job did not land."
+    ),
+)
+async def start_wiki_operation(
+    payload: WcsWikiAdminJob,
+    request: Request,
+    admin: Principal = Depends(require_scope("wcs.wiki.operate")),
+) -> Envelope[WcsWikiAdminJobAccepted]:
+    """Queue the operation the admin asked for; a drop is a 502."""
+    if payload.action == "rebuild_every_page":
+        job = WcsWikiJob(job="materialise")
+        summary = "Queued a rebuild of every page."
+    else:
+        slugs = sorted({s.strip() for s in payload.slugs if s.strip()})
+        if not slugs:
+            raise api_error(
+                422, "validation_error", "rebuild_pages needs at least one slug"
+            )
+        job = WcsWikiJob(job="materialise", entities=slugs)
+        summary = (
+            f"Queued a rebuild of {len(slugs)} page{'s' if len(slugs) != 1 else ''}."
+        )
+    settings = get_settings()
+    try:
+        accepted = await wiki_dispatch.dispatch_wiki_job(job, settings=settings)
+    except wiki_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(502, "dispatch_failed", f"Not queued: {exc}") from exc
+    log.info(
+        "%s wiki admin operation %s caller=%s",
+        LOG_SUCCESS,
+        payload.action,
+        admin.subject,
+    )
+    data = WcsWikiAdminJobAccepted(
+        action=payload.action,
+        message_ids=[str(accepted.get("message_id") or "")],
+        summary=summary,
+    )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
