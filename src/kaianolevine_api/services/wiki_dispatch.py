@@ -20,7 +20,8 @@ write different entries can overlap:
 - ``link`` writes one source's statements: a group per source, so lessons
   link side by side.
 - ``materialise`` reads state and writes page documents: spread over
-  :data:`PAGE_GROUPS` groups, so a rebuild runs batches side by side.
+  :data:`PAGE_GROUPS` groups, so the pages a ``generate`` touched need not
+  wait behind the next ``generate``.
 - ``consolidate`` and ``generate`` name entities that overlap between jobs,
   so two at once could pay twice for one entity: one group, one at a time.
 
@@ -72,8 +73,8 @@ COG = "wiki-curator"
 MESSAGE_VERSION = 1
 TYPE_JOB = "wiki.job"
 
-#: Message groups the page rebuilds spread over. How many actually run at
-#: once is the smaller of this and the curator's reserved concurrency (infra
+#: Message groups materialise jobs spread over. How many actually run at
+#: once is the smaller of this and the curator's concurrency ceiling (infra
 #: cogs.tf); groups beyond it just wait their turn.
 PAGE_GROUPS = 5
 

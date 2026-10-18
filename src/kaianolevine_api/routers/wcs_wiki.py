@@ -628,9 +628,8 @@ async def enqueue_wiki_jobs(
     status_code=202,
     summary="Start a free wiki operation (admin)",
     description=(
-        "rebuild_every_page queues one job that names every page, in "
-        "follow-on jobs the worker sends; rebuild_pages queues the pages in "
-        "slugs. Both rebuild page documents from the curator's state and call "
+        "rebuild_every_page queues one job that rebuilds every page; "
+        "rebuild_pages queues the pages in slugs. Both rebuild page documents from the curator's state and call "
         "no model. Answers 502 if the job did not land."
     ),
 )
