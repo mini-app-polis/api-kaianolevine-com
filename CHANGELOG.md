@@ -1,3 +1,10 @@
+# [2.17.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.16.1...v2.17.0) (2026-10-18)
+
+
+### Features
+
+* **wcs:** a wiki pages write says which pages are new, changed or gone ([2e06a0c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2e06a0cfc12ad1b8db455d8d98de1e3db2b5df8e))
+
 ## [2.16.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.16.0...v2.16.1) (2026-10-18)
 
 
