@@ -1,3 +1,10 @@
+# [2.14.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.13.0...v2.14.0) (2026-10-18)
+
+
+### Features
+
+* **wcs:** the admin starts free wiki operations from /admin/wiki (MINI-103) ([1310a5e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1310a5e52355606140025a7d2b534ebba3f485ed))
+
 # [2.13.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.12.0...v2.13.0) (2026-10-18)
 
 
