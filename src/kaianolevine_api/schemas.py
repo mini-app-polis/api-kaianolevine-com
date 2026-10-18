@@ -1491,6 +1491,34 @@ class EvaluationFleetAccepted(BaseModel):
     )
 
 
+class WcsWikiAdminJob(BaseModel):
+    """``POST /v1/wcs/wiki/admin/jobs`` — an operation the admin starts (MINI-103).
+
+    Only operations that call no model: every one here is free. The paid
+    passes need a cost estimate the admin confirms first, and are not here.
+    """
+
+    action: Literal["rebuild_every_page", "rebuild_pages"] = Field(
+        ...,
+        description="rebuild_every_page: rebuild every page document from the "
+        "curator's state; rebuild_pages: rebuild the pages named in slugs.",
+    )
+    slugs: list[str] = Field(
+        default_factory=list,
+        max_length=25,
+        description="rebuild_pages: the pages to rebuild (a folded slug "
+        "rebuilds the page it folded into). Ignored otherwise.",
+    )
+
+
+class WcsWikiAdminJobAccepted(BaseModel):
+    """What an admin operation put on the curator's queue."""
+
+    action: str = Field(..., description="The operation started.")
+    message_ids: list[str] = Field(..., description="SQS message ids.")
+    summary: str = Field(..., description="What was queued, in a sentence.")
+
+
 class WcsWikiPageSummary(BaseModel):
     """One wiki page in the index: enough to search, list and sort by change.
 

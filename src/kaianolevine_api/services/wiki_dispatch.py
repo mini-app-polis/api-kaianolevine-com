@@ -94,6 +94,8 @@ def describe(job: WcsWikiJob) -> str:
     """How a job reads in a log line or a drop report."""
     if job.job == "link":
         return f"wiki link source {job.source_id}"
+    if job.job == "materialise" and job.entities is None:
+        return "wiki materialise of every page"
     named = job.entities or ([job.entity] if job.entity else [])
     return f"wiki {job.job} of {len(named)} entit{'y' if len(named) == 1 else 'ies'}"
 
