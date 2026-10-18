@@ -16,6 +16,9 @@ It does three things:
   from ``wcs_sources`` on every read, so a source made private after its
   pages were built does not leak through a stale flag.
 - **Serve.** The page by slug, and an index of every page a reader can see.
+  A slug folded into a page — a facet, or another name for the same idea —
+  has no page of its own; asked for, it is served the page that lists it in
+  ``folded``, with ``requested_slug`` naming what was asked for (MINI-100).
 
 The admin sees everything (``visible=None``) and can ask for the public
 view of the same page, which is the filter with only default-visible
@@ -60,7 +63,8 @@ async def put_pages(
             "slug": page.slug,
             "kind": page.kind,
             "name": page.name,
-            "document": page.model_dump(mode="json"),
+            # requested_slug belongs to a read, never to the stored page.
+            "document": page.model_dump(mode="json", exclude={"requested_slug"}),
             "evidence_sources": list(page.evidence_sources),
         }
         for page in write.pages
@@ -201,13 +205,39 @@ def filter_page(
 async def get_page(
     session: AsyncSession, slug: str, visible: set[uuid.UUID] | None
 ) -> WcsWikiPage | None:
-    """One page for a reader who can see ``visible`` (None: everything)."""
+    """One page for a reader who can see ``visible`` (None: everything).
+
+    A slug with no page of its own is looked up among the pages' ``folded``
+    slugs, and the page it folded into is served with ``requested_slug`` set.
+    """
     row = await session.get(WcsWikiPageRow, slug)
+    requested: str | None = None
     if row is None:
-        return None
+        row = await _folded_into(session, slug)
+        if row is None:
+            return None
+        requested = slug
     page = WcsWikiPage.model_validate(row.document)
     public = await public_sources(session, source_ids(page))
-    return filter_page(page, visible, public)
+    served = filter_page(page, visible, public)
+    if served is not None:
+        served.requested_slug = requested
+    return served
+
+
+async def _folded_into(session: AsyncSession, slug: str) -> WcsWikiPageRow | None:
+    """The page that lists ``slug`` as folded into it, if one does.
+
+    The curator folds each slug into one page, so there is at most one; the
+    first by slug is taken should a stale write ever leave two.
+    """
+    stmt = (
+        select(WcsWikiPageRow)
+        .where(WcsWikiPageRow.document.contains({"folded": [slug]}))
+        .order_by(WcsWikiPageRow.slug)
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
 
 
 async def list_pages(

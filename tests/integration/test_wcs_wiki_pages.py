@@ -249,3 +249,49 @@ async def test_reading_the_wiki_does_not_grant_writing_it(
     )
     assert resp.status_code == 403
     assert (await reader_client.get("/v1/wcs/wiki/admin/pages/x")).status_code == 403
+
+
+# ── Folded slugs (MINI-100) ──
+
+
+async def test_a_folded_slug_is_served_the_page_it_folded_into(client, sources) -> None:
+    folded = _page("anchor", [sources["public"]], folded=["stationary-anchor"])
+    await _put(client, {"pages": [folded]})
+
+    for path in ("/v1/wcs/wiki/admin/pages", "/v1/wcs/wiki/pages"):
+        resp = await client.get(f"{path}/stationary-anchor")
+        assert resp.status_code == 200, resp.text
+        page = resp.json()["data"]
+        assert page["slug"] == "anchor"
+        assert page["requested_slug"] == "stationary-anchor"
+
+
+async def test_a_page_asked_for_by_its_own_slug_names_no_request(
+    client, sources
+) -> None:
+    folded = _page("anchor", [sources["public"]], folded=["stationary-anchor"])
+    await _put(client, {"pages": [folded]})
+    page = (await client.get("/v1/wcs/wiki/admin/pages/anchor")).json()["data"]
+    assert page["requested_slug"] is None
+    assert page["folded"] == ["stationary-anchor"]
+
+
+async def test_a_folded_slug_keeps_the_readers_visibility(
+    reader_client, sources, db_session: AsyncSession
+) -> None:
+    hidden = _page("secret", [sources["private"]], folded=["secret-facet"])
+    await _store(db_session, {"pages": [hidden]})
+    resp = await reader_client.get("/v1/wcs/wiki/pages/secret-facet")
+    assert resp.status_code == 404
+
+
+async def test_a_slug_folded_nowhere_is_still_not_found(client, sources) -> None:
+    await _put(client, {"pages": [_page("anchor", [sources["public"]])]})
+    assert (await client.get("/v1/wcs/wiki/admin/pages/nowhere")).status_code == 404
+
+
+async def test_a_requested_slug_sent_in_a_write_is_not_stored(client, sources) -> None:
+    sent = _page("anchor", [sources["public"]], requested_slug="stray")
+    await _put(client, {"pages": [sent]})
+    page = (await client.get("/v1/wcs/wiki/admin/pages/anchor")).json()["data"]
+    assert page["requested_slug"] is None
