@@ -330,28 +330,13 @@ SSR Astro site at `wcs.kaianolevine.com`. Reads the caller-scoped endpoints. Pag
 
 Authenticated via Clerk session JWT.
 
-### Wiki renderer (`wiki-curator-cog`)
-
-Stateless one-shot process (per `wiki-curator-cog` ADR-002), run on Railway: each start renders once and exits. One job: read the substrate, write markdown.
-
-Flow:
-
-1. Authenticate to the API with the cog's own named API key (`WIKI_CURATOR_COG_API_KEY`); the key identifies the cog.
-2. Clone or refresh the `wcs-wiki` repo.
-3. `GET /v1/wcs/wiki/export` — fetch the full canonical graph.
-4. Build in-memory indexes (entities by id and slug, instructors by id, sources by id, attributions grouped by entity and source, etc.).
-5. Render the full markdown bundle per `wcs-wiki/CLAUDE.md` (v1.0 render spec): entity pages by kind (concepts/techniques/drills), source pages bucketed by primary instructor, instructor pages, four views, regenerated index.
-6. Overwrite the wiki's derived pages wholesale, append one `log.md` entry, commit once (`render: <date> (<N> entities, <S> sources)`), push.
-
-Given the same canonical state at the same render-spec version, output is byte-identical.
-
 ### Wiki worker (`wiki-curator-cog`, ADR-006)
 
-A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched, and after each `generate` a `materialise` that stores the changed pages' documents — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer above retires next: it renders the bare export, without the worker's links, folds or prose, and the `wcs-wiki` repo stays only as a local export written from the same page documents (wiki-curator-cog MINI-99).
+A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched, and after each `generate` a `materialise` that stores the changed pages' documents — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer that cloned, rendered and pushed the markdown wiki is retired (wiki-curator-cog MINI-95); the `wcs-wiki` repo is a local export of the same page documents, written by the curator's `render` command (MINI-99).
 
 ### Wiki repo (`wcs-wiki`)
 
-The markdown projection of the canonical state. Browsable in Obsidian or on GitHub. Operator-readable, not operator-writable: hand-edits to derived pages are overwritten on next render. The editable surfaces are `CLAUDE.md` (the render spec), `README.md`, and the canonical store (via the API's admin endpoints).
+A local markdown export of the page documents, written by `python -m wiki_curator_cog.main render` and committed by hand if at all; browsable in Obsidian or on GitHub. Not an edit surface: a render overwrites derived pages. Corrections go in as notes, through the same ingestion as lessons (wiki-curator-cog ADR-005).
 
 ### Q&A agent
 
@@ -426,9 +411,8 @@ After recompose, the synthetic `kaiano-amy` instructor row is orphan. `DELETE` i
 
 ### Re-render the wiki after corrections
 
-**Tool:** trigger the renderer.
-**Calls:** run `wiki-curator-cog` (`python -m wiki_curator_cog.main export`; starting its Railway service runs one export).
-**Effect:** the markdown bundle in `wcs-wiki` regenerates from current canonical state.
+**Tool:** nothing, once the correction is composed: the source's `link` job and its follow-ons regenerate and re-materialise the pages it touches.
+**By hand:** `python -m wiki_curator_cog.main materialise` (every page, or `--entity`) rebuilds the stored page documents; `render` writes the markdown export.
 
 ---
 
