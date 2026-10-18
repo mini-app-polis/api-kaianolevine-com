@@ -1,3 +1,15 @@
+# [2.13.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.12.0...v2.13.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.6.0 ([5402d04](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5402d0492549820397df1a51dc4f8929610a6231))
+
+
+### Features
+
+* **wcs:** a folded slug is served the page it folded into (MINI-100) ([f590208](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f59020868fac3772e807a8ff99519945958b7c67))
+
 # [2.12.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.11.1...v2.12.0) (2026-10-17)
 
 
