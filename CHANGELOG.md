@@ -1,3 +1,15 @@
+# [2.18.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.17.0...v2.18.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **deps:** require miniapppolis-common-utils 6.9.0 for the wiki review contract (MINI-101) ([6490cc8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6490cc8a9eac592e87ff9771a56b3156ece6a0e6))
+
+
+### Features
+
+* **wcs:** correction session type, wiki page revisions and thin list, notes from the site (MINI-102, MINI-101, MINI-98) ([3e2c4e4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3e2c4e41794a53c83ae082b181b03810e46e0e9c))
+
 # [2.17.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.16.1...v2.17.0) (2026-10-18)
 
 
