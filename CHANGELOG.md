@@ -1,3 +1,10 @@
+# [2.19.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.18.0...v2.19.0) (2026-10-19)
+
+
+### Features
+
+* **wcs:** a wiki-operator role and the wiki-curator-deploy machine for rebuilds after a deploy (MINI-109) ([4e54c40](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4e54c40d123588af13e3ead6245935b04673ad55))
+
 # [2.18.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.17.0...v2.18.0) (2026-10-19)
 
 
