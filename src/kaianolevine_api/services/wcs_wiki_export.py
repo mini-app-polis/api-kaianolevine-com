@@ -58,6 +58,8 @@ class ExportBusy(Exception):
 
 @dataclass(frozen=True)
 class BuiltExport:
+    """One built export: the serialised response body and the ETag it answers to."""
+
     etag: str
     body: bytes
 
@@ -100,6 +102,7 @@ class ExportCache:
         self._waiting = 0
 
     def clear(self) -> None:
+        """Forget the built export, so the next read builds it again (tests use this)."""
         self._built = None
 
     async def get(
