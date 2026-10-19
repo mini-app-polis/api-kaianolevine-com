@@ -75,6 +75,7 @@ const SHARED = [
   "TRANSCRIPTION_COG_API_KEY",
   "WATCHER_COG_API_KEY",
   "WIKI_CURATOR_COG_API_KEY",
+  "WIKI_CURATOR_DEPLOY_API_KEY",
   // Production's names: the API base URL is suffixed _DEV outside production
   // (mini_app_polis.environment.env_var), and the Spotify re-auth runs
   // against prd only.
