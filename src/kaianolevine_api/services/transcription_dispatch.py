@@ -11,6 +11,10 @@ names them, one request per file, and each file gets an invocation to
 itself. The one exception is ``voicenotes-cleanup``, the retention sweep
 over the archive, which names no file.
 
+``wcs-note`` is the other: a note written on the site (MINI-98), which
+carries its own text instead of naming a file. The API produces it itself,
+from ``POST /v1/wcs/wiki/admin/notes``; watcher-cog never asks for it.
+
 Two requests for one file produce two jobs. That is safe: the cog skips a
 file that is no longer in its inbox, and runs one job at a time — which is
 the consumer's concurrency setting to provide, not something the message
@@ -51,16 +55,22 @@ TYPE_RUN = "transcription.run"
 
 @dataclass(frozen=True)
 class TranscriptionJob:
-    """One run of transcription-cog: one file in one mode, or the cleanup sweep."""
+    """One run of transcription-cog: one file in one mode, the cleanup sweep,
+    or one note written on the site."""
 
     mode: str
     drive_file_id: str | None = None
+    #: ``wcs-note``: the note, with ``id``, ``date``, ``instructor``,
+    #: ``title`` and ``text``.
+    note: dict[str, str] | None = None
 
     def as_message(self) -> dict[str, Any]:
         """Render this job as one ``TYPE_RUN`` queue message."""
         payload: dict[str, Any] = {"mode": self.mode}
         if self.drive_file_id:
             payload["drive_file_id"] = self.drive_file_id
+        if self.note is not None:
+            payload["note"] = self.note
         return {
             "type": TYPE_RUN,
             "version": MESSAGE_VERSION,
@@ -71,6 +81,8 @@ class TranscriptionJob:
         """How this job reads in a log line or a drop report."""
         if self.drive_file_id:
             return f"transcription {self.mode} file {self.drive_file_id}"
+        if self.note is not None:
+            return f"transcription {self.mode} {self.note.get('id', '')}".rstrip()
         return f"transcription {self.mode}"
 
 

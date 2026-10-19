@@ -72,6 +72,11 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     WcsWikiProseState,
     WcsWikiReference,
     WcsWikiStateWriteResult,
+    WcsWikiThinEntity,
+    WcsWikiThinQuote,
+    WcsWikiThinState,
+    WcsWikiThinWrite,
+    WcsWikiThinWriteResult,
 )
 from pydantic import (
     BaseModel,
@@ -79,6 +84,7 @@ from pydantic import (
     Field,
     StrictBool,
     StrictStr,
+    field_validator,
     model_validator,
 )
 
@@ -485,6 +491,7 @@ def success_envelope(data: T, *, count: int, total: int, version: str) -> Envelo
 WcsSessionType = Literal[
     "private_lesson",
     "group_class",
+    "correction",
     "other",
 ]
 
@@ -1529,6 +1536,61 @@ class WcsWikiAdminJobAccepted(BaseModel):
     )
 
 
+class WcsWikiAdminNote(BaseModel):
+    """``POST /v1/wcs/wiki/admin/notes`` — a note written on the site (MINI-98).
+
+    Processed as if it were a Drive file named
+    ``<date> <instructor> > Note - <title>``: transcription-cog extracts it
+    with the note prompt and stores it as a correction source. One paid model
+    call, then the wiki's passes for what it touches.
+    """
+
+    date: dt.date = Field(..., description="The note's date; newer statements win.")
+    instructor: str = Field(
+        ...,
+        min_length=1,
+        max_length=80,
+        pattern=r"^[^>+\n]+$",
+        description="Who the note is from: one name, no '>' or '+'.",
+    )
+    title: str = Field(
+        "",
+        max_length=200,
+        pattern=r"^[^\n]*$",
+        description="What the note is about, on one line.",
+    )
+    text: str = Field(
+        ..., min_length=1, max_length=20_000, description="The note itself."
+    )
+
+    @field_validator("instructor", "title", "text", mode="before")
+    @classmethod
+    def _stripped(cls, value: object) -> object:
+        """Stripped before the length and pattern checks, so blank is empty."""
+        return value.strip() if isinstance(value, str) else value
+
+
+class WcsWikiAdminNoteAccepted(BaseModel):
+    """What a note put on transcription-cog's queue."""
+
+    note_id: str = Field(
+        ...,
+        description="The note's id, from its content; its transcript's "
+        "drive_file_id. The same note sent twice is the same transcript.",
+    )
+    message_id: str = Field(..., description="SQS message id.")
+    file_name: str = Field(..., description="The name it is processed under.")
+    summary: str = Field(..., description="What was queued, in a sentence.")
+    deduplicated: bool = Field(
+        default=False,
+        description="The same note was sent within the queue's five-minute "
+        "dedup window; nothing new was queued.",
+    )
+    queued_at: dt.datetime = Field(
+        ..., description="When it was queued: now, or the earlier send's time."
+    )
+
+
 class WcsWikiPageSummary(BaseModel):
     """One wiki page in the index: enough to search, list and sort by change.
 
@@ -1542,3 +1604,51 @@ class WcsWikiPageSummary(BaseModel):
     aliases: list[str] = Field(default_factory=list, description="Other names.")
     definition: str = Field("", description="The page's first section.")
     updated_at: dt.datetime = Field(..., description="When it was last materialised.")
+
+
+class WcsWikiRevisionSource(BaseModel):
+    """The page revisions one source caused, counted (MINI-101).
+
+    Web-facing only, for /admin/wiki. ``source_id`` null groups the revisions
+    no source caused: admin rebuilds and operator runs.
+    """
+
+    source_id: uuid.UUID | None = Field(
+        None, description="The source; null for work no source started."
+    )
+    title: str | None = Field(None, description="The source's title, if it exists.")
+    session_date: dt.date | None = Field(None, description="The source's date.")
+    session_type: str | None = Field(None, description="The source's session type.")
+    pages: int = Field(..., description="Distinct pages it touched.")
+    created: int = Field(..., description="Revisions creating a page.")
+    changed: int = Field(..., description="Revisions changing a page.")
+    removed: int = Field(..., description="Revisions removing a page.")
+    last_at: dt.datetime = Field(..., description="Its most recent revision.")
+
+
+class WcsWikiRevisionItem(BaseModel):
+    """One page revision, without its documents."""
+
+    id: int = Field(..., description="The revision.")
+    slug: str = Field(..., description="The page's slug.")
+    name: str = Field("", description="The page's name, after or else before.")
+    kind: str = Field("", description="The page's kind, after or else before.")
+    change: Literal["created", "changed", "removed"] = Field(
+        ..., description="What the write did to the page."
+    )
+    origin_source_id: uuid.UUID | None = Field(
+        None, description="The source whose work wrote it; null for none."
+    )
+    origin_job_id: str | None = Field(None, description="The run that wrote it.")
+    at: dt.datetime = Field(..., description="When.")
+
+
+class WcsWikiRevisionDetail(WcsWikiRevisionItem):
+    """One page revision with the documents before and after, unfiltered."""
+
+    previous: WcsWikiPage | None = Field(
+        None, description="The stored page before; null when created."
+    )
+    document: WcsWikiPage | None = Field(
+        None, description="The page after; null when removed."
+    )

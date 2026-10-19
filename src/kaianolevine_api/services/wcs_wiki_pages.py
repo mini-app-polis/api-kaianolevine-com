@@ -30,12 +30,13 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import WcsSource, WcsWikiPageRow
+from ..models import WcsSource, WcsWikiPageRevisionRow, WcsWikiPageRow
 from ..schemas import (
     WcsWikiPage,
     WcsWikiPageCitation,
@@ -63,7 +64,8 @@ async def put_pages(
     moves and the /admin/wiki panel can count a rebuild's progress. Which of
     them is new or different is read from the rows they replace, in the same
     transaction, so a run report can say what changed and not only what was
-    processed.
+    processed. Each page created, changed or removed is also recorded as a
+    revision, with the write's origin, in the same transaction (MINI-101).
     """
     rows = [
         {
@@ -78,6 +80,7 @@ async def put_pages(
     ]
     created: list[str] = []
     changed: list[str] = []
+    revisions: list[dict[str, Any]] = []
     if rows:
         stored = {
             r.slug: (r.kind, r.name, r.document)
@@ -97,8 +100,10 @@ async def put_pages(
             before = stored.get(slug)
             if before is None:
                 created.append(slug)
+                revisions.append(_revision(write, slug, "created", None, row))
             elif before != (row["kind"], row["name"], row["document"]):
                 changed.append(slug)
+                revisions.append(_revision(write, slug, "changed", before[2], row))
         stmt = insert(WcsWikiPageRow).values(rows)
         await session.execute(
             stmt.on_conflict_do_update(
@@ -119,9 +124,16 @@ async def put_pages(
         deleted = await session.execute(
             delete(WcsWikiPageRow)
             .where(WcsWikiPageRow.slug.in_(gone))
-            .returning(WcsWikiPageRow.slug)
+            .returning(WcsWikiPageRow.slug, WcsWikiPageRow.document)
         )
-        removed_slugs = sorted(deleted.scalars().all())
+        removed = sorted(deleted.all())
+        removed_slugs = [slug for slug, _ in removed]
+        revisions += [
+            _revision(write, slug, "removed", document, None)
+            for slug, document in removed
+        ]
+    if revisions:
+        await session.execute(insert(WcsWikiPageRevisionRow).values(revisions))
     await session.commit()
     total = int(
         (
@@ -136,6 +148,24 @@ async def put_pages(
         changed=sorted(changed),
         removed_slugs=removed_slugs,
     )
+
+
+def _revision(
+    write: WcsWikiPagesWrite,
+    slug: str,
+    change: str,
+    previous: dict[str, Any] | None,
+    row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """One revision row: the stored document before and the one after."""
+    return {
+        "slug": slug,
+        "change": change,
+        "origin_source_id": write.origin_source_id,
+        "origin_job_id": write.origin_job_id,
+        "previous": previous,
+        "document": row["document"] if row is not None else None,
+    }
 
 
 # ── Who sees what ──

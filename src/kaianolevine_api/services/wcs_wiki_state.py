@@ -8,6 +8,10 @@ whole (its references or revisions included), records the document's header
 entries twice leaves the store as one write did, so an import can be
 re-sent, and a chunked one resumed.
 
+The thin-entity list (MINI-101) is kept here too, though it is no pass's
+memory: one document per entity, replaced whole, and the slugs the curator
+names as no longer thin removed.
+
 The store keeps the keys it is given. It does not check them against the
 corpus: the curator decides what a key means, and keys that no longer match
 a statement or entity are ignored there, not deleted here.
@@ -28,6 +32,7 @@ from ..models import (
     WcsWikiProse,
     WcsWikiStatement,
     WcsWikiStateMeta,
+    WcsWikiThinRow,
 )
 from ..models import WcsWikiProseRevision as ProseRevisionRow
 from ..models import WcsWikiReference as ReferenceRow
@@ -41,6 +46,10 @@ from ..schemas import (
     WcsWikiProseState,
     WcsWikiReference,
     WcsWikiStateWriteResult,
+    WcsWikiThinEntity,
+    WcsWikiThinState,
+    WcsWikiThinWrite,
+    WcsWikiThinWriteResult,
 )
 
 #: Rows per INSERT statement. asyncpg allows 32,767 bind parameters; the
@@ -359,4 +368,54 @@ async def put_prose(
     await session.commit()
     return WcsWikiStateWriteResult(
         written=len(slugs), total=await _count(session, WcsWikiProse)
+    )
+
+
+# ── Thin entities ──
+
+
+async def get_thin(session: AsyncSession) -> WcsWikiThinState:
+    """Every thin entity, grouped by the page it is on, then by slug."""
+    rows = (await session.execute(select(WcsWikiThinRow.data))).scalars().all()
+    entities = sorted(
+        (WcsWikiThinEntity.model_validate(data) for data in rows),
+        key=lambda e: (e.page, e.slug),
+    )
+    return WcsWikiThinState(entities=entities)
+
+
+async def put_thin(
+    session: AsyncSession, write: WcsWikiThinWrite
+) -> WcsWikiThinWriteResult:
+    """Upsert the entities in ``write``, each replaced whole; delete the slugs gone.
+
+    A slug both written and named in ``remove`` is kept: the write is the
+    newer word, as for pages.
+    """
+    # The last of a slug sent twice wins; one INSERT cannot touch a row twice.
+    by_slug = {e.slug: e for e in write.entities}
+    if by_slug:
+        await _upsert(
+            session,
+            WcsWikiThinRow,
+            WcsWikiThinRow.slug,
+            [
+                {"slug": slug, "data": e.model_dump(mode="json")}
+                for slug, e in sorted(by_slug.items())
+            ],
+        )
+    gone = sorted(set(write.remove) - set(by_slug))
+    removed = 0
+    if gone:
+        deleted = await session.execute(
+            delete(WcsWikiThinRow)
+            .where(WcsWikiThinRow.slug.in_(gone))
+            .returning(WcsWikiThinRow.slug)
+        )
+        removed = len(deleted.all())
+    await session.commit()
+    return WcsWikiThinWriteResult(
+        written=len(by_slug),
+        removed=removed,
+        total=await _count(session, WcsWikiThinRow),
     )

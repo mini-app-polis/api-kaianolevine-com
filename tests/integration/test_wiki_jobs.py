@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api.main import app
 from kaianolevine_api.schemas import WcsWikiJob
-from kaianolevine_api.services import job_queue, wiki_dispatch
+from kaianolevine_api.services import job_queue, transcription_dispatch, wiki_dispatch
 from tests.integration.test_wcs_sources_endpoint import (
     _create_transcript,
     _source_payload,
@@ -406,3 +406,129 @@ async def test_operations_take_the_operate_scope(reader_only_client) -> None:
         )
     assert resp.status_code == 403
     sent.assert_not_awaited()
+
+
+# ── A note written on the site (MINI-98) ──
+
+NOTE = {
+    "date": "2026-10-19",
+    "instructor": " Kaiano ",
+    "title": "Underarm turn",
+    "text": "A right side pass with the arm raised is the underarm turn.",
+}
+
+
+def _sent(mock: AsyncMock) -> transcription_dispatch.TranscriptionJob:
+    [call] = mock.await_args_list
+    return call.args[0]
+
+
+async def test_a_note_is_queued_as_a_wcs_note(client) -> None:
+    with patch.object(
+        transcription_dispatch,
+        "dispatch_transcription",
+        AsyncMock(return_value={"message_id": "m-1"}),
+    ) as sent:
+        resp = await client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+
+    assert resp.status_code == 202, resp.text
+    data = resp.json()["data"]
+    assert data["message_id"] == "m-1"
+    assert data["file_name"] == "2026-10-19 Kaiano > Note - Underarm turn"
+    assert data["deduplicated"] is False
+    assert data["note_id"].startswith("note:")
+    job = _sent(sent)
+    assert job.as_message()["payload"] == {
+        "mode": "wcs-note",
+        "note": {
+            "id": data["note_id"],
+            "date": "2026-10-19",
+            "instructor": "Kaiano",
+            "title": "Underarm turn",
+            "text": NOTE["text"],
+        },
+    }
+
+
+async def test_the_same_note_twice_is_the_same_note(client) -> None:
+    """Its id comes from its content, and a send inside the dedup window says so."""
+    with patch.object(
+        transcription_dispatch,
+        "dispatch_transcription",
+        AsyncMock(return_value={"message_id": "m-dup"}),
+    ):
+        first = await client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+        second = await client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+        other = await client.post(
+            "/v1/wcs/wiki/admin/notes", json={**NOTE, "text": NOTE["text"] + " Really."}
+        )
+    a, b, c = (r.json()["data"] for r in (first, second, other))
+    assert a["note_id"] == b["note_id"] != c["note_id"]
+    assert (a["deduplicated"], b["deduplicated"]) == (False, True)
+
+
+async def test_a_note_without_a_title_is_named_without_one(client) -> None:
+    with patch.object(
+        transcription_dispatch,
+        "dispatch_transcription",
+        AsyncMock(return_value={"message_id": "m-2"}),
+    ):
+        resp = await client.post(
+            "/v1/wcs/wiki/admin/notes", json={**NOTE, "title": "  "}
+        )
+    assert resp.json()["data"]["file_name"] == "2026-10-19 Kaiano > Note"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {**NOTE, "instructor": "Kaiano > Sarah"},
+        {**NOTE, "instructor": "Kaiano+Amy"},
+        {**NOTE, "instructor": ""},
+        {**NOTE, "instructor": "   "},
+        {**NOTE, "text": "  \n "},
+        {**NOTE, "title": "Two\nlines"},
+        {**NOTE, "text": ""},
+        {**NOTE, "text": "x" * 20_001},
+        {**NOTE, "date": "yesterday"},
+        {k: v for k, v in NOTE.items() if k != "text"},
+    ],
+)
+async def test_a_note_it_cannot_send_is_refused(client, body) -> None:
+    with patch.object(
+        transcription_dispatch, "dispatch_transcription", AsyncMock()
+    ) as sent:
+        resp = await client.post("/v1/wcs/wiki/admin/notes", json=body)
+    assert resp.status_code == 422
+    sent.assert_not_awaited()
+
+
+async def test_a_dropped_note_is_a_502(client) -> None:
+    with (
+        patch.object(
+            transcription_dispatch,
+            "dispatch_transcription",
+            AsyncMock(
+                side_effect=transcription_dispatch.DispatchError("down", detail="d")
+            ),
+        ),
+        patch.object(job_queue, "report_dropped", AsyncMock()),
+    ):
+        resp = await client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+    assert resp.status_code == 502
+
+
+async def test_a_note_takes_the_note_author_scope(reader_only_client) -> None:
+    with patch.object(
+        transcription_dispatch, "dispatch_transcription", AsyncMock()
+    ) as sent:
+        resp = await reader_only_client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+    assert resp.status_code == 403
+    sent.assert_not_awaited()
+
+
+def test_a_note_job_describes_itself_by_its_id() -> None:
+    job = transcription_dispatch.TranscriptionJob(
+        mode="wcs-note", note={"id": "note:ab"}
+    )
+    assert job.describe() == "transcription wcs-note note:ab"

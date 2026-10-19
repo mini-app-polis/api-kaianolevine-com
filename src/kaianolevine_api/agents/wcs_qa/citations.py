@@ -115,7 +115,9 @@ class EnrichedCitation(BaseModel):
     # render citations using the same label process as the /notes page:
     # date + session-type badge, primary label = students (for private
     # lessons) or organization, with "[with instructors]" appended.
-    session_type: Literal["private_lesson", "group_class", "other"] | None = Field(
+    session_type: (
+        Literal["private_lesson", "group_class", "correction", "other"] | None
+    ) = Field(
         None,
         description=(
             "Session type from the underlying note. None for chunk citations "
@@ -294,12 +296,14 @@ async def _resolve_note(
     return note
 
 
-_SessionType = Literal["private_lesson", "group_class", "other"]
-_SESSION_TYPES: frozenset[str] = frozenset({"private_lesson", "group_class", "other"})
+_SessionType = Literal["private_lesson", "group_class", "correction", "other"]
+_SESSION_TYPES: frozenset[str] = frozenset(
+    {"private_lesson", "group_class", "correction", "other"}
+)
 
 
 def _is_session_type(value: str) -> TypeGuard[_SessionType]:
-    """True when a stored session_type is one of the three the API serves.
+    """True when a stored session_type is one of those the API serves.
 
     The column is free text, so a value outside the set is possible; it is
     dropped to None here rather than carried into a response model that
@@ -324,7 +328,7 @@ class _ChunkResolution:
     title: str
     session_date: dt.date | None
     linked_note_id: uuid.UUID | None
-    session_type: Literal["private_lesson", "group_class", "other"] | None
+    session_type: Literal["private_lesson", "group_class", "correction", "other"] | None
     instructors: list[str]
     students: list[str]
     organization: str | None
