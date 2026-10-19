@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import time
 import uuid
 from typing import Annotated, Literal
@@ -31,6 +33,8 @@ from ..schemas import (
     WcsSourceViewItem,
     WcsWikiAdminJob,
     WcsWikiAdminJobAccepted,
+    WcsWikiAdminNote,
+    WcsWikiAdminNoteAccepted,
     WcsWikiExportItem,
     WcsWikiFacetsState,
     WcsWikiJob,
@@ -42,14 +46,21 @@ from ..schemas import (
     WcsWikiPagesWrite,
     WcsWikiPagesWriteResult,
     WcsWikiProseState,
+    WcsWikiRevisionDetail,
+    WcsWikiRevisionItem,
+    WcsWikiRevisionSource,
     WcsWikiStateWriteResult,
+    WcsWikiThinState,
+    WcsWikiThinWrite,
+    WcsWikiThinWriteResult,
     api_error,
     success_envelope,
 )
-from ..services import job_queue, wiki_dispatch
+from ..services import job_queue, transcription_dispatch, wiki_dispatch
 from ..services import wcs_wiki as wiki_svc
 from ..services import wcs_wiki_export as export_svc
 from ..services import wcs_wiki_pages as pages_svc
+from ..services import wcs_wiki_revisions as revisions_svc
 from ..services import wcs_wiki_state as state_svc
 
 router = APIRouter()
@@ -495,6 +506,51 @@ async def put_wiki_prose(
     )
 
 
+@router.get(
+    "/wcs/wiki/state/thin",
+    response_model=Envelope[WcsWikiThinState],
+    summary="Thin entities for the admin's review (cog-only)",
+    description="Every thin entity the curator found, by page, then slug (MINI-101).",
+)
+async def get_wiki_thin(
+    _caller: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiThinState]:
+    """Return the whole thin-entity list."""
+    doc = await state_svc.get_thin(session)
+    n = len(doc.entities)
+    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+
+
+@router.post(
+    "/wcs/wiki/state/thin",
+    response_model=Envelope[WcsWikiThinWriteResult],
+    summary="Upsert and remove thin entities (cog-only)",
+    description=(
+        "Each entity given replaces the stored one; each slug in remove "
+        "that was not also given is deleted."
+    ),
+)
+async def put_wiki_thin(
+    payload: WcsWikiThinWrite,
+    caller: Principal = Depends(require_scope("wcs.wiki.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiThinWriteResult]:
+    """Upsert the entities in ``payload`` and delete the slugs it names as gone."""
+    result = await state_svc.put_thin(session, payload)
+    log.info(
+        "%s wiki state thin written=%d removed=%d total=%d caller=%s",
+        LOG_SUCCESS,
+        result.written,
+        result.removed,
+        result.total,
+        caller.subject,
+    )
+    return success_envelope(
+        result, count=1, total=1, version=get_settings().API_VERSION
+    )
+
+
 # ---------------------------------------------------------------------------
 # Page documents (wiki-curator-cog ADR-006, MINI-96)
 # ---------------------------------------------------------------------------
@@ -621,6 +677,99 @@ async def get_wiki_page_admin(
 
 
 # ---------------------------------------------------------------------------
+# Page revisions (MINI-101)
+# ---------------------------------------------------------------------------
+# What each source changed in the wiki, for /admin/wiki. Every page write
+# records its creations, changes and removals; these read them back, grouped
+# by the source whose work caused them. Documents are shown whole.
+
+
+@router.get(
+    "/wcs/wiki/admin/revisions/sources",
+    response_model=Envelope[list[WcsWikiRevisionSource]],
+    summary="Page revisions by source (admin)",
+    description=(
+        "Revisions counted per source whose work caused them, most recently "
+        "active first. source_id null groups the work no source started."
+    ),
+)
+async def list_wiki_revision_sources(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    _admin: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[WcsWikiRevisionSource]]:
+    """One row per origin source, with its revision counts."""
+    items, total = await revisions_svc.list_sources(session, limit=limit, offset=offset)
+    return success_envelope(
+        items, count=len(items), total=total, version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/wcs/wiki/admin/revisions",
+    response_model=Envelope[list[WcsWikiRevisionItem]],
+    summary="List page revisions (admin)",
+    description=(
+        "Revisions newest first, without their documents. source_id is a "
+        "source's id, or 'none' for the work no source started; slug narrows "
+        "to one page."
+    ),
+)
+async def list_wiki_revisions(
+    source_id: Annotated[
+        str | None, Query(description="A source id, or 'none'.")
+    ] = None,
+    slug: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    _admin: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[WcsWikiRevisionItem]]:
+    """Revisions, filtered by origin source and page."""
+    origin: uuid.UUID | None = None
+    no_source = source_id == "none"
+    if source_id is not None and not no_source:
+        try:
+            origin = uuid.UUID(source_id)
+        except ValueError:
+            raise api_error(
+                422, "validation_error", "source_id must be a UUID or 'none'"
+            ) from None
+    items, total = await revisions_svc.list_revisions(
+        session,
+        source_id=origin,
+        no_source=no_source,
+        slug=slug,
+        limit=limit,
+        offset=offset,
+    )
+    return success_envelope(
+        items, count=len(items), total=total, version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/wcs/wiki/admin/revisions/{revision_id}",
+    response_model=Envelope[WcsWikiRevisionDetail],
+    summary="Get one page revision (admin)",
+    description="The revision with the page before and after, unfiltered.",
+)
+async def get_wiki_revision(
+    revision_id: int,
+    _admin: Principal = Depends(require_scope("wcs.corpus.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[WcsWikiRevisionDetail]:
+    """One revision with its documents; 404 if there is none."""
+    revision = await revisions_svc.get_revision(session, revision_id)
+    if revision is None:
+        raise api_error(404, "revision_not_found", "Wiki page revision not found")
+    return success_envelope(
+        revision, count=1, total=1, version=get_settings().API_VERSION
+    )
+
+
+# ---------------------------------------------------------------------------
 # Wiki jobs (wiki-curator-cog ADR-006, MINI-95)
 # ---------------------------------------------------------------------------
 
@@ -732,6 +881,103 @@ async def start_wiki_operation(
     data = WcsWikiAdminJobAccepted(
         action=payload.action,
         message_ids=[message_id],
+        summary=summary,
+        deduplicated=earlier is not None,
+        queued_at=earlier or now,
+    )
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+# ── A note written on the site (MINI-98) ──
+#
+# The admin writes a note on a wiki page instead of dropping a file in Drive.
+# It goes on transcription-cog's queue as a ``wcs-note`` message carrying its
+# text — the API stays the only producer onto a cog's queue (CD-006) — and the
+# cog processes it as it would ``<date> <instructor> > Note - <title>`` from
+# Drive, with no file to find, read or archive. The transcript and source are
+# written by the cog, so they are the cog's, as every other is.
+#
+# Not free: one model call to extract it, then the wiki's paid passes for what
+# it touches. Its own scope, wcs.notes.author, so that holding wcs.wiki.operate
+# (free operations only) never starts paid work.
+
+
+def note_id(payload: WcsWikiAdminNote) -> str:
+    """The note's id, from its content: the same note is the same transcript.
+
+    It is the transcript's drive_file_id, which the API upserts on, so a
+    redelivery or a second send stores the note again rather than twice.
+    """
+    content = json.dumps(
+        [payload.date.isoformat(), payload.instructor, payload.title, payload.text],
+        ensure_ascii=False,
+    )
+    return "note:" + hashlib.sha256(content.encode()).hexdigest()[:32]
+
+
+def note_file_name(payload: WcsWikiAdminNote) -> str:
+    """The name transcription-cog processes the note under (its note_filename)."""
+    name = f"{payload.date.isoformat()} {payload.instructor} > Note"
+    return f"{name} - {payload.title}" if payload.title else name
+
+
+@router.post(
+    "/wcs/wiki/admin/notes",
+    response_model=Envelope[WcsWikiAdminNoteAccepted],
+    status_code=202,
+    summary="Send a note written on the site (admin)",
+    description=(
+        "Queues the note for transcription-cog, which extracts it with the note "
+        "prompt (one paid model call) and stores it as a correction source; the "
+        "wiki then links it. Answers 502 if the job did not land."
+    ),
+)
+async def send_wiki_note(
+    payload: WcsWikiAdminNote,
+    request: Request,
+    admin: Principal = Depends(require_scope("wcs.notes.author")),
+) -> Envelope[WcsWikiAdminNoteAccepted]:
+    """Queue the note; a drop is a 502."""
+    nid = note_id(payload)
+    file_name = note_file_name(payload)
+    job = transcription_dispatch.TranscriptionJob(
+        mode="wcs-note",
+        note={
+            "id": nid,
+            "date": payload.date.isoformat(),
+            "instructor": payload.instructor,
+            "title": payload.title,
+            "text": payload.text,
+        },
+    )
+    settings = get_settings()
+    try:
+        accepted = await transcription_dispatch.dispatch_transcription(
+            job, settings=settings
+        )
+    except transcription_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(502, "dispatch_failed", f"Not queued: {exc}") from exc
+    message_id = str(accepted.get("message_id") or "")
+    now = dt.datetime.now(dt.UTC)
+    # SQS answers a send it deduplicated with the kept message's id.
+    earlier = wiki_dispatch.first_queued(message_id, now)
+    summary = (
+        "Already sent less than five minutes ago; not queued again."
+        if earlier is not None
+        else f"Queued “{file_name}”. It is a correction once extracted."
+    )
+    log.info(
+        "%s wiki note %s caller=%s deduplicated=%s",
+        LOG_SUCCESS,
+        nid,
+        admin.subject,
+        earlier is not None,
+    )
+    data = WcsWikiAdminNoteAccepted(
+        note_id=nid,
+        message_id=message_id,
+        file_name=file_name,
         summary=summary,
         deduplicated=earlier is not None,
         queued_at=earlier or now,

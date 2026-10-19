@@ -7,6 +7,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     UUID,
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -1725,6 +1726,41 @@ class WcsWikiPageRow(Base):
         default=list,
         server_default=text("'{}'"),
     )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiPageRevisionRow(Base):
+    """One page created, changed or removed by a page write (MINI-101)."""
+
+    __tablename__ = "wcs_wiki_page_revisions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    change: Mapped[str] = mapped_column(Text, nullable=False)
+    origin_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    origin_job_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous: Mapped[dict | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    document: Mapped[dict | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiThinRow(Base):
+    """One thin entity, as the curator found it (MINI-101)."""
+
+    __tablename__ = "wcs_wiki_thin"
+
+    slug: Mapped[str] = mapped_column(Text, primary_key=True)
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

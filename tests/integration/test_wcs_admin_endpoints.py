@@ -504,6 +504,7 @@ async def test_gaps_skills_unpaired_names_the_side_each_skill_is_on(
         ("organization", "Twin Cities WCS", "organization", "Twin Cities WCS"),
         ("session_date", "2024-02-20", "session_date", "2024-02-20"),
         ("session_type", "group_class", "session_type", "group_class"),
+        ("session_type", "correction", "session_type", "correction"),
         ("instructors", ["Kaiano", "Amy"], "instructors_raw", ["Kaiano", "Amy"]),
         ("students", ["Sarah", "Kate"], "students_raw", ["Sarah", "Kate"]),
         ("visibility", "public", "visibility", "public"),
