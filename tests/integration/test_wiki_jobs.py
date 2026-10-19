@@ -408,6 +408,70 @@ async def test_operations_take_the_operate_scope(reader_only_client) -> None:
     sent.assert_not_awaited()
 
 
+@pytest.fixture
+async def deploy_client(
+    client, db_session: AsyncSession
+) -> AsyncIterator[httpx.AsyncClient]:
+    """wiki-curator-cog's deploy job: it holds wiki-operator and nothing else."""
+    principal = Principal(
+        kind="machine", issuer="apikey", subject="deploy-only", display_name="d"
+    )
+    db_session.add(principal)
+    await db_session.flush()
+    db_session.add(
+        PrincipalRole(
+            principal_id=principal.id, role_name="wiki-operator", granted_by="test"
+        )
+    )
+    await db_session.commit()
+    original = auth_mod.verify_bearer
+    auth_mod.verify_bearer = AsyncMock(
+        return_value=VerifiedSubject(
+            issuer="apikey", subject="deploy-only", kind="machine"
+        )
+    )
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            headers={"Authorization": "Bearer k"},
+        ) as c:
+            yield c
+    auth_mod.verify_bearer = original
+
+
+async def test_a_deploy_rebuilds_every_page(deploy_client) -> None:
+    """MINI-109: the curator's CI asks for the rebuild the panel starts."""
+    with patch.object(
+        wiki_dispatch, "dispatch_wiki_job", AsyncMock(return_value={"message_id": "m"})
+    ) as sent:
+        resp = await deploy_client.post(
+            "/v1/wcs/wiki/admin/jobs", json={"action": "rebuild_every_page"}
+        )
+    assert resp.status_code == 202, resp.text
+    assert sent.await_args.args[0] == WcsWikiJob(job="materialise")
+
+
+async def test_a_deploy_cannot_start_paid_work_or_read_the_corpus(
+    deploy_client,
+) -> None:
+    with patch.object(wiki_dispatch, "dispatch_wiki_job", AsyncMock()) as sent:
+        note = await deploy_client.post("/v1/wcs/wiki/admin/notes", json=NOTE)
+        export = await deploy_client.get("/v1/wcs/wiki/export")
+    assert note.status_code == 403
+    assert export.status_code == 403
+    sent.assert_not_awaited()
+
+
+def test_the_deploy_machine_holds_only_what_it_needs() -> None:
+    from kaianolevine_api import identity_registry
+
+    machine = identity_registry.declared("wiki-curator-deploy")
+    assert machine is not None
+    assert machine.roles == ("wiki-operator", "notifier")
+    assert machine.key_env_var == "WIKI_CURATOR_DEPLOY_API_KEY"
+
+
 # ── A note written on the site (MINI-98) ──
 
 NOTE = {
