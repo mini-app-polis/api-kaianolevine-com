@@ -1,3 +1,11 @@
+## [2.19.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.19.0...v2.19.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.9.0 ([63b90c8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/63b90c83fe405aca66a84abc55fa8de2955a2c73))
+* **wcs:** give the API service the wiki-curator-deploy key (MINI-109) ([5df2539](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5df25395e4b3422c042881b78043ec80203b9c6e))
+
 # [2.19.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.18.0...v2.19.0) (2026-10-19)
 
 
