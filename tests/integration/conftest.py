@@ -255,6 +255,7 @@ _DEV_ROLES = {
     "notifier": ["notify.messages.send"],
     "standards-publisher": ["standards.catalog.publish"],
     "evaluation-trigger": ["evaluations.runs.create"],
+    "wiki-operator": ["wcs.wiki.operate"],
     "deejay-trigger": ["deejay.runs.create"],
     "transcription-trigger": ["transcription.runs.create"],
 }

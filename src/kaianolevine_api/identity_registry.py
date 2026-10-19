@@ -158,6 +158,17 @@ MACHINES: tuple[Machine, ...] = (
         roles=("standards-publisher", "notifier"),
         notes="POST /v1/standards/catalog from the release job.",
     ),
+    # wiki-curator-cog's CI, after it deploys the worker: a release can change
+    # how pages are built without changing the curator's state, so it asks
+    # for one rebuild of every page (MINI-109). Its key is a repository-level
+    # GitHub secret on wiki-curator-cog, like ecosystem-standards', and its
+    # role holds only wcs.wiki.operate: free operations, no model calls, no
+    # state writes, no corpus reads.
+    Machine(
+        name="wiki-curator-deploy",
+        roles=("wiki-operator", "notifier"),
+        notes="POST /v1/wcs/wiki/admin/jobs (rebuild_every_page) from the deploy job.",
+    ),
     # watcher-cog polls Drive and turns a change in a watched folder into a
     # run of the cog that owns it by asking the API, which enqueues onto
     # that cog's queue. One trigger role per downstream cog, so a watcher
