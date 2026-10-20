@@ -28,6 +28,7 @@ from kaianolevine_api.retrieval.wcs.tools import (
     search_notes,
     search_transcripts,
 )
+from tests.integration.conftest import grant_role
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 FLATTENER_VERSION = 1
@@ -81,6 +82,7 @@ async def seed_dev_owner_admin(reset_db, async_engine) -> None:
                 "ON CONFLICT (user_id) DO NOTHING"
             )
         )
+    await grant_role(async_engine, "dev-owner", "wcs-admin")
 
 
 @pytest.fixture
