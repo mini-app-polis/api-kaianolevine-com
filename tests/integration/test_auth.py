@@ -13,9 +13,10 @@ import uuid
 from unittest.mock import AsyncMock
 
 import httpx
+import jwt
 import pytest
 from fastapi import HTTPException
-from identity.errors import CredentialInvalid
+from identity.errors import CredentialInvalid, IssuerUnavailable
 from identity.store import (
     ExplicitGrant,
     Issuer,
@@ -110,16 +111,17 @@ async def test_credential_failure_still_raises_401(
 async def test_unreachable_issuer_raises_503_not_401(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A JWKS fetch that never connects leaves the credential unjudged.
+    """An issuer whose JWKS cannot be fetched leaves the credential unjudged.
 
     401 would tell the caller their session is invalid, and a client that
-    believes it logs them out over an outage that self-heals.
+    believes it logs them out over an outage that self-heals. The verifier
+    reports every way the fetch can fail as IssuerUnavailable.
     """
     monkeypatch.setattr(
         auth_mod,
         "get_verifier",
         lambda settings=None: _verifier_raising(
-            httpx.ConnectError("All connection attempts failed")
+            IssuerUnavailable("JWKS fetch failed: All connection attempts failed")
         ),
     )
     with pytest.raises(HTTPException) as exc:
@@ -129,15 +131,28 @@ async def test_unreachable_issuer_raises_503_not_401(
 
 
 @pytest.mark.asyncio
-async def test_issuer_timeout_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every httpx transport failure maps the same way, not just ConnectError."""
-    monkeypatch.setattr(
-        auth_mod,
-        "get_verifier",
-        lambda settings=None: _verifier_raising(httpx.ReadTimeout("timed out")),
+async def test_a_real_jwks_outage_is_a_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    """End to end through the real verifier: the JWKS answering 503."""
+    import respx
+
+    issuer = "https://clerk.outage.test"
+    jwks_url = f"{issuer}/.well-known/jwks.json"
+    from identity.clerk import ClerkIssuer, ClerkVerifier
+
+    verifier = ClerkVerifier([ClerkIssuer(issuer=issuer, jwks_url=jwks_url)])
+    monkeypatch.setattr(auth_mod, "get_verifier", lambda settings=None: verifier)
+    # Any token naming the issuer and a key id: the verifier fetches the JWKS
+    # to find the key before it checks anything the signature covers.
+    token = jwt.encode(
+        {"iss": issuer, "sub": "user_x"},
+        "k" * 32,
+        algorithm="HS256",
+        headers={"kid": "kid-1"},
     )
-    with pytest.raises(HTTPException) as exc:
-        await verify_bearer("Bearer token", _SettingsShim())  # type: ignore[arg-type]
+    with respx.mock() as router:
+        router.get(jwks_url).mock(return_value=httpx.Response(503))
+        with pytest.raises(HTTPException) as exc:
+            await verify_bearer(f"Bearer {token}", _SettingsShim())  # type: ignore[arg-type]
     assert exc.value.status_code == 503
 
 

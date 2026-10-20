@@ -44,12 +44,16 @@ import os
 from collections.abc import Mapping
 from functools import lru_cache
 
-import httpx
 from fastapi import Depends, Header, Request
 from identity.apikey import ApiKeyVerifier
 from identity.chain import ChainVerifier
 from identity.clerk import ClerkIssuer, ClerkVerifier
-from identity.errors import CredentialInvalid, IdentityError, IssuerNotTrusted
+from identity.errors import (
+    CredentialInvalid,
+    IdentityError,
+    IssuerNotTrusted,
+    IssuerUnavailable,
+)
 from identity.policy import authorize as decide
 from identity.store import (
     Issuer,
@@ -189,11 +193,7 @@ async def verify_bearer(
                 return await get_verifier(settings).verify(token)
             except IssuerNotTrusted as exc:
                 logger.warning(with_log_prefix(LOG_WARNING, f"untrusted issuer: {exc}"))
-            except (CredentialInvalid, IdentityError) as exc:
-                logger.warning(
-                    with_log_prefix(LOG_WARNING, f"credential rejected: {exc!r}")
-                )
-            except httpx.HTTPError as exc:
+            except IssuerUnavailable as exc:
                 # The issuer was unreachable, so the credential was never
                 # judged. 401 would say it was judged and found bad, and a
                 # client that believes that clears the session and bounces the
@@ -210,6 +210,10 @@ async def verify_bearer(
                     "auth_unavailable",
                     "Identity provider unreachable; retry shortly",
                 ) from exc
+            except (CredentialInvalid, IdentityError) as exc:
+                logger.warning(
+                    with_log_prefix(LOG_WARNING, f"credential rejected: {exc!r}")
+                )
 
     raise api_error(401, "unauthorized", "Valid Bearer token required")
 
