@@ -63,6 +63,31 @@ async def test_contact_blocked_origin(client: AsyncClient) -> None:
     assert resp.json()["error"]["code"] == "forbidden"
 
 
+@pytest.mark.asyncio
+async def test_a_wildcard_cors_setting_is_not_a_contact_allowlist(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The form redirects to the caller's origin, so "*" must admit no one."""
+    from kaianolevine_api.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "CORS_ORIGINS", ["*"])
+    resp = await client.post(
+        "/v1/contact",
+        json=VALID_JSON_BODY,
+        headers={"origin": "https://evil.example.com"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "forbidden"
+
+
+@pytest.mark.asyncio
+async def test_contact_without_an_origin_is_rejected(client: AsyncClient) -> None:
+    resp = await client.post("/v1/contact", json=VALID_JSON_BODY)
+
+    assert resp.status_code == 403
+
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_contact_allowed_origin(client: AsyncClient) -> None:

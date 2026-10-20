@@ -242,9 +242,12 @@ async def submit_contact(request: Request) -> Response:
     settings = get_settings()
 
     # --- Origin allow-list ---
+    # Only an origin named in CORS_ORIGINS. A wildcard there is not an
+    # allowlist: the redirect below goes to the caller's origin, so "*"
+    # would make this an open redirect.
     origin = request.headers.get("origin", "").strip()
-    allowed = settings.CORS_ORIGINS
-    if allowed and "*" not in allowed and origin not in allowed:
+    allowed = [o for o in settings.CORS_ORIGINS if o != "*"]
+    if origin not in allowed:
         return _error_response(403, "forbidden", "Origin not permitted")
 
     # --- Parse body ---

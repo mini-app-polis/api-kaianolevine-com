@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api.main import app
+from tests.integration.conftest import grant_role
 
 
 def _vs(subject: str, kind: str = "human", claims: dict | None = None):
@@ -333,8 +334,21 @@ async def test_patch_admin_note_rejects_non_admin(stranger_client) -> None:
 # ── PATCH /v1/wcs/admin/users/{user_id} ───────────────────────────────────────
 
 
+async def _roles_of(async_engine, subject: str) -> set[str]:
+    async with async_engine.begin() as conn:
+        rows = await conn.execute(
+            text(
+                "SELECT r.role_name FROM identity_principal_roles r "
+                "JOIN identity_principals p ON p.id = r.principal_id "
+                "WHERE p.subject = :s"
+            ),
+            {"s": subject},
+        )
+        return {row[0] for row in rows}
+
+
 async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> None:
-    """Contract test for PATCH /v1/wcs/admin/users/{user_id}."""
+    """is_admin grants and revokes the wcs-admin role; the flag mirrors it."""
     async with async_engine.begin() as conn:
         await conn.execute(
             text(
@@ -342,6 +356,7 @@ async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> No
                 "VALUES ('promote-me', 'p@example.com', 'P', false)"
             )
         )
+    await grant_role(async_engine, "promote-me", "wcs-reader")
 
     r = await client.patch(
         "/v1/wcs/admin/users/promote-me",
@@ -351,6 +366,7 @@ async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> No
     data = r.json()["data"]
     assert data["user_id"] == "promote-me"
     assert data["is_admin"] is True
+    assert await _roles_of(async_engine, "promote-me") == {"wcs-reader", "wcs-admin"}
 
     r2 = await client.patch(
         "/v1/wcs/admin/users/promote-me",
@@ -358,6 +374,43 @@ async def test_patch_wcs_admin_user_toggles_is_admin(client, async_engine) -> No
     )
     assert r2.status_code == 200
     assert r2.json()["data"]["is_admin"] is False
+    assert await _roles_of(async_engine, "promote-me") == {"wcs-reader"}
+
+
+async def test_revoking_admin_from_an_admin_only_principal_leaves_the_reader_role(
+    client, async_engine
+) -> None:
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
+                "VALUES ('demote-me', 'd@example.com', 'D', true)"
+            )
+        )
+    await grant_role(async_engine, "demote-me", "wcs-admin")
+
+    r = await client.patch("/v1/wcs/admin/users/demote-me", json={"is_admin": False})
+
+    assert r.status_code == 200
+    assert await _roles_of(async_engine, "demote-me") == {"wcs-reader"}
+
+
+async def test_patch_is_admin_without_a_principal_is_409(client, async_engine) -> None:
+    """A profile alone cannot hold a role; the person must sign in once."""
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, is_admin) "
+                "VALUES ('never-signed-in', 'n@example.com', 'N', false)"
+            )
+        )
+
+    r = await client.patch(
+        "/v1/wcs/admin/users/never-signed-in", json={"is_admin": True}
+    )
+
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "principal_not_found"
 
 
 async def test_patch_wcs_admin_user_not_found_returns_404(client) -> None:

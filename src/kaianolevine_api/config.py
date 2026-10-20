@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     API_VERSION: str = "1.0"
     STANDARDS_VERSION: str = "3.4.2"
     SENTRY_DSN_APIS: str | None = None
-    CORS_ORIGINS: list[str] = ["*"]
+    # Fails closed: no origin is allowed until one is configured. A wildcard
+    # default, with credentials allowed, would also have let the contact form
+    # accept and redirect to any origin.
+    CORS_ORIGINS: list[str] = []
 
     # Logging
     LOGGING_LEVEL: str = "INFO"
