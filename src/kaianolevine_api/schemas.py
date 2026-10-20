@@ -31,6 +31,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     SpotifyPlaylistIngest,
     SpotifyPlaylistsIngest,
     SpotifyPlaylistsIngestResponse,
+    TaskCreateAccepted,
+    TaskCreateRequest,
     TranscriptionRunAccepted,
     TranscriptionRunRequest,
     WcsDrillPurposeItem,
@@ -581,7 +583,11 @@ class WcsUserProfilePatch(BaseModel):
     """Admin patch payload for mutable WCS user fields."""
 
     is_admin: bool | None = Field(
-        default=None, description="Whether the user has WCS admin access."
+        default=None,
+        description=(
+            "Grant (true) or revoke (false) the user's wcs-admin role. The "
+            "role decides access; the profile flag mirrors it for display."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")

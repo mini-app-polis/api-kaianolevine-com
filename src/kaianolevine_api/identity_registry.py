@@ -169,6 +169,15 @@ MACHINES: tuple[Machine, ...] = (
         roles=("wiki-operator", "notifier"),
         notes="POST /v1/wcs/wiki/admin/jobs (rebuild_every_page) from the deploy job.",
     ),
+    # task-manager-cog is the one writer to the task board. Nothing it does
+    # goes through this API but its run reports: the board is Asana, reached
+    # with its own token. It asks for no tasks itself, so it does not hold
+    # task-requester.
+    Machine(
+        name="task-manager-cog",
+        roles=("pipeline-writer", "notifier"),
+        notes="POST /v1/evaluations, /v1/notify. Run reports only.",
+    ),
     # watcher-cog polls Drive and turns a change in a watched folder into a
     # run of the cog that owns it by asking the API, which enqueues onto
     # that cog's queue. One trigger role per downstream cog, so a watcher
