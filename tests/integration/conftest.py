@@ -267,6 +267,7 @@ _DEV_ROLES = {
     "wiki-operator": ["wcs.wiki.operate"],
     "deejay-trigger": ["deejay.runs.create"],
     "transcription-trigger": ["transcription.runs.create"],
+    "task-requester": ["tasks.requests.create"],
 }
 
 
@@ -324,6 +325,56 @@ async def seed_identity(session: AsyncSession) -> None:
                 )
             )
     await session.commit()
+
+
+async def grant_role(async_engine, subject: str, role: str) -> None:
+    """Give ``subject`` a human principal holding ``role``. Idempotent.
+
+    Roles are the authority for access, including which notes, sources and
+    wiki pages a viewer may see; the profile's is_admin flag decides nothing.
+    Tests that need a viewer with the whole corpus grant them wcs-admin.
+    """
+    from sqlalchemy import select
+
+    maker = async_sessionmaker(async_engine, expire_on_commit=False, autoflush=False)
+    async with maker() as session:
+        await seed_identity(session)
+        principal = (
+            (
+                await session.execute(
+                    select(Principal).where(
+                        Principal.issuer == DEV_ISSUER, Principal.subject == subject
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if principal is None:
+            principal = Principal(
+                kind="human", issuer=DEV_ISSUER, subject=subject, display_name=subject
+            )
+            session.add(principal)
+            await session.flush()
+        held = (
+            (
+                await session.execute(
+                    select(PrincipalRole).where(
+                        PrincipalRole.principal_id == principal.id,
+                        PrincipalRole.role_name == role,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if held is None:
+            session.add(
+                PrincipalRole(
+                    principal_id=principal.id, role_name=role, granted_by="conftest"
+                )
+            )
+        await session.commit()
 
 
 @pytest.fixture(autouse=True)
