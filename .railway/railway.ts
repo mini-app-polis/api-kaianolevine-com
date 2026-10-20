@@ -29,6 +29,13 @@
 // machine's <NAME>_API_KEY (identity_registry.py), and what mini_app_polis
 // reads on its behalf. DATABASE_URL is not shared — it references the
 // Postgres service — and is kept as Railway has it.
+//
+// The rest of the Settings fields the service reads in production are not
+// shared either, and are kept as Railway has them with preserve(): set on
+// the service when needed and left unset otherwise, so the code's default
+// applies without Doppler holding every one of them.
+// tests/unit/test_railway_variables.py fails when a Settings field
+// is neither declared here nor listed there as deliberately left out.
 
 import { defineRailway, github, preserve, project, service } from "railway/iac";
 
@@ -109,6 +116,21 @@ export default defineRailway((ctx) => {
     env: {
       ...Object.fromEntries(SHARED.map((n) => [n, ctx.shared[n]])),
       DATABASE_URL: preserve(),
+      // OPS-002: the schema-owning role's connection, read by
+      // scripts/apply_migrations.py. Like DATABASE_URL, a database URL.
+      DATABASE_URL_MIGRATIONS: preserve(),
+      // The multi-issuer form of CLERK_ISSUER / CLERK_JWKS_URL.
+      CLERK_ISSUERS: preserve(),
+      // The fallback for every Discord channel without its own webhook.
+      DISCORD_WEBHOOK_URL: preserve(),
+      // Switches config.py documents as changed without a deploy.
+      GITHUB_NOTIFY_EVENTS: preserve(),
+      GITHUB_DASHBOARD_CACHE_TTL_SECS: preserve(),
+      NOTIFY_DATA_CHANGES: preserve(),
+      NOTIFY_FAULTS: preserve(),
+      NOTIFY_MACHINE_CLIENT_ERRORS: preserve(),
+      NOTIFY_SUPPRESSED_TABLES: preserve(),
+      NOTIFY_EXCLUDED_PATHS: preserve(),
     },
   });
 
