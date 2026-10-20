@@ -195,11 +195,13 @@ async def refresh_wcs_embeddings(
         page_flattener_version=settings.WCS_QA_PAGE_FLATTENER_VERSION,
     )
     log.info(
-        "%s WCS embedding refresh notes=%d/%d chunks=%d duration_ms=%d",
+        "%s WCS embedding refresh notes=%d/%d chunks=%d pages=%d/%d duration_ms=%d",
         LOG_SUCCESS,
         summary.notes_embedded,
         summary.notes_total,
         summary.chunks_embedded,
+        summary.pages_embedded,
+        summary.pages_total,
         summary.duration_ms,
     )
     return success_envelope(summary, count=1, total=1, version=settings.API_VERSION)
