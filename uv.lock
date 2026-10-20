@@ -1307,7 +1307,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
     { name = "miniapppolis-common-utils", specifier = ">=6.10.0,<7" },
-    { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.0,<3" },
+    { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.1.6,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.2" },
     { name = "openai", specifier = ">=1.40,<4.0" },
     { name = "pgvector", specifier = ">=0.3,<1.0" },
@@ -1471,15 +1471,15 @@ wheels = [
 
 [[package]]
 name = "miniapppolis-identity"
-version = "2.1.5"
+version = "2.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pyjwt", extra = ["crypto"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/21/4e30985cb24237202f417ce3532e2bb186d21a2fe25371c0fce337766275/miniapppolis_identity-2.1.5.tar.gz", hash = "sha256:c2dade0c6c3c9558d0623849c515b73cc933ec8658b2421e3f5810229529d66c", size = 9821145, upload-time = "2026-10-20T21:12:50.673Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/95/5d88d1254b75c6e74191e08cdb84dcc19a1da9a7143a918c9e7a4f6b7387/miniapppolis_identity-2.1.6.tar.gz", hash = "sha256:44b7e6f6cbf3ae3e592a8aea4f9d1c5380d6af1f54205e25efb1c19f67966d14", size = 9825381, upload-time = "2026-10-20T21:53:14.736Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/a8/e76997b0551d243e1a87451bfdaad7d17e85e13489b09ae1abddf0a1d0ec/miniapppolis_identity-2.1.5-py3-none-any.whl", hash = "sha256:c75838d7f79bef804cb9f59e80f13124b11cea2f76b6552bec50efc8ab59fd80", size = 26943, upload-time = "2026-10-20T21:12:49.231Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/80/0bfd81d07b80b2d24ed36eeab432743032fa121e8cbf19b76cb2d5e9f22f/miniapppolis_identity-2.1.6-py3-none-any.whl", hash = "sha256:fd8b519d1767288d68caf72b20889c36a9d01aa208a9cfd84da116960b17bc30", size = 28756, upload-time = "2026-10-20T21:53:12.668Z" },
 ]
 
 [package.optional-dependencies]
