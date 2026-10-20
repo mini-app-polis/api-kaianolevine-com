@@ -1,3 +1,11 @@
+## [2.21.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.1...v2.21.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **railway:** declare every Settings field the service reads so apply cannot remove it ([ecbe11a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ecbe11adac3916c2b11d9f2df12ca91961acfd11))
+* **wcs:** log wiki page counts with each embeddings refresh ([baf0462](https://github.com/mini-app-polis/api-kaianolevine-com/commit/baf04624739c2ead85bb69a50b9dba030f9b281c))
+
 ## [2.21.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.0...v2.21.1) (2026-10-20)
 
 
