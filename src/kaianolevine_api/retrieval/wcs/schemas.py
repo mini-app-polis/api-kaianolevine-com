@@ -318,6 +318,62 @@ class TranscriptWindow(BaseModel):
     )
 
 
+class WikiPageHit(BaseModel):
+    """One ``search_wiki`` hit: a wiki page the question may be about.
+
+    No ``source_url`` — read the page with ``get_wiki_page`` before citing it.
+    """
+
+    slug: str = Field(..., description="The page's slug; pass it to get_wiki_page.")
+    name: str = Field(..., description="The page's display name.")
+    kind: str = Field(..., description="concept, technique, pattern or drill.")
+    snippet: str = Field(..., description="The start of the page's definition.")
+    score: float = Field(
+        ..., description="Cosine similarity; a relative ordering signal only."
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class WikiPageDoc(BaseModel):
+    """A wiki page as ``get_wiki_page`` returns it to the agent.
+
+    The page's own text, filtered to what the asker may see. ``details``,
+    ``mistakes`` and ``related`` are one line each. The lessons behind the
+    page are cited through ``search_notes`` / ``search_transcripts``, not
+    from here.
+    """
+
+    slug: str = Field(..., description="The page's slug; cite it as type page.")
+    name: str = Field(..., description="The page's display name.")
+    kind: str = Field(..., description="concept, technique, pattern or drill.")
+    aliases: list[str] = Field(default_factory=list, description="Other names.")
+    definition: str = Field("", description="What it is, in a sentence or two.")
+    in_practice: str = Field("", description="What a dancer needs beyond that.")
+    details: list[str] = Field(
+        default_factory=list, description="Narrower ideas folded into the page."
+    )
+    mistakes: list[str] = Field(
+        default_factory=list, description="Mistake → correction lines."
+    )
+    related: list[str] = Field(
+        default_factory=list, description="Related pages and how they relate."
+    )
+    teachers: list[str] = Field(
+        default_factory=list, description="Teachers whose lessons the page draws on."
+    )
+    requested: str | None = Field(
+        None,
+        description=(
+            "What was asked for, when it was another name for this page or a "
+            "narrower idea folded into it."
+        ),
+    )
+    source_url: str = Field(..., description="Where the page is read on the site.")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ToolError(Exception):
     """Tool-level error. Caught by the agent loop and serialized as JSON."""
 

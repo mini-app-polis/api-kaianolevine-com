@@ -9,6 +9,7 @@
 #                     The Opus judge compares the agent's answer against this.
 #   ideal_source_ids  - notes:  list of note UUIDs from wcs_notes
 #                     - chunks: list of "<transcript_uuid>:<chunk_index>" composite IDs
+#                     - pages:  list of wiki page slugs (MINI-113)
 #                     Used for source_recall / source_precision.
 #   difficulty        easy   = single source, direct lookup
 #                     medium = 2-3 sources, light synthesis
@@ -45,3 +46,55 @@
     the match, search_transcripts for the same date, get_transcript_window.
     If this fails, retrieval is broken — not the reasoning. Once corpus is
     embedded, replace placeholder UUIDs with real values from the DB.
+
+# ── Wiki pages (MINI-113) ─────────────────────────────────────────────────────
+# Questions whose best answer is a wiki page. Slugs and ideal answers are from
+# the wcs-wiki export of 2026-10-19; the page's lessons may also be cited.
+
+- id: q002
+  question: What is a weighted connection?
+  ideal_answer: |
+    The feeling of active, grounded weight going into and out of the hand
+    through the connection, neither pulling away nor going limp. In closed
+    position both points of contact should carry weight equally; a common
+    mistake is shying away from the back hand or letting the front hand go
+    slack.
+  ideal_source_ids:
+    pages:
+      - "weighted-connection"
+  difficulty: easy
+  category: factual
+  notes: |
+    Names the idea directly. Tests get_wiki_page by name, and that the answer
+    comes first with the page listed ahead of any lessons.
+
+- id: q003
+  question: What happens on the last two counts of a pattern, and where should my foot land?
+  ideal_answer: |
+    That is the anchor step: both partners decelerate, re-establish stretch
+    and redirect into the next pattern. Land on the ball of the foot on count
+    six rather than at full extension, so there is still range to travel into
+    the heel on the "and", where peak stretch happens.
+  ideal_source_ids:
+    pages:
+      - "anchor-step"
+  difficulty: medium
+  category: synthesis
+  notes: |
+    Describes the idea without naming it. Tests search_wiki finding the page,
+    then the lessons behind it backing the detail about count six.
+
+- id: q004
+  question: If my leader gives me no counter-tension at the anchor, should I keep extending until I find the stretch?
+  ideal_answer: |
+    No. Anchor in place and apply pressure into the connection to make the
+    stretch yourself. Overextending is a symptom of poor space management
+    before count six, not something to fix at that moment.
+  ideal_source_ids:
+    pages:
+      - "anchor-step"
+  difficulty: medium
+  category: factual
+  notes: |
+    The page's In practice answers it, and a lesson backs it up. Tests that
+    every claim is grounded in a cited source (judge_grounded).

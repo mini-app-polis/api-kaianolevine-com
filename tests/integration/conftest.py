@@ -135,6 +135,15 @@ async def create_tables(async_engine) -> AsyncIterator[None]:
 
 
 @pytest.fixture(autouse=True)
+async def stop_auto_refresh() -> AsyncIterator[None]:
+    """No automatic embeddings refresh outlives its test (MINI-114)."""
+    from kaianolevine_api.retrieval.wcs import auto_refresh
+
+    yield
+    await auto_refresh.stop()
+
+
+@pytest.fixture(autouse=True)
 def clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield

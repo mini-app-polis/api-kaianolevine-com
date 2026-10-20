@@ -37,6 +37,7 @@ from ...retrieval.wcs.tools import (
     search_notes,
     search_transcripts,
 )
+from ...retrieval.wcs.wiki_pages import get_wiki_page, search_wiki
 from .citations import (
     CitationParseError,
     EnrichedCitation,
@@ -157,6 +158,35 @@ def _tool_definitions() -> list[dict]:
             },
         },
         {
+            "name": "search_wiki",
+            "description": (
+                "Vector search over the wiki's pages: curated, consolidated pages on WCS "
+                "concepts, techniques, patterns and drills. Returns up to k hits with slug, "
+                "name, kind and the start of the definition. Use get_wiki_page before citing."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "k": {"type": "integer", "description": "Default 5, max 15."},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_wiki_page",
+            "description": (
+                'Read one wiki page by slug, other name or display name (e.g. "strike"). '
+                "Returns its definition, In practice, details, mistakes, related pages and "
+                "source_url."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        },
+        {
             "name": "get_transcript_window",
             "description": (
                 "Fetch a window of consecutive transcript chunks around the target chunk_id. "
@@ -246,6 +276,25 @@ async def _dispatch_tool(
             after=int(inputs.get("after", 1)),
         )
         return window.model_dump(mode="json")
+    if name == "search_wiki":
+        page_hits = await search_wiki(
+            session=session,
+            embedder=embedder,
+            viewer_id=viewer_id,
+            embedding_model=config.embedding_model,
+            page_flattener_version=config.page_flattener_version,
+            query=inputs["query"],
+            k=int(inputs.get("k", 5)),
+        )
+        return {"hits": [h.model_dump(mode="json") for h in page_hits]}
+    if name == "get_wiki_page":
+        page = await get_wiki_page(
+            session=session,
+            viewer_id=viewer_id,
+            site_url=config.site_url,
+            name=str(inputs.get("name") or ""),
+        )
+        return page.model_dump(mode="json", exclude_none=True)
     raise ToolError("invalid_input", f"Unknown tool: {name}")
 
 

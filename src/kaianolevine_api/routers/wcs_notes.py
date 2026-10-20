@@ -28,6 +28,7 @@ from ..models import WcsNoteGrant
 from ..models import WcsSource as DbSource
 from ..models import WcsSourceExtraction as DbSourceExtraction
 from ..models import WcsTranscript as DbTranscript
+from ..retrieval.wcs import auto_refresh
 from ..schemas import (
     Envelope,
     WcsNoteCreate,
@@ -123,6 +124,7 @@ async def create_transcript(
         )
 
     settings = get_settings()
+    auto_refresh.request_refresh(settings)
     data = WcsTranscriptItem(
         id=row.id,
         source_type=row.source_type,
@@ -215,6 +217,7 @@ async def create_note(
     log.info("%s note stored id=%s", LOG_SUCCESS, row.id)
 
     settings = get_settings()
+    auto_refresh.request_refresh(settings)
     data = _to_item(row)
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 

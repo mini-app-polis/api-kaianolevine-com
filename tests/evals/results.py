@@ -29,6 +29,7 @@ async def write_eval_run(
     judge_reasoning: str | None,
     judge_model: str,
     judge_prompt_sha: str,
+    judge_grounded: bool | None = None,
 ) -> None:
     session.add(
         WcsQaEvalRun(
@@ -44,6 +45,7 @@ async def write_eval_run(
             judge_reasoning=judge_reasoning,
             judge_model=judge_model,
             judge_prompt_sha=judge_prompt_sha,
+            judge_grounded=judge_grounded,
         )
     )
     await session.commit()

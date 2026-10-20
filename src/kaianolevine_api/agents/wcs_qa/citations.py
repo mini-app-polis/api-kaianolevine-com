@@ -21,6 +21,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import LegacyWcsNote, WcsTranscript, WcsTranscriptChunk
+from ...retrieval.wcs.schemas import ToolError
+from ...retrieval.wcs.wiki_pages import get_wiki_page
 from ...services.wcs_access import user_can_see_note
 
 SENTINEL_RE = re.compile(
@@ -28,7 +30,7 @@ SENTINEL_RE = re.compile(
     re.DOTALL,
 )
 
-VALID_TYPES = {"note", "chunk"}
+VALID_TYPES = {"note", "chunk", "page"}
 
 
 @dataclass
@@ -75,18 +77,20 @@ class EnrichedCitation(BaseModel):
             "``[N]`` reference in the answer text."
         ),
     )
-    type: Literal["note", "chunk"] = Field(
+    type: Literal["note", "chunk", "page"] = Field(
         ...,
         description=(
             "Citation kind. ``note`` points at a structured WCS lesson note; "
-            "``chunk`` points at a transcript chunk."
+            "``chunk`` points at a transcript chunk; ``page`` points at a wiki "
+            "page (MINI-113)."
         ),
     )
     id: str = Field(
         ...,
         description=(
             "Stable identifier of the cited resource. UUID for notes; "
-            "``<transcript_uuid>:<chunk_index>`` for chunks."
+            "``<transcript_uuid>:<chunk_index>`` for chunks; the page's slug "
+            "for pages."
         ),
     )
     transcript_id: str | None = Field(
@@ -100,7 +104,15 @@ class EnrichedCitation(BaseModel):
         None,
         description=(
             "Display title for the cited resource — the linked note's title "
-            "when one exists, otherwise the transcript's source filename."
+            "when one exists, otherwise the transcript's source filename; a "
+            "page's display name."
+        ),
+    )
+    kind: str | None = Field(
+        None,
+        description=(
+            "For ``type=page``: concept, technique, pattern or drill. None "
+            "for notes and chunks."
         ),
     )
     session_date: dt.date | None = Field(
@@ -223,7 +235,7 @@ async def enrich_citations(
 
     Returns (enriched, dropped_ids). Dropped IDs cover: malformed UUID,
     note not in DB, note not visible to viewer, chunk not in DB, chunk owned
-    by another user.
+    by another user, page with no wiki page or none of it visible.
     """
     enriched: list[EnrichedCitation] = []
     dropped: list[str] = []
@@ -250,6 +262,27 @@ async def enrich_citations(
                     students=list(note.students or []),
                     organization=note.organization or None,
                     source_url=_note_url(site_url, note.id),
+                )
+            )
+        elif ent_type == "page":
+            try:
+                page = await get_wiki_page(
+                    session=session,
+                    viewer_id=viewer_id,
+                    site_url=site_url,
+                    name=ent_id,
+                )
+            except ToolError:
+                dropped.append(ent_id)
+                continue
+            enriched.append(
+                EnrichedCitation(
+                    marker=marker,
+                    type="page",
+                    id=page.slug,
+                    title=page.name,
+                    kind=page.kind,
+                    source_url=page.source_url,
                 )
             )
         else:  # chunk

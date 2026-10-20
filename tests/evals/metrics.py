@@ -3,9 +3,10 @@
 source_recall    = |ideal ∩ cited| / |ideal|     (None when ideal is empty)
 source_precision = |ideal ∩ cited| / |cited|     (None when cited is empty)
 
-Notes and chunks are flattened into a single set of opaque string IDs.
-Note IDs are dashed UUIDs; chunk IDs are "<uuid>:<index>". Their formats
-are disjoint, so flattening can't produce false matches.
+Notes, chunks and pages are flattened into a single set of opaque string
+IDs. Note IDs are dashed UUIDs; chunk IDs are "<uuid>:<index>"; page IDs are
+slugs (lowercase words joined by hyphens, MINI-113). Their formats are
+disjoint, so flattening can't produce false matches.
 """
 
 from __future__ import annotations
@@ -14,12 +15,13 @@ from typing import Any
 
 
 def flatten_ids(struct: dict[str, Any] | None) -> set[str]:
-    """Flatten {"notes": [...], "chunks": [...]} into a single ID set."""
+    """Flatten {"notes": [...], "chunks": [...], "pages": [...]} into one ID set."""
     if not struct:
         return set()
     notes = struct.get("notes") or []
     chunks = struct.get("chunks") or []
-    return set(notes) | set(chunks)
+    pages = struct.get("pages") or []
+    return set(notes) | set(chunks) | set(pages)
 
 
 def source_recall(ideal_ids: set[str], cited_ids: set[str]) -> float | None:
