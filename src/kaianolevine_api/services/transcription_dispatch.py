@@ -11,7 +11,7 @@ names them, one request per file, and each file gets an invocation to
 itself. The one exception is ``voicenotes-cleanup``, the retention sweep
 over the archive, which names no file.
 
-``wcs-note`` is the other: a note written on the site (MINI-98), which
+``wcs-note`` is the other: a note written on the site, which
 carries its own text instead of naming a file. The API produces it itself,
 from ``POST /v1/wcs/wiki/admin/notes``; watcher-cog never asks for it.
 

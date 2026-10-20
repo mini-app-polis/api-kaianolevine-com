@@ -10,7 +10,7 @@
 --
 -- That state lived in three JSON files in the wcs-wiki repo and was paid for
 -- in model calls. These tables hold it in the API that owns the rest of the
--- WCS data (wiki-curator-cog ADR-006, MINI-89). They are keyed exactly as the
+-- WCS data (wiki-curator-cog ADR-006). They are keyed exactly as the
 -- files are — a statement key such as 'attribution:<uuid>', or an entity
 -- slug — so the files import as they stand and every watermark still holds.
 --

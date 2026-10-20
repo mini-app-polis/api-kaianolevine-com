@@ -4,7 +4,7 @@
 -- changing any of the curator's state, so nothing it does would rebuild
 -- them. Its CI asks for one rebuild of every page after the Lambda deploy,
 -- through POST /v1/wcs/wiki/admin/jobs — the same free operation the
--- /admin/wiki panel starts (MINI-109). The API stays the only producer onto
+-- /admin/wiki panel starts. The API stays the only producer onto
 -- the curator's queue (CD-006).
 --
 -- The caller is a GitHub Actions run holding a repository-level secret, so

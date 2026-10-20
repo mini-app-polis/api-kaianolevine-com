@@ -86,7 +86,7 @@ async def lifespan(_app: FastAPI):
     await github_dashboard.warm(settings)
     github_refresh = asyncio.create_task(github_dashboard.refresh_loop(settings))
     reminders = _start_spotify_token_reminders(settings)
-    # Picks up any content a stopped process left unembedded (MINI-114).
+    # Picks up any content a stopped process left unembedded.
     auto_refresh.request_refresh(settings)
 
     yield

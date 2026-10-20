@@ -1,4 +1,4 @@
--- Migration 063: the Q&A answers from the wiki's pages (MINI-113)
+-- Migration 063: the Q&A answers from the wiki's pages
 --
 -- wcs_wiki_page_embeddings: one row per page × (embedding_model,
 -- page_flattener_version). Embeds a page's name, other names, definition,

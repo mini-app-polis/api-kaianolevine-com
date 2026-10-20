@@ -1713,7 +1713,7 @@ class WcsWikiProseRevision(Base):
 
 
 class WcsWikiPageRow(Base):
-    """One entity page's document, as materialise built it (MINI-96)."""
+    """One entity page's document, as materialise built it."""
 
     __tablename__ = "wcs_wiki_pages"
 
@@ -1733,7 +1733,7 @@ class WcsWikiPageRow(Base):
 
 
 class WcsWikiPageEmbedding(Base):
-    """Vector embedding of a wiki page's text, for the Q&A (MINI-113).
+    """Vector embedding of a wiki page's text, for the Q&A.
 
     Keyed like the note embeddings: one row per page under each
     (embedding_model, page_flattener_version), with content_sha deciding
@@ -1757,7 +1757,7 @@ class WcsWikiPageEmbedding(Base):
 
 
 class WcsWikiPageRevisionRow(Base):
-    """One page created, changed or removed by a page write (MINI-101)."""
+    """One page created, changed or removed by a page write."""
 
     __tablename__ = "wcs_wiki_page_revisions"
 
@@ -1780,7 +1780,7 @@ class WcsWikiPageRevisionRow(Base):
 
 
 class WcsWikiThinRow(Base):
-    """One thin entity, as the curator found it (MINI-101)."""
+    """One thin entity, as the curator found it."""
 
     __tablename__ = "wcs_wiki_thin"
 

@@ -1,4 +1,4 @@
-"""The wiki's pages as a Q&A source (MINI-113).
+"""The wiki's pages as a Q&A source.
 
 Two tools sit beside the four over notes and transcripts:
 

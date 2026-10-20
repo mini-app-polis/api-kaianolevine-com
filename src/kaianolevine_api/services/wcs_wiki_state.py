@@ -8,7 +8,7 @@ whole (its references or revisions included), records the document's header
 entries twice leaves the store as one write did, so an import can be
 re-sent, and a chunked one resumed.
 
-The thin-entity list (MINI-101) is kept here too, though it is no pass's
+The thin-entity list is kept here too, though it is no pass's
 memory: one document per entity, replaced whole, and the slugs the curator
 names as no longer thin removed.
 

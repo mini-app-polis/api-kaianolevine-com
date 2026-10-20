@@ -1,4 +1,4 @@
-"""The wiki's review trail: page revisions and thin entities (MINI-101).
+"""The wiki's review trail: page revisions and thin entities.
 
 Every page write records what it created, changed or removed, with the
 source whose work caused it, so /admin/wiki can show what each source did to

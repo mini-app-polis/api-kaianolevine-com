@@ -82,7 +82,7 @@ class EnrichedCitation(BaseModel):
         description=(
             "Citation kind. ``note`` points at a structured WCS lesson note; "
             "``chunk`` points at a transcript chunk; ``page`` points at a wiki "
-            "page (MINI-113)."
+            "page."
         ),
     )
     id: str = Field(

@@ -1,4 +1,4 @@
-"""The eval judge's reply is parsed into score, grounded and reasoning (MINI-113)."""
+"""The eval judge's reply is parsed into score, grounded and reasoning."""
 
 from __future__ import annotations
 

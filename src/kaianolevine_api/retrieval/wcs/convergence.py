@@ -6,7 +6,7 @@ run, computes the canonical text for each source row, hashes it, and embeds
 only rows whose stored hash doesn't match. No backfill step — the first run
 embeds everything; subsequent runs no-op for unchanged rows.
 
-Wiki pages (MINI-113) are keyed on (embedding_model, page_flattener_version)
+Wiki pages are keyed on (embedding_model, page_flattener_version)
 and hashed over the page text the Q&A searches (``wiki_pages.flatten_page``).
 
 For transcripts, content_sha is computed at the transcript level
@@ -110,7 +110,7 @@ class RefreshSummary(BaseModel):
         ...,
         description=(
             "Wiki pages considered under the current ``(embedding_model, "
-            "page_flattener_version)`` config (MINI-113)."
+            "page_flattener_version)`` config."
         ),
     )
     pages_embedded: int = Field(
@@ -189,7 +189,7 @@ async def _converge_pages(
     embedding_model: str,
     page_flattener_version: int,
 ) -> dict[str, int]:
-    """Embed the wiki pages whose text changed (MINI-113).
+    """Embed the wiki pages whose text changed.
 
     Reads only the parts of each document that are embedded, not the whole
     page. A removed page's rows go with it (ON DELETE CASCADE).

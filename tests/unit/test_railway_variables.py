@@ -1,4 +1,4 @@
-"""Every declared machine's key reaches the production service (MINI-109).
+"""Every declared machine's key reaches the production service.
 
 Doppler syncs secrets to Railway's shared variables, but the service only
 sees the names .railway/railway.ts references. A machine declared in

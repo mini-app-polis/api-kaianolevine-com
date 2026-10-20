@@ -1505,7 +1505,7 @@ class EvaluationFleetAccepted(BaseModel):
 
 
 class WcsWikiAdminJob(BaseModel):
-    """``POST /v1/wcs/wiki/admin/jobs`` — an operation the admin starts (MINI-103).
+    """``POST /v1/wcs/wiki/admin/jobs`` — an operation the admin starts.
 
     Only operations that call no model: every one here is free. The paid
     passes need a cost estimate the admin confirms first, and are not here.
@@ -1543,7 +1543,7 @@ class WcsWikiAdminJobAccepted(BaseModel):
 
 
 class WcsWikiAdminNote(BaseModel):
-    """``POST /v1/wcs/wiki/admin/notes`` — a note written on the site (MINI-98).
+    """``POST /v1/wcs/wiki/admin/notes`` — a note written on the site.
 
     Processed as if it were a Drive file named
     ``<date> <instructor> > Note - <title>``: transcription-cog extracts it
@@ -1601,7 +1601,7 @@ class WcsWikiPageSummary(BaseModel):
     """One wiki page in the index: enough to search, list and sort by change.
 
     The page documents themselves are the fleet contract's ``WcsWikiPage``;
-    this summary is web-facing only (wiki-curator-cog ADR-006, MINI-96).
+    this summary is web-facing only (wiki-curator-cog ADR-006).
     """
 
     slug: str = Field(..., description="The page's slug.")
@@ -1613,7 +1613,7 @@ class WcsWikiPageSummary(BaseModel):
 
 
 class WcsWikiRevisionSource(BaseModel):
-    """The page revisions one source caused, counted (MINI-101).
+    """The page revisions one source caused, counted.
 
     Web-facing only, for /admin/wiki. ``source_id`` null groups the revisions
     no source caused: admin rebuilds and operator runs.

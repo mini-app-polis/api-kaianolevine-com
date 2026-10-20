@@ -1,4 +1,4 @@
-"""The Q&A answers from the wiki's pages (MINI-113).
+"""The Q&A answers from the wiki's pages.
 
 Pinned here: pages are embedded and kept current like notes; search_wiki and
 get_wiki_page give an asker only the pages the /wiki routes would; a page is

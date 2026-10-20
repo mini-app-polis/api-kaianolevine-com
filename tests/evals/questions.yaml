@@ -9,7 +9,7 @@
 #                     The Opus judge compares the agent's answer against this.
 #   ideal_source_ids  - notes:  list of note UUIDs from wcs_notes
 #                     - chunks: list of "<transcript_uuid>:<chunk_index>" composite IDs
-#                     - pages:  list of wiki page slugs (MINI-113)
+#                     - pages:  list of wiki page slugs
 #                     Used for source_recall / source_precision.
 #   difficulty        easy   = single source, direct lookup
 #                     medium = 2-3 sources, light synthesis
@@ -47,7 +47,7 @@
     If this fails, retrieval is broken — not the reasoning. Once corpus is
     embedded, replace placeholder UUIDs with real values from the DB.
 
-# ── Wiki pages (MINI-113) ─────────────────────────────────────────────────────
+# ── Wiki pages ────────────────────────────────────────────────────────────────
 # Questions whose best answer is a wiki page. Slugs and ideal answers are from
 # the wcs-wiki export of 2026-10-19; the page's lessons may also be cited.
 

@@ -5,7 +5,7 @@
 -- transcription-cog used to store it as session type 'other', the same as
 -- any unclassified session, so after ingest it could not be told apart from
 -- one, and the site showed it as an "Other" lesson. It now sends
--- 'correction' (MINI-102), and the API serves that type.
+-- 'correction', and the API serves that type.
 --
 -- This moves any note already stored as 'other' over. Probably none: the
 -- first real note had not been ingested when this was written. Notes are

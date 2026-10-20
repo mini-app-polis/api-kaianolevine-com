@@ -1,7 +1,7 @@
 """The wiki's page documents: store them, filter them per reader, serve them.
 
 wiki-curator-cog's materialise step builds one document per entity page and
-posts it here (ADR-006, MINI-96). The page logic — folds, the reference
+posts it here (ADR-006). The page logic — folds, the reference
 overlay, By teacher — is the curator's; this module never recomputes a page.
 It does three things:
 
@@ -18,7 +18,7 @@ It does three things:
 - **Serve.** The page by slug, and an index of every page a reader can see.
   A slug folded into a page — a facet, or another name for the same idea —
   has no page of its own; asked for, it is served the page that lists it in
-  ``folded``, with ``requested_slug`` naming what was asked for (MINI-100).
+  ``folded``, with ``requested_slug`` naming what was asked for.
 
 The admin sees everything (``visible=None``) and can ask for the public
 view of the same page, which is the filter with only default-visible
@@ -65,7 +65,7 @@ async def put_pages(
     them is new or different is read from the rows they replace, in the same
     transaction, so a run report can say what changed and not only what was
     processed. Each page created, changed or removed is also recorded as a
-    revision, with the write's origin, in the same transaction (MINI-101).
+    revision, with the write's origin, in the same transaction.
     """
     rows = [
         {

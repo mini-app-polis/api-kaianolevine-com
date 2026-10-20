@@ -2,7 +2,7 @@
 --
 -- The /admin/wiki panel starts curator work — rebuilding page documents —
 -- through POST /v1/wcs/wiki/admin/jobs, as the signed-in admin, instead of a
--- terminal command (MINI-103). That route needs a scope of its own:
+-- terminal command. That route needs a scope of its own:
 --
 -- wcs.wiki.write is the curator's, for writing its state and enqueueing its
 -- follow-on jobs; granting it to a human would let the admin overwrite that
