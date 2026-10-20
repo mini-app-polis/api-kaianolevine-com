@@ -21,6 +21,7 @@ from ..auth import (
 )
 from ..config import get_settings
 from ..database import get_db_session
+from ..retrieval.wcs import auto_refresh
 from ..schemas import (
     Envelope,
     ErrorDetail,
@@ -582,6 +583,9 @@ async def put_wiki_pages(
 ) -> Envelope[WcsWikiPagesWriteResult]:
     """Store the pages in ``payload`` and delete the ones it names as gone."""
     result = await pages_svc.put_pages(session, payload)
+    if result.created or result.changed or result.removed_slugs:
+        # The Q&A searches the pages too (MINI-113): re-embed what changed.
+        auto_refresh.request_refresh(get_settings())
     log.info(
         "%s wiki pages written=%d removed=%d total=%d caller=%s",
         LOG_SUCCESS,

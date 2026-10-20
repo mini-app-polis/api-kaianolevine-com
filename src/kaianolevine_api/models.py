@@ -678,6 +678,7 @@ class WcsQaEvalRun(Base):
     judge_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     judge_model: Mapped[str] = mapped_column(String, nullable=False)
     judge_prompt_sha: Mapped[str] = mapped_column(String, nullable=False)
+    judge_grounded: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     manual_grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
     manual_grade_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     ran_at: Mapped[dt.datetime] = mapped_column(
@@ -1727,6 +1728,30 @@ class WcsWikiPageRow(Base):
         server_default=text("'{}'"),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WcsWikiPageEmbedding(Base):
+    """Vector embedding of a wiki page's text, for the Q&A (MINI-113).
+
+    Keyed like the note embeddings: one row per page under each
+    (embedding_model, page_flattener_version), with content_sha deciding
+    when the page is embedded again.
+    """
+
+    __tablename__ = "wcs_wiki_page_embeddings"
+
+    slug: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("wcs_wiki_pages.slug", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    embedding_model: Mapped[str] = mapped_column(String, primary_key=True)
+    page_flattener_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    content_sha: Mapped[str] = mapped_column(String, nullable=False)
+    embedded_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

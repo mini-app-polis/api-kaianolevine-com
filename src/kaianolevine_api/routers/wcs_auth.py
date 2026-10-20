@@ -20,6 +20,7 @@ from ..config import Settings, get_settings
 from ..database import get_db_session
 from ..models import LegacyWcsNote as DbNote
 from ..models import WcsNoteGrant, WcsUserProfile
+from ..retrieval.wcs import auto_refresh
 from ..schemas import (
     Envelope,
     WcsMeUpsert,
@@ -386,6 +387,7 @@ async def patch_wcs_note_admin(
 
     await session.commit()
     await session.refresh(note)
+    auto_refresh.request_refresh(settings)
 
     return success_envelope(
         _to_item(note),

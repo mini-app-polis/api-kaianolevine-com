@@ -33,6 +33,7 @@ class AgentConfig:
     flattener_version: int
     chunking_version: int
     site_url: str
+    page_flattener_version: int = 1
 
 
 def from_settings(settings: Settings) -> AgentConfig:
@@ -61,4 +62,5 @@ def from_settings(settings: Settings) -> AgentConfig:
         flattener_version=settings.WCS_QA_FLATTENER_VERSION,
         chunking_version=settings.WCS_QA_CHUNKING_VERSION,
         site_url=settings.WCS_SITE_URL,
+        page_flattener_version=settings.WCS_QA_PAGE_FLATTENER_VERSION,
     )

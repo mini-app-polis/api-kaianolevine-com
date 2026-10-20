@@ -256,6 +256,9 @@ async def test_refresh_summary_shape(client, stub_embedder) -> None:
         "transcripts_embedded",
         "transcripts_skipped",
         "chunks_embedded",
+        "pages_total",
+        "pages_embedded",
+        "pages_skipped",
         "duration_ms",
     }
     assert set(s.keys()) == expected_keys

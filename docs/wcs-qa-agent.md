@@ -30,11 +30,20 @@ v1 retrieval reads the **legacy notes + transcripts tables**, not the entity sub
 - **Notes:** `LegacyWcsNote` → table `_legacy_wcs_notes` (renamed from `wcs_notes` in migration 019). Structured `notes_json` from LLM extraction.
 - **Transcripts:** `WcsTranscript` → `wcs_transcripts`, chunked into `wcs_transcript_chunks` for search.
 
+- **Wiki pages (MINI-113):** `WcsWikiPageRow` → `wcs_wiki_pages`, the page documents wiki-curator-cog builds, embedded into `wcs_wiki_page_embeddings` (migration 063).
+
 ADR-0002 describes a future move to entity-grain retrieval tools; that migration is not implemented in the Q&A agent yet.
 
 ## Retrieval surface
 
-The agent exposes exactly **four tools** to the model (`agents/wcs_qa/loop.py` → `retrieval/wcs/tools.py`):
+The agent exposes **six tools** to the model (`agents/wcs_qa/loop.py` → `retrieval/wcs/tools.py`, and `retrieval/wcs/wiki_pages.py` for the two over the wiki):
+
+### `search_wiki(query, k?)` and `get_wiki_page(name)` (MINI-113)
+
+- `search_wiki` is vector search over page embeddings (default k 5, max 15); hits carry slug, name, kind and the start of the definition, no URL.
+- `get_wiki_page` reads one page by slug, display name or other name (a slug folded into a page serves that page). It returns the definition, In practice, details, mistakes, related pages, teachers and `source_url` (`/wiki/page?slug=`).
+- Visibility is the /wiki routes' rule (`services/wcs_wiki_pages.py`): a page with no evidence, or with a source the asker can see, links to hidden sources reduced to their label. An admin sees every page, as on /admin/wiki.
+- The prompt starts questions about an idea at the wiki, then backs the answer with lessons, and answers first with the pages numbered ahead of the lessons.
 
 ### `search_notes(query, k?, filters?)`
 
@@ -86,13 +95,14 @@ The system prompt (`agents/wcs_qa/prompts.py`) requires:
 ```
 [[CITATIONS_BEGIN]]
 [
-  {"marker": 1, "type": "note", "id": "<note-uuid>"},
-  {"marker": 2, "type": "chunk", "id": "<transcript-uuid>:<chunk_index>"}
+  {"marker": 1, "type": "page", "id": "<page-slug>"},
+  {"marker": 2, "type": "note", "id": "<note-uuid>"},
+  {"marker": 3, "type": "chunk", "id": "<transcript-uuid>:<chunk_index>"}
 ]
 [[CITATIONS_END]]
 ```
 
-Parsing is in `agents/wcs_qa/citations.py` (`SENTINEL_RE`, `parse_citations_block`). Valid `type` values: `note`, `chunk`. The API strips the entire sentinel block from `answer` and returns enriched metadata per marker (`title`, `session_date`, instructors/students/organization, `source_url` where applicable).
+Parsing is in `agents/wcs_qa/citations.py` (`SENTINEL_RE`, `parse_citations_block`). Valid `type` values: `page`, `note`, `chunk`. A page citation carries the page's name as `title`, its `kind`, and its /wiki `source_url`; one the asker may not see is dropped. The API strips the entire sentinel block from `answer` and returns enriched metadata per marker (`title`, `session_date`, instructors/students/organization, `source_url` where applicable).
 
 Chunk citations get `source_url` only when the transcript has exactly one linked legacy note; otherwise `source_url` is null in v1.
 
@@ -100,7 +110,7 @@ Chunk citations get `source_url` only when the transcript has exactly one linked
 
 Offline eval lives under `tests/evals/` (not part of normal CI unless keys are present).
 
-**Question set:** `tests/evals/questions.yaml` — each entry has `id`, `question`, `ideal_answer`, and `ideal_source_ids` (`notes` / `chunks` UUID lists for metric computation).
+**Question set:** `tests/evals/questions.yaml` — each entry has `id`, `question`, `ideal_answer`, and `ideal_source_ids` (`notes` / `chunks` UUID lists and `pages` slugs, for metric computation).
 
 **Harness:** `tests/evals/test_harness.py`, run locally with:
 
@@ -112,8 +122,8 @@ Requires `RUN_EVALS=1`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and a non-empty q
 
 1. `POST /v1/wcs/ask` via in-process ASGI (`httpx` + dependency override on `get_current_owner`; user defaults to `WCS_QA_EVAL_USER_ID` or `dev-owner`).
 2. **Auto-metrics** (`tests/evals/metrics.py`): `source_recall` and `source_precision` comparing cited IDs to `ideal_source_ids`.
-3. **LLM-as-judge** (`tests/evals/judge.py`): separate model (`WCS_QA_JUDGE_MODEL`, default `claude-opus-4-7`) scores the agent answer 1–5 against `ideal_answer` using `JUDGE_PROMPT` (agent runs on Sonnet — cross-model grading).
-4. **Persistence:** one row per `(run_id, question_id)` in `wcs_qa_eval_runs` (migration 018), including `git_sha`, `agent_answer`, `cited_source_ids`, `tool_trace`, metrics, judge score/reasoning, and `judge_prompt_sha` (SHA-256 of `JUDGE_PROMPT` for drift detection).
+3. **LLM-as-judge** (`tests/evals/judge.py`): separate model (`WCS_QA_JUDGE_MODEL`, default `claude-opus-4-7`) scores the agent answer 1–5 against `ideal_answer` using `JUDGE_PROMPT` (agent runs on Sonnet — cross-model grading). It is also given the text of every cited source (`tests/evals/sources.py`) and says whether each claim in the answer is backed by one (`judge_grounded`, MINI-113).
+4. **Persistence:** one row per `(run_id, question_id)` in `wcs_qa_eval_runs` (migration 018), including `git_sha`, `agent_answer`, `cited_source_ids`, `tool_trace`, metrics, judge score/reasoning/`judge_grounded`, and `judge_prompt_sha` (SHA-256 of `JUDGE_PROMPT` for drift detection).
 
 `manual_grade` / `manual_grade_notes` columns are reserved for a future admin UI; the harness leaves them NULL.
 
@@ -130,13 +140,13 @@ Schema: migration `017_wcs_qa_embeddings.sql`.
 
 Vectors are **1536-dimensional** (`vector` extension). v1 uses **exact cosine search** (no ANN index) — acceptable at current corpus size.
 
-**Population:** `refresh_embeddings` (`retrieval/wcs/convergence.py`), invoked by `POST /v1/wcs/embeddings/refresh`:
+**Population:** `refresh_embeddings` (`retrieval/wcs/convergence.py`). It runs by itself after content changes (`retrieval/wcs/auto_refresh.py`, MINI-114): storing a transcript or a note, an admin edit to a note, or a page write that created, changed or removed a wiki page (MINI-113) requests a refresh, which runs off the request path after `WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so one lesson's writes give one refresh. Every start requests one too, for anything a stopped process left. A failed refresh is retried, then reported to Discord's errors channel and Sentry. A Postgres advisory lock keeps refreshes one at a time across processes. `POST /v1/wcs/embeddings/refresh` still runs one on demand.
 
-- Computes canonical text per source (notes via `flatten_note` / `FLATTENER_VERSION`; transcripts via `chunk_transcript` / `chunking_version`).
+- Computes canonical text per source (notes via `flatten_note` / `FLATTENER_VERSION`; transcripts via `chunk_transcript` / `chunking_version`; wiki pages via `wiki_pages.flatten_page` / `page_flattener_version`).
 - Stores `content_sha`; re-embeds only when the hash changes (idempotent).
 - Transcripts: if SHA mismatches, deletes existing chunks for that transcript at the current config and re-chunks + re-embeds.
 
-Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_FLATTENER_VERSION`, `WCS_QA_CHUNKING_VERSION` (see `config.py`).
+Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_FLATTENER_VERSION`, `WCS_QA_CHUNKING_VERSION`, `WCS_QA_PAGE_FLATTENER_VERSION`, `WCS_QA_REFRESH_DEBOUNCE_SECS` (see `config.py`).
 
 During `ask`, the user's question is embedded on each `search_*` call; there is no separate index refresh in the ask path.
 

@@ -23,7 +23,8 @@ For each question in questions.yaml:
      real Anthropic — auth is overridden so the harness runs as a configured
      user without needing a Clerk session).
   2. Compute source_recall + source_precision against ideal_source_ids.
-  3. Call the Opus judge for a 1-5 score + free-form reasoning.
+  3. Call the Opus judge for a 1-5 score, a grounded yes/no (is every claim
+     backed by a cited source, given those sources' text) and reasoning.
   4. Append a row to wcs_qa_eval_runs on the configured DATABASE_URL.
 
 Each pytest run uses a single fresh run_id; one row per question is written
@@ -54,6 +55,7 @@ from kaianolevine_api.main import app
 from .judge import judge_answer
 from .metrics import flatten_ids, source_precision, source_recall
 from .results import write_eval_run
+from .sources import cited_sources_text
 
 QUESTIONS_PATH = Path(__file__).parent / "questions.yaml"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -168,17 +170,25 @@ async def test_eval_question(
     recall = source_recall(ideal_ids, cited_ids)
     precision = source_precision(ideal_ids, cited_ids)
 
-    # 3. Judge.
-    judge_score, judge_reasoning = await judge_answer(
+    # 3. Judge, with the text of what the answer cites for the grounding check.
+    sm = get_sessionmaker(settings.DATABASE_URL)
+    async with sm() as session:
+        sources = await cited_sources_text(
+            session=session,
+            citations=data["citations"],
+            viewer_id=os.environ.get("WCS_QA_EVAL_USER_ID", "dev-owner"),
+            settings=settings,
+        )
+    judge_score, judge_grounded, judge_reasoning = await judge_answer(
         client=judge_client,
         model=settings.WCS_QA_JUDGE_MODEL,
         question=question["question"],
         ideal_answer=question.get("ideal_answer", ""),
         agent_answer=data["answer"],
+        cited_sources=sources,
     )
 
     # 4. Persist on the configured DATABASE_URL (development; see the guard above).
-    sm = get_sessionmaker(settings.DATABASE_URL)
     async with sm() as session:
         await write_eval_run(
             session=session,
@@ -189,6 +199,7 @@ async def test_eval_question(
             cited_source_ids={
                 "notes": [c["id"] for c in data["citations"] if c["type"] == "note"],
                 "chunks": [c["id"] for c in data["citations"] if c["type"] == "chunk"],
+                "pages": [c["id"] for c in data["citations"] if c["type"] == "page"],
             },
             tool_trace={
                 "tool_trace_id": data["tool_trace_id"],
@@ -200,4 +211,5 @@ async def test_eval_question(
             judge_reasoning=judge_reasoning,
             judge_model=settings.WCS_QA_JUDGE_MODEL,
             judge_prompt_sha=judge_prompt_sha,
+            judge_grounded=judge_grounded,
         )

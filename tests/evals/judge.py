@@ -1,8 +1,9 @@
 """LLM-as-judge wrapper for the WCS Q&A eval harness.
 
 Calls Claude Opus with the JUDGE_PROMPT system prompt and a user message
-containing the question, agent answer, and ideal answer. Parses out the
-"Reasoning: ..." and "Score: N" lines.
+containing the question, agent answer, ideal answer and the text of the
+sources the answer cites. Parses out the "Reasoning: ...", "Grounded: yes|no"
+and "Score: N" lines.
 
 The judge runs cross-model from the agent (Opus vs Sonnet) so the same
 model class isn't grading itself. The prompt requires reasoning before the
@@ -17,8 +18,9 @@ from typing import Any
 from kaianolevine_api.agents.wcs_qa.prompts import JUDGE_PROMPT
 
 _SCORE_RE = re.compile(r"Score:\s*(\d+)", re.IGNORECASE)
+_GROUNDED_RE = re.compile(r"Grounded:\s*(yes|no)\b", re.IGNORECASE)
 _REASONING_RE = re.compile(
-    r"Reasoning:\s*(.+?)(?=\n\s*Score:)", re.IGNORECASE | re.DOTALL
+    r"Reasoning:\s*(.+?)(?=\n\s*(?:Grounded|Score):)", re.IGNORECASE | re.DOTALL
 )
 
 
@@ -29,17 +31,20 @@ async def judge_answer(
     question: str,
     ideal_answer: str,
     agent_answer: str,
+    cited_sources: str = "(no sources cited)",
     max_tokens: int = 1024,
-) -> tuple[int | None, str]:
-    """Call Opus, return (score, reasoning).
+) -> tuple[int | None, bool | None, str]:
+    """Call Opus, return (score, grounded, reasoning).
 
-    score is None if parsing failed; reasoning is the full response text in
-    that case so a human can inspect what went wrong.
+    score or grounded is None if its line could not be parsed; reasoning is
+    the full response text when the Reasoning line could not be, so a human
+    can inspect what went wrong.
     """
     user_message = (
         f"Question:\n{question}\n\n"
         f"Agent answer:\n{agent_answer}\n\n"
-        f"Ideal answer:\n{ideal_answer}\n"
+        f"Ideal answer:\n{ideal_answer}\n\n"
+        f"Cited sources:\n{cited_sources}\n"
     )
     response = await client.messages.create(
         model=model,
@@ -61,7 +66,10 @@ async def judge_answer(
         except ValueError:
             score = None
 
+    grounded_match = _GROUNDED_RE.search(text)
+    grounded = grounded_match.group(1).lower() == "yes" if grounded_match else None
+
     reasoning_match = _REASONING_RE.search(text)
     reasoning = reasoning_match.group(1).strip() if reasoning_match else text.strip()
 
-    return score, reasoning
+    return score, grounded, reasoning

@@ -23,6 +23,7 @@ from mini_app_polis.sentry import init_sentry
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from .config import get_settings
+from .retrieval.wcs import auto_refresh
 from .routers import (
     catalog,
     contact,
@@ -84,8 +85,11 @@ async def lifespan(_app: FastAPI):
     await github_dashboard.warm(settings)
     github_refresh = asyncio.create_task(github_dashboard.refresh_loop(settings))
     reminders = _start_spotify_token_reminders(settings)
+    # Picks up any content a stopped process left unembedded (MINI-114).
+    auto_refresh.request_refresh(settings)
 
     yield
+    await auto_refresh.stop()
     github_refresh.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await github_refresh

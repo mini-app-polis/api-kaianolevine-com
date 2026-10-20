@@ -192,6 +192,7 @@ async def refresh_wcs_embeddings(
         embedding_model=settings.WCS_QA_EMBEDDING_MODEL,
         flattener_version=settings.WCS_QA_FLATTENER_VERSION,
         chunking_version=settings.WCS_QA_CHUNKING_VERSION,
+        page_flattener_version=settings.WCS_QA_PAGE_FLATTENER_VERSION,
     )
     log.info(
         "%s WCS embedding refresh notes=%d/%d chunks=%d duration_ms=%d",
