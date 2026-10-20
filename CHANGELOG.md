@@ -1,3 +1,12 @@
+## [2.21.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.0...v2.21.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **auth:** decide WCS visibility by role, fail CORS closed, close contact open redirect ([dc7df25](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dc7df2585524960a50ffa94043bb63c3ddfbfb44))
+* **auth:** decide WCS visibility by role, fail CORS closed, close contact open redirect ([0ca5252](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0ca52525693ea5c590910221e223b2bb1bfb7dae))
+* **deps:** bump miniapppolis-identity to 2.1.5 ([feed04f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/feed04f422ad70d4b166fc330d0b4e629a31e681))
+
 # [2.21.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.20.0...v2.21.0) (2026-10-20)
 
 
