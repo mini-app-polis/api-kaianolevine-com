@@ -1,7 +1,7 @@
 """The text of the sources an answer cites, for the judge's grounding check.
 
 The judge decides whether every claim in an answer is backed by a cited
-source (MINI-113), so it is given what those sources say: each cited wiki
+source, so it is given what those sources say: each cited wiki
 page, note and transcript window, read through the same tools the agent
 uses and as the asker sees them.
 """

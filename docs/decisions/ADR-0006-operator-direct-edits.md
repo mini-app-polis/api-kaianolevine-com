@@ -9,7 +9,7 @@
 
 ADR-0003 established a write model for the WCS substrate centered on **input-layer modifications composed at compose-time**. The principle: extractions are immutable LLM outputs; operator changes happen by adding correction records (`name_corrections`, `attribution_corrections`, `source_metadata_corrections`) or addition records (`*_additions`) that overlay extractions when the Composition Service runs. Canonical-layer rows are *computed*, not directly edited.
 
-The ADR's phrasing ("In-place mutation of extracted content. No endpoint lets an operator edit a `source_extractions.raw_output` blob. Mutation is via correction or new extraction.") was scoped to extraction blobs, but in practice it was read by future work — including this assistant — as ruling out direct mutation of canonical rows generally.
+The ADR's phrasing ("In-place mutation of extracted content. No endpoint lets an operator edit a `source_extractions.raw_output` blob. Mutation is via correction or new extraction.") was scoped to extraction blobs, but in practice it was read as ruling out direct mutation of canonical rows generally.
 
 Practice has diverged from that reading in two ways:
 

@@ -1,4 +1,4 @@
-"""Wiki jobs: the API sends work to wiki-curator-cog (ADR-006, MINI-95).
+"""Wiki jobs: the API sends work to wiki-curator-cog (ADR-006).
 
 Two ways in — a composed source, behind a flag seeded off, and the curator's
 own follow-on jobs — and one FIFO queue out.
@@ -105,7 +105,7 @@ async def test_jobs_are_enqueued_in_order(client, monkeypatch) -> None:
                 "jobs": [
                     {"job": "consolidate", "entities": ["stationary-anchor"]},
                     {"job": "generate", "entities": ["anchor", "frame"]},
-                    # generate's follow-on (MINI-96)
+                    # generate's follow-on
                     {"job": "materialise", "entities": ["anchor", "frame"]},
                 ]
             },
@@ -294,7 +294,7 @@ async def test_a_standard_queue_refuses_a_message_group(monkeypatch) -> None:
         )
 
 
-# ── Admin operations (MINI-103) ──
+# ── Admin operations ──
 
 
 def test_every_page_is_a_materialise_job_with_no_entities() -> None:
@@ -441,7 +441,7 @@ async def deploy_client(
 
 
 async def test_a_deploy_rebuilds_every_page(deploy_client) -> None:
-    """MINI-109: the curator's CI asks for the rebuild the panel starts."""
+    """The curator's CI asks for the rebuild the panel starts."""
     with patch.object(
         wiki_dispatch, "dispatch_wiki_job", AsyncMock(return_value={"message_id": "m"})
     ) as sent:
@@ -472,7 +472,7 @@ def test_the_deploy_machine_holds_only_what_it_needs() -> None:
     assert machine.key_env_var == "WIKI_CURATOR_DEPLOY_API_KEY"
 
 
-# ── A note written on the site (MINI-98) ──
+# ── A note written on the site ──
 
 NOTE = {
     "date": "2026-10-19",

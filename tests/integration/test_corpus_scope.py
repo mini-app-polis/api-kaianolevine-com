@@ -38,11 +38,11 @@ CORPUS_ROUTES = [
     "/v1/wcs/wiki/state/links",
     "/v1/wcs/wiki/state/facets",
     "/v1/wcs/wiki/state/prose",
-    # Thin entities quote what was said about them, from any source (MINI-101).
+    # Thin entities quote what was said about them, from any source.
     "/v1/wcs/wiki/state/thin",
-    # Page documents unfiltered, private citations included (MINI-96).
+    # Page documents unfiltered, private citations included.
     "/v1/wcs/wiki/admin/pages",
-    # Page revisions: documents before and after, unfiltered (MINI-101).
+    # Page revisions: documents before and after, unfiltered.
     "/v1/wcs/wiki/admin/revisions/sources",
     "/v1/wcs/wiki/admin/revisions",
     "/v1/wcs/wiki/admin/revisions/1",

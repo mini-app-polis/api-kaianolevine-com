@@ -1,4 +1,4 @@
-"""The wiki's pages as a Q&A source (MINI-113).
+"""The wiki's pages as a Q&A source.
 
 Two tools sit beside the four over notes and transcripts:
 
@@ -31,8 +31,9 @@ from mini_app_polis.api.contract.wcs_wiki import WcsWikiPage
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import WcsUserProfile, WcsWikiPageEmbedding, WcsWikiPageRow
+from ...models import WcsWikiPageEmbedding, WcsWikiPageRow
 from ...services import wcs_wiki_pages as pages_svc
+from ...services.wcs_access import sees_whole_corpus
 from ...services.wcs_composition import slugify
 from .convergence import Embedder
 from .schemas import ToolError, WikiPageDoc, WikiPageHit
@@ -93,13 +94,8 @@ def page_url(site_url: str, slug: str) -> str:
 
 
 async def visible_scope(session: AsyncSession, viewer_id: str) -> set[uuid.UUID] | None:
-    """Sources whose pages this asker may see; None for an admin (every page)."""
-    profile = (
-        await session.execute(
-            select(WcsUserProfile).where(WcsUserProfile.user_id == viewer_id)
-        )
-    ).scalar_one_or_none()
-    if profile is not None and profile.is_admin:
+    """Sources whose pages this asker may see; None for the whole corpus."""
+    if await sees_whole_corpus(session, viewer_id):
         return None
     return await pages_svc.visible_for_user(session, viewer_id)
 

@@ -1,4 +1,4 @@
-"""Page revisions, as /admin/wiki reads them: what each source changed (MINI-101).
+"""Page revisions, as /admin/wiki reads them: what each source changed.
 
 A page write records one revision for every page it creates, changes or
 removes (``wcs_wiki_pages.put_pages``). This module only reads them: grouped

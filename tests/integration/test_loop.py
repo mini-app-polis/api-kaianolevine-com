@@ -22,6 +22,7 @@ from kaianolevine_api.agents.wcs_qa.config import AgentConfig
 from kaianolevine_api.agents.wcs_qa.loop import AgentResult, run_agent
 from kaianolevine_api.models import LegacyWcsNote, WcsTranscript
 from kaianolevine_api.retrieval.wcs.convergence import refresh_embeddings
+from tests.integration.conftest import grant_role
 
 # ── Test config ───────────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ async def seed_admin(reset_db, async_engine) -> None:
                 "ON CONFLICT (user_id) DO UPDATE SET is_admin = excluded.is_admin"
             )
         )
+    await grant_role(async_engine, "dev-owner", "wcs-admin")
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
-"""Q&A embeddings refresh themselves when content changes (MINI-114).
+"""Q&A embeddings refresh themselves when content changes.
 
 A write that changes what the Q&A searches — a transcript, a note, an admin
 edit to a note, or a page write that created, changed or removed a wiki page
-(MINI-113) — calls :func:`request_refresh` after it commits. The refresh runs off the request path, in this process,
+— calls :func:`request_refresh` after it commits. The refresh runs off the request path, in this process,
 after :data:`Settings.WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so a lesson's
 transcript, note and source arriving together give one refresh, not three.
 Writes that land while a refresh runs give one more refresh after it.

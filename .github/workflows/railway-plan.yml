@@ -3,7 +3,7 @@
 # review, and merging is the approval. A plan that destroys anything fails
 # unless the pull request is labelled allow-destroy. The steps live in the
 # shared workflow in mini-app-polis/.github, modelled on
-# mini-app-polis/infra's terraform.yml. MINI-69.
+# mini-app-polis/infra's terraform.yml.
 name: Railway plan
 
 on:

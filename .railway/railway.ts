@@ -5,7 +5,7 @@
 // request is labelled allow-destroy. As mini-app-polis/infra applies
 // Terraform. Nothing is applied from a workstation, and Railway itself does
 // not read this file when it deploys. Replaces railway.json, which Railway
-// stops reading on 2026-12-01. MINI-69.
+// stops reading on 2026-12-01.
 //
 // Production only. Planned against any other environment it declares
 // nothing, and a partial that owns nothing there changes nothing; the

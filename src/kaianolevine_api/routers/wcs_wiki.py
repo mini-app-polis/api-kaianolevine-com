@@ -376,7 +376,7 @@ async def export_wiki(
 
 
 # ---------------------------------------------------------------------------
-# The curator's state (wiki-curator-cog ADR-006, MINI-89)
+# The curator's state (wiki-curator-cog ADR-006)
 # ---------------------------------------------------------------------------
 # One document per pass, shaped as the file it replaces. Read with the corpus
 # scope — statements quote private sources — and written with wcs.wiki.write,
@@ -511,7 +511,7 @@ async def put_wiki_prose(
     "/wcs/wiki/state/thin",
     response_model=Envelope[WcsWikiThinState],
     summary="Thin entities for the admin's review (cog-only)",
-    description="Every thin entity the curator found, by page, then slug (MINI-101).",
+    description="Every thin entity the curator found, by page, then slug.",
 )
 async def get_wiki_thin(
     _caller: Principal = Depends(require_scope("wcs.corpus.read")),
@@ -553,7 +553,7 @@ async def put_wiki_thin(
 
 
 # ---------------------------------------------------------------------------
-# Page documents (wiki-curator-cog ADR-006, MINI-96)
+# Page documents (wiki-curator-cog ADR-006)
 # ---------------------------------------------------------------------------
 # The curator posts one document per entity page; readers get it filtered to
 # the sources they can see. Same split as sources: the plain routes filter
@@ -584,7 +584,7 @@ async def put_wiki_pages(
     """Store the pages in ``payload`` and delete the ones it names as gone."""
     result = await pages_svc.put_pages(session, payload)
     if result.created or result.changed or result.removed_slugs:
-        # The Q&A searches the pages too (MINI-113): re-embed what changed.
+        # The Q&A searches the pages too: re-embed what changed.
         auto_refresh.request_refresh(get_settings())
     log.info(
         "%s wiki pages written=%d removed=%d total=%d caller=%s",
@@ -681,7 +681,7 @@ async def get_wiki_page_admin(
 
 
 # ---------------------------------------------------------------------------
-# Page revisions (MINI-101)
+# Page revisions
 # ---------------------------------------------------------------------------
 # What each source changed in the wiki, for /admin/wiki. Every page write
 # records its creations, changes and removals; these read them back, grouped
@@ -774,7 +774,7 @@ async def get_wiki_revision(
 
 
 # ---------------------------------------------------------------------------
-# Wiki jobs (wiki-curator-cog ADR-006, MINI-95)
+# Wiki jobs (wiki-curator-cog ADR-006)
 # ---------------------------------------------------------------------------
 
 
@@ -824,7 +824,7 @@ async def enqueue_wiki_jobs(
 
 
 # ---------------------------------------------------------------------------
-# Admin operations (MINI-103)
+# Admin operations
 # ---------------------------------------------------------------------------
 #
 # The /admin/wiki panel starts curator work here, as the signed-in admin,
@@ -892,7 +892,7 @@ async def start_wiki_operation(
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
 
 
-# ── A note written on the site (MINI-98) ──
+# ── A note written on the site ──
 #
 # The admin writes a note on a wiki page instead of dropping a file in Drive.
 # It goes on transcription-cog's queue as a ``wcs-note`` message carrying its

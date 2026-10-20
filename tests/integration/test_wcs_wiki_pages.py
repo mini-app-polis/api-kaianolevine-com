@@ -1,4 +1,4 @@
-"""Page documents: stored whole, served filtered, removed when gone (MINI-96).
+"""Page documents: stored whole, served filtered, removed when gone.
 
 wiki-curator-cog posts one document per entity page. The API never
 recomputes a page; what these pin is that it gives each reader the evidence
@@ -289,7 +289,7 @@ async def test_reading_the_wiki_does_not_grant_writing_it(
     assert (await reader_client.get("/v1/wcs/wiki/admin/pages/x")).status_code == 403
 
 
-# ── Folded slugs (MINI-100) ──
+# ── Folded slugs ──
 
 
 async def test_a_folded_slug_is_served_the_page_it_folded_into(client, sources) -> None:

@@ -4,7 +4,7 @@ SQL-side filtering, then pgvector cosine distance ordering. Filters are
 applied before vector ranking so the existing btree/GIN indexes do their job.
 
 Visibility rules mirror services.wcs_access.user_can_see_note:
-  default-visible OR caller is admin OR caller has a grant.
+  default-visible OR caller holds wcs.corpus.read OR caller has a grant.
 """
 
 from __future__ import annotations
@@ -20,21 +20,18 @@ from ...models import (
     WcsNoteGrant,
     WcsTranscript,
     WcsTranscriptChunk,
-    WcsUserProfile,
 )
+from ...services.wcs_access import sees_whole_corpus
 from .schemas import NoteFilters, TranscriptFilters
 
 
 async def _build_visibility_clause(session: AsyncSession, viewer_id: str):
     """Return a SQL clause restricting wcs_notes rows to those visible to viewer.
 
-    Returns sqlalchemy true() if the caller is an admin (no restriction).
+    Returns sqlalchemy true() if the caller's roles carry wcs.corpus.read
+    (no restriction).
     """
-    profile_q = await session.execute(
-        select(WcsUserProfile).where(WcsUserProfile.user_id == viewer_id)
-    )
-    profile = profile_q.scalars().first()
-    if profile is not None and profile.is_admin:
+    if await sees_whole_corpus(session, viewer_id):
         return true()
 
     grant_subq = select(WcsNoteGrant.note_id).where(WcsNoteGrant.user_id == viewer_id)

@@ -1,4 +1,4 @@
-"""The Q&A answers from the wiki's pages (MINI-113).
+"""The Q&A answers from the wiki's pages.
 
 Pinned here: pages are embedded and kept current like notes; search_wiki and
 get_wiki_page give an asker only the pages the /wiki routes would; a page is
@@ -24,6 +24,7 @@ from kaianolevine_api.retrieval.wcs.convergence import refresh_embeddings
 from kaianolevine_api.retrieval.wcs.schemas import ToolError
 from kaianolevine_api.schemas import WcsWikiPagesWrite
 from kaianolevine_api.services import wcs_wiki_pages as pages_svc
+from tests.integration.conftest import grant_role
 
 from .test_wcs_qa import StubEmbedder
 from .test_wcs_wiki_pages import _page, _source
@@ -44,13 +45,14 @@ def one_chunk_per_transcript(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-async def seeded(db_session: AsyncSession) -> dict[str, uuid.UUID]:
+async def seeded(db_session: AsyncSession, async_engine) -> dict[str, uuid.UUID]:
     """A public page, a private one, and one with no evidence; two askers."""
     public = await _source(db_session, public=True)
     private = await _source(db_session, public=False)
     db_session.add(WcsUserProfile(user_id=ADMIN, is_admin=True))
     db_session.add(WcsUserProfile(user_id=READER, is_admin=False))
     await db_session.commit()
+    await grant_role(async_engine, ADMIN, "wcs-admin")
     await pages_svc.put_pages(
         db_session,
         WcsWikiPagesWrite.model_validate(

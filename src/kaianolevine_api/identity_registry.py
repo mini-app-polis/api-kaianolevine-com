@@ -160,7 +160,7 @@ MACHINES: tuple[Machine, ...] = (
     ),
     # wiki-curator-cog's CI, after it deploys the worker: a release can change
     # how pages are built without changing the curator's state, so it asks
-    # for one rebuild of every page (MINI-109). Its key is a repository-level
+    # for one rebuild of every page. Its key is a repository-level
     # GitHub secret on wiki-curator-cog, like ecosystem-standards', and its
     # role holds only wcs.wiki.operate: free operations, no model calls, no
     # state writes, no corpus reads.

@@ -2,7 +2,7 @@
 --
 -- When a source is composed, the API can ask wiki-curator-cog to link it,
 -- and that job's follow-ons regenerate the pages it touched (wiki-curator-cog
--- ADR-006, MINI-95). Every job costs model calls, so the hook is off until
+-- ADR-006). Every job costs model calls, so the hook is off until
 -- switched on: with this FALSE a composed source is simply not linked yet,
 -- and the curator's local commands pick it up whenever they next run.
 --

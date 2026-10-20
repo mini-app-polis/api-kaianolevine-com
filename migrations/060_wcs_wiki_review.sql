@@ -1,7 +1,7 @@
 -- Migration 060: the wiki's review trail — page revisions and thin entities
 --
 -- /admin/wiki shows what each source changed in the wiki, and which entities
--- have too little evidence to stand on their own (MINI-101).
+-- have too little evidence to stand on their own.
 --
 -- wcs_wiki_page_revisions: a page write (POST /v1/wcs/wiki/pages) records one
 -- row for every page it creates, changes or removes, in the same transaction

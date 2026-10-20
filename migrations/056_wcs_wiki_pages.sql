@@ -2,7 +2,7 @@
 --
 -- wiki-curator-cog's materialise step builds one structured JSON document per
 -- entity page — definition, In practice, Details, By teacher with citations,
--- Mentions, Referenced by — and posts it here (ADR-006, MINI-96). The page
+-- Mentions, Referenced by — and posts it here (ADR-006). The page
 -- logic stays in the curator; this API stores the documents, filters them by
 -- the reader's access to their sources, and serves them.
 --

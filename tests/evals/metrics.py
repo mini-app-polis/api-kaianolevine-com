@@ -5,7 +5,7 @@ source_precision = |ideal ∩ cited| / |cited|     (None when cited is empty)
 
 Notes, chunks and pages are flattened into a single set of opaque string
 IDs. Note IDs are dashed UUIDs; chunk IDs are "<uuid>:<index>"; page IDs are
-slugs (lowercase words joined by hyphens, MINI-113). Their formats are
+slugs (lowercase words joined by hyphens). Their formats are
 disjoint, so flattening can't produce false matches.
 """
 

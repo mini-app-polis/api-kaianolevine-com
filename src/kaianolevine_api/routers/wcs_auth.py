@@ -7,10 +7,12 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
+from identity.store import Principal as PrincipalRow
+from identity.store import PrincipalRole
 from identity.types import Principal
 from mini_app_polis import logger as logger_mod
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +40,9 @@ from .wcs_notes import _to_item
 
 router = APIRouter()
 log = logger_mod.get_logger()
+
+#: The role ``PATCH /wcs/admin/users/{id}`` grants and revokes.
+ADMIN_ROLE = "wcs-admin"
 
 
 # ── /wcs/me ───────────────────────────────────────────────────────────────────
@@ -180,7 +185,12 @@ async def list_wcs_users(
     "/wcs/admin/users/{user_id}",
     response_model=Envelope[WcsUserProfileOut],
     summary="Patch WCS user",
-    description="Admin-only. Update fields such as is_admin.",
+    description=(
+        "Admin-only. `is_admin` grants or revokes the person's `wcs-admin` "
+        "role, which is what decides their access; the profile flag mirrors "
+        "it for display. The person must have signed in once, so they have a "
+        "principal to hold the role."
+    ),
 )
 async def patch_wcs_user(
     user_id: str,
@@ -199,6 +209,7 @@ async def patch_wcs_user(
         raise api_error(404, "user_not_found", "User not found")
 
     if body.is_admin is not None:
+        await _set_wcs_admin_role(session, user_id, admin=body.is_admin)
         profile.is_admin = body.is_admin
 
     await session.commit()
@@ -209,6 +220,69 @@ async def patch_wcs_user(
         total=1,
         version=settings.API_VERSION,
     )
+
+
+async def _set_wcs_admin_role(
+    session: AsyncSession, user_id: str, *, admin: bool
+) -> None:
+    """Grant or revoke ``wcs-admin`` on the person's principal.
+
+    Roles are the authority for every scope, corpus visibility included. A
+    person left with no role on revocation gets the default reader role, the
+    same one a new sign-in receives.
+    """
+    principal_ids = (
+        (
+            await session.execute(
+                select(PrincipalRow.id).where(
+                    PrincipalRow.subject == user_id, PrincipalRow.kind == "human"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not principal_ids:
+        raise api_error(
+            409,
+            "principal_not_found",
+            "This person has no principal yet; they must sign in once first.",
+        )
+    for principal_id in principal_ids:
+        held = set(
+            (
+                await session.execute(
+                    select(PrincipalRole.role_name).where(
+                        PrincipalRole.principal_id == principal_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if admin and ADMIN_ROLE not in held:
+            session.add(
+                PrincipalRole(
+                    principal_id=principal_id,
+                    role_name=ADMIN_ROLE,
+                    granted_by="patch_wcs_user",
+                )
+            )
+        elif not admin and ADMIN_ROLE in held:
+            await session.execute(
+                delete(PrincipalRole).where(
+                    PrincipalRole.principal_id == principal_id,
+                    PrincipalRole.role_name == ADMIN_ROLE,
+                )
+            )
+            if held == {ADMIN_ROLE}:
+                session.add(
+                    PrincipalRole(
+                        principal_id=principal_id,
+                        role_name=auth.HUMAN_DEFAULT_ROLE,
+                        granted_by="patch_wcs_user",
+                    )
+                )
 
 
 # ── /wcs/admin/grants ─────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ v1 retrieval reads the **legacy notes + transcripts tables**, not the entity sub
 - **Notes:** `LegacyWcsNote` → table `_legacy_wcs_notes` (renamed from `wcs_notes` in migration 019). Structured `notes_json` from LLM extraction.
 - **Transcripts:** `WcsTranscript` → `wcs_transcripts`, chunked into `wcs_transcript_chunks` for search.
 
-- **Wiki pages (MINI-113):** `WcsWikiPageRow` → `wcs_wiki_pages`, the page documents wiki-curator-cog builds, embedded into `wcs_wiki_page_embeddings` (migration 063).
+- **Wiki pages:** `WcsWikiPageRow` → `wcs_wiki_pages`, the page documents wiki-curator-cog builds, embedded into `wcs_wiki_page_embeddings` (migration 063).
 
 ADR-0002 describes a future move to entity-grain retrieval tools; that migration is not implemented in the Q&A agent yet.
 
@@ -38,7 +38,7 @@ ADR-0002 describes a future move to entity-grain retrieval tools; that migration
 
 The agent exposes **six tools** to the model (`agents/wcs_qa/loop.py` → `retrieval/wcs/tools.py`, and `retrieval/wcs/wiki_pages.py` for the two over the wiki):
 
-### `search_wiki(query, k?)` and `get_wiki_page(name)` (MINI-113)
+### `search_wiki(query, k?)` and `get_wiki_page(name)`
 
 - `search_wiki` is vector search over page embeddings (default k 5, max 15); hits carry slug, name, kind and the start of the definition, no URL.
 - `get_wiki_page` reads one page by slug, display name or other name (a slug folded into a page serves that page). It returns the definition, In practice, details, mistakes, related pages, teachers and `source_url` (`/wiki/page?slug=`).
@@ -122,7 +122,7 @@ Requires `RUN_EVALS=1`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and a non-empty q
 
 1. `POST /v1/wcs/ask` via in-process ASGI (`httpx` + dependency override on `get_current_owner`; user defaults to `WCS_QA_EVAL_USER_ID` or `dev-owner`).
 2. **Auto-metrics** (`tests/evals/metrics.py`): `source_recall` and `source_precision` comparing cited IDs to `ideal_source_ids`.
-3. **LLM-as-judge** (`tests/evals/judge.py`): separate model (`WCS_QA_JUDGE_MODEL`, default `claude-opus-4-7`) scores the agent answer 1–5 against `ideal_answer` using `JUDGE_PROMPT` (agent runs on Sonnet — cross-model grading). It is also given the text of every cited source (`tests/evals/sources.py`) and says whether each claim in the answer is backed by one (`judge_grounded`, MINI-113).
+3. **LLM-as-judge** (`tests/evals/judge.py`): separate model (`WCS_QA_JUDGE_MODEL`, default `claude-opus-4-7`) scores the agent answer 1–5 against `ideal_answer` using `JUDGE_PROMPT` (agent runs on Sonnet — cross-model grading). It is also given the text of every cited source (`tests/evals/sources.py`) and says whether each claim in the answer is backed by one (`judge_grounded`).
 4. **Persistence:** one row per `(run_id, question_id)` in `wcs_qa_eval_runs` (migration 018), including `git_sha`, `agent_answer`, `cited_source_ids`, `tool_trace`, metrics, judge score/reasoning/`judge_grounded`, and `judge_prompt_sha` (SHA-256 of `JUDGE_PROMPT` for drift detection).
 
 `manual_grade` / `manual_grade_notes` columns are reserved for a future admin UI; the harness leaves them NULL.
@@ -140,7 +140,7 @@ Schema: migration `017_wcs_qa_embeddings.sql`.
 
 Vectors are **1536-dimensional** (`vector` extension). v1 uses **exact cosine search** (no ANN index) — acceptable at current corpus size.
 
-**Population:** `refresh_embeddings` (`retrieval/wcs/convergence.py`). It runs by itself after content changes (`retrieval/wcs/auto_refresh.py`, MINI-114): storing a transcript or a note, an admin edit to a note, or a page write that created, changed or removed a wiki page (MINI-113) requests a refresh, which runs off the request path after `WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so one lesson's writes give one refresh. Every start requests one too, for anything a stopped process left. A failed refresh is retried, then reported to Discord's errors channel and Sentry. A Postgres advisory lock keeps refreshes one at a time across processes. `POST /v1/wcs/embeddings/refresh` still runs one on demand.
+**Population:** `refresh_embeddings` (`retrieval/wcs/convergence.py`). It runs by itself after content changes (`retrieval/wcs/auto_refresh.py`): storing a transcript or a note, an admin edit to a note, or a page write that created, changed or removed a wiki page requests a refresh, which runs off the request path after `WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so one lesson's writes give one refresh. Every start requests one too, for anything a stopped process left. A failed refresh is retried, then reported to Discord's errors channel and Sentry. A Postgres advisory lock keeps refreshes one at a time across processes. `POST /v1/wcs/embeddings/refresh` still runs one on demand.
 
 - Computes canonical text per source (notes via `flatten_note` / `FLATTENER_VERSION`; transcripts via `chunk_transcript` / `chunking_version`; wiki pages via `wiki_pages.flatten_page` / `page_flattener_version`).
 - Stores `content_sha`; re-embeds only when the hash changes (idempotent).

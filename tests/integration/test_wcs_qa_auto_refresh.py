@@ -1,4 +1,4 @@
-"""WCS Q&A embeddings refresh themselves when content changes (MINI-114)."""
+"""WCS Q&A embeddings refresh themselves when content changes."""
 
 from __future__ import annotations
 

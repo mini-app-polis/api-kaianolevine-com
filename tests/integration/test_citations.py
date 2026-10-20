@@ -17,6 +17,7 @@ from kaianolevine_api.agents.wcs_qa.citations import (
     parse_citations_block,
 )
 from kaianolevine_api.models import LegacyWcsNote, WcsTranscript, WcsTranscriptChunk
+from tests.integration.conftest import grant_role
 
 SITE_URL = "https://wcs.example.com"
 
@@ -140,6 +141,7 @@ async def seed_admin(reset_db, async_engine) -> None:
                 "VALUES ('viewer', '', '', false) ON CONFLICT (user_id) DO NOTHING"
             )
         )
+    await grant_role(async_engine, "dev-owner", "wcs-admin")
 
 
 @pytest.fixture
