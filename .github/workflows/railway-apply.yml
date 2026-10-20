@@ -3,7 +3,7 @@
 # workflow). Removing a service or a variable is destructive and applies
 # only if the pull request the commit came from is labelled allow-destroy.
 # The steps live in the shared workflow in mini-app-polis/.github,
-# modelled on mini-app-polis/infra's terraform.yml. MINI-69.
+# modelled on mini-app-polis/infra's terraform.yml.
 name: Railway apply
 
 on:
