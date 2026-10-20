@@ -1,3 +1,10 @@
+## [2.21.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.2...v2.21.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **auth:** answer 503 when identity reports the issuer unavailable ([bc65d22](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bc65d2216c306438adaa66717b5760ed26b1fdc8))
+
 ## [2.21.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.1...v2.21.2) (2026-10-20)
 
 
