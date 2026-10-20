@@ -1,3 +1,10 @@
+# [2.21.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.20.0...v2.21.0) (2026-10-20)
+
+
+### Features
+
+* **tasks:** POST /v1/tasks hands task requests to task-manager-cog ([8bdd583](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8bdd583dbf08928097b97f4b6816c239b9ee4705))
+
 # [2.20.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.19.1...v2.20.0) (2026-10-20)
 
 
