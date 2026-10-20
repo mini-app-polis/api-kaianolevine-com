@@ -149,6 +149,7 @@ async def refresh_once(settings: Settings) -> RefreshSummary:
             LOG_SUCCESS,
             f"wcs embeddings refresh notes={summary.notes_embedded}/"
             f"{summary.notes_total} chunks={summary.chunks_embedded} "
+            f"pages={summary.pages_embedded}/{summary.pages_total} "
             f"duration_ms={summary.duration_ms}",
         )
     )
