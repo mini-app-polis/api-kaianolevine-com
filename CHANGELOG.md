@@ -1,3 +1,10 @@
+# [2.20.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.19.1...v2.20.0) (2026-10-20)
+
+
+### Features
+
+* **wcs:** Q&A answers from the wiki pages, and embeddings refresh themselves (MINI-113, MINI-114) ([48c7f5a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/48c7f5a6b52eef64f3217e8a2c716cdc4c8ce1ed))
+
 ## [2.19.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.19.0...v2.19.1) (2026-10-19)
 
 
