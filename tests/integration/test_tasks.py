@@ -153,6 +153,13 @@ async def test_a_caller_without_the_scope_is_refused(notifier_client) -> None:
     dispatched.assert_not_awaited()
 
 
+async def test_voice_notes_ask_for_their_tasks() -> None:
+    """transcription-cog is a source of tasks: each voice note becomes one."""
+    cog = identity_registry.declared("transcription-cog")
+    assert cog is not None
+    assert "task-requester" in cog.roles
+
+
 async def test_the_task_manager_does_not_ask_for_tasks() -> None:
     """It writes the board; it is not a source of tasks."""
     cog = identity_registry.declared("task-manager-cog")

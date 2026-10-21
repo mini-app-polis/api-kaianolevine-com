@@ -98,8 +98,11 @@ MACHINES: tuple[Machine, ...] = (
     ),
     Machine(
         name="transcription-cog",
-        roles=("wcs-writer", "pipeline-writer", "notifier"),
-        notes="POST /v1/wcs/sources, /v1/wcs/transcripts, /v1/evaluations.",
+        roles=("wcs-writer", "pipeline-writer", "task-requester", "notifier"),
+        notes=(
+            "POST /v1/wcs/sources, /v1/wcs/transcripts, /v1/evaluations, "
+            "/v1/tasks (a voice note's task)."
+        ),
     ),
     Machine(
         name="evaluator-cog",
