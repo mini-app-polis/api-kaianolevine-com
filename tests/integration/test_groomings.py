@@ -1,12 +1,17 @@
-"""Tests for the task board's grooming records and the month's paid grooming."""
+"""Tests for the task board's grooming records, paid grooming, and the hand-offs."""
 
 from __future__ import annotations
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api import identity_registry
+from kaianolevine_api.schemas import GroomingJobRequest, GroomingProposal
+from kaianolevine_api.services import grooming_dispatch, job_queue
 
 pytestmark = pytest.mark.asyncio
 
@@ -109,3 +114,137 @@ async def test_the_task_manager_keeps_the_records() -> None:
     cog = identity_registry.declared("task-manager-cog")
     assert cog is not None
     assert "task-groomer" in cog.roles
+
+
+# ── hand-offs between the task manager and the groomer ────────────────────
+
+ACCOUNT_QUEUES = "https://sqs.us-east-1.amazonaws.com/400200465748"
+
+JOB = {
+    "task": {
+        "task_gid": "1219755103049631",
+        "task_id": "MINI-38",
+        "name": "MINI-38 · idea - dashboard for TV shows and movies",
+        "notes": "Done when:\nWhere:\n",
+        "tags": [],
+        "section": "Ideas",
+        "fingerprint": "c" * 64,
+        "problems": ["Done when is blank"],
+    },
+    "board": ["MINI-9 · Discord commands and actions"],
+}
+
+PROPOSAL = {
+    "task_gid": "1219755103049631",
+    "fingerprint": "c" * 64,
+    "title": "Dashboard for TV shows and movies",
+    "where": "website-astro-software",
+    "effort": "M",
+    "questions": ["Which service holds the watch history?"],
+    "model": "claude-sonnet-5-5",
+    "cost_usd": 0.11,
+}
+
+
+def _aws(monkeypatch):
+    from kaianolevine_api.config import get_settings
+
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    get_settings.cache_clear()
+    return get_settings()
+
+
+async def test_a_grooming_job_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
+    _aws(monkeypatch)
+    with patch.object(
+        grooming_dispatch, "dispatch_job", AsyncMock(return_value={"message_id": "m-1"})
+    ) as dispatched:
+        response = await client.post("/v1/tasks/groomings/jobs", json=JOB)
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"] == {
+        "accepted": True,
+        "message_id": "m-1",
+        "task_gid": JOB["task"]["task_gid"],
+    }
+    assert dispatched.await_args.args[0] == GroomingJobRequest.model_validate(JOB)
+
+
+async def test_a_proposal_is_enqueued_for_the_task_manager(client, monkeypatch) -> None:
+    _aws(monkeypatch)
+    with patch.object(
+        grooming_dispatch,
+        "dispatch_proposal",
+        AsyncMock(return_value={"message_id": "m-2"}),
+    ) as dispatched:
+        response = await client.post("/v1/tasks/groomings/proposals", json=PROPOSAL)
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["message_id"] == "m-2"
+    assert dispatched.await_args.args[0] == GroomingProposal.model_validate(PROPOSAL)
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "target"),
+    [
+        ("/v1/tasks/groomings/jobs", JOB, "dispatch_job"),
+        ("/v1/tasks/groomings/proposals", PROPOSAL, "dispatch_proposal"),
+    ],
+)
+async def test_a_dropped_hand_off_is_a_502(client, monkeypatch, path, body, target):
+    _aws(monkeypatch)
+    with patch.object(
+        grooming_dispatch,
+        target,
+        AsyncMock(side_effect=grooming_dispatch.DispatchError("queue unreachable")),
+    ):
+        response = await client.post(path, json=body)
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dispatch_failed"
+
+
+async def test_a_proposal_with_an_effort_off_the_scale_is_rejected(client) -> None:
+    response = await client.post(
+        "/v1/tasks/groomings/proposals", json={**PROPOSAL, "effort": "XL"}
+    )
+    assert response.status_code == 422
+
+
+async def test_a_job_goes_to_the_groomers_queue(monkeypatch) -> None:
+    settings = _aws(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await grooming_dispatch.dispatch_job(
+            GroomingJobRequest.model_validate(JOB), settings=settings
+        )
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["QueueUrl"] == f"{ACCOUNT_QUEUES}/task-groomer-jobs"
+    assert "MessageGroupId" not in sent
+    body = json.loads(sent["MessageBody"])
+    assert (body["type"], body["version"]) == ("task.groom", 1)
+    assert GroomingJobRequest.model_validate(body["payload"]) == (
+        GroomingJobRequest.model_validate(JOB)
+    )
+
+
+async def test_a_proposal_goes_to_the_task_managers_queue(monkeypatch) -> None:
+    settings = _aws(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-2"}
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await grooming_dispatch.dispatch_proposal(
+            GroomingProposal.model_validate(PROPOSAL), settings=settings
+        )
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["QueueUrl"] == f"{ACCOUNT_QUEUES}/task-manager-jobs.fifo"
+    assert sent["MessageGroupId"] == "task-manager"
+    body = json.loads(sent["MessageBody"])
+    assert (body["type"], body["version"]) == ("task.groom-proposal", 1)
+
+
+async def test_the_groomer_proposes_and_never_asks_for_tasks() -> None:
+    cog = identity_registry.declared("task-groomer-cog")
+    assert cog is not None
+    assert "task-groomer" in cog.roles
+    assert "task-requester" not in cog.roles
