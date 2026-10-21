@@ -1,3 +1,10 @@
+# [2.25.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.24.1...v2.25.0) (2026-10-21)
+
+
+### Features
+
+* **signals:** consecutive failing cog runs become a task ([5603581](https://github.com/mini-app-polis/api-kaianolevine-com/commit/56035817c40a756b9cb66bf8884b7905c382bdb3))
+
 ## [2.24.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.24.0...v2.24.1) (2026-10-21)
 
 
