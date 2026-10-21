@@ -46,12 +46,14 @@ async def test_writing_a_record_again_replaces_it(client) -> None:
         "problems": [],
         "moved_to_ready_at": "2026-10-21T20:00:00Z",
         "returned_count": 1,
+        "groomed_fingerprint": "b" * 64,
     }
     response = await client.post("/v1/tasks/groomings", json=moved)
     data = response.json()["data"]
     assert data["outcome"] == "ready"
     assert data["fingerprint"] == "b" * 64
     assert data["returned_count"] == 1
+    assert data["groomed_fingerprint"] == "b" * 64
     assert data["moved_to_ready_at"].startswith("2026-10-21T20:00:00")
 
     listed = (await client.get("/v1/tasks/groomings")).json()["data"]

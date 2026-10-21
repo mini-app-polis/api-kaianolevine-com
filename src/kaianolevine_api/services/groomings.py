@@ -23,7 +23,7 @@ from ..schemas import (
 
 _COLUMNS = (
     "task_gid, task_id, fingerprint, outcome, problems, moved_to_ready_at, "
-    "returned_count, updated_at"
+    "returned_count, groomed_fingerprint, updated_at"
 )
 
 
@@ -52,10 +52,11 @@ async def write_record(
                 f"""
                 INSERT INTO task_groomings
                   (task_gid, task_id, fingerprint, outcome, problems,
-                   moved_to_ready_at, returned_count, updated_at)
+                   moved_to_ready_at, returned_count, groomed_fingerprint,
+                   updated_at)
                 VALUES (:task_gid, :task_id, :fingerprint, :outcome,
                         CAST(:problems AS jsonb), :moved_to_ready_at,
-                        :returned_count, now())
+                        :returned_count, :groomed_fingerprint, now())
                 ON CONFLICT (task_gid) DO UPDATE SET
                   task_id = EXCLUDED.task_id,
                   fingerprint = EXCLUDED.fingerprint,
@@ -63,6 +64,7 @@ async def write_record(
                   problems = EXCLUDED.problems,
                   moved_to_ready_at = EXCLUDED.moved_to_ready_at,
                   returned_count = EXCLUDED.returned_count,
+                  groomed_fingerprint = EXCLUDED.groomed_fingerprint,
                   updated_at = now()
                 RETURNING {_COLUMNS}
                 """
