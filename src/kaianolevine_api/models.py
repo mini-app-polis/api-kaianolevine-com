@@ -1789,3 +1789,38 @@ class WcsWikiThinRow(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class SignalStreak(Base):
+    """One detected problem, from its first failure until it recovers.
+
+    See services/signals.py for the rules; this is only the record. At most
+    one open streak per (kind, key), enforced by the partial unique index in
+    migration 065.
+    """
+
+    __tablename__ = "signal_streaks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    key: Mapped[str] = mapped_column(String(512), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    remediations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    opened_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    escalated_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    task_external_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    closed_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

@@ -330,3 +330,20 @@ borrow a cog's key.
 has a policy for at all — and defaults to the five in the table.
 `check_run`, `check_suite` and `status` are absent on purpose: they
 duplicate `workflow_run`, and Discord renders none of the three.
+
+### Signals: detected problems that may become tasks
+
+The same webhook feeds `services/signals.py`, independently of what is
+announced on Discord. A detector turns an event into a signal (a kind, a key
+naming the problem, failing or recovered); a streak holds one problem from its
+first failure until it recovers; and a streak becomes a task request for
+task-manager-cog only when its kind's rule says so. A streak that heals first
+closes quietly and is only logged. Production only.
+
+| Kind | Key | Before a task | Closes on |
+|------|-----|---------------|-----------|
+| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` | the failed jobs are re-run once; the next failure escalates | a green run |
+
+A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
+escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a
+streak makes one task however many failures it sees.
