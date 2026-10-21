@@ -60,6 +60,7 @@ const SHARED = [
   "EVALUATION_QUEUE_PRODUCER_KEY_ID",
   "EVALUATION_QUEUE_PRODUCER_SECRET",
   "GH_TOKEN",
+  "GITHUB_ACTIONS_TOKEN",
   "GITHUB_DASHBOARD_TOKEN",
   "GITHUB_TOKEN",
   "GITHUB_WEBHOOK_SECRET",
@@ -125,6 +126,10 @@ export default defineRailway((ctx) => {
       DISCORD_WEBHOOK_URL: preserve(),
       // Switches config.py documents as changed without a deploy.
       GITHUB_NOTIFY_EVENTS: preserve(),
+      SIGNAL_ORGS: preserve(),
+      SIGNAL_CI_BRANCHES: preserve(),
+      SIGNAL_CI_RERUN: preserve(),
+      SIGNAL_CI_ESCALATE_AFTER: preserve(),
       GITHUB_DASHBOARD_CACHE_TTL_SECS: preserve(),
       NOTIFY_DATA_CHANGES: preserve(),
       NOTIFY_FAULTS: preserve(),

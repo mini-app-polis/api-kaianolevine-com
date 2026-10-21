@@ -44,6 +44,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Request
 from identity.types import Principal
+from mini_app_polis.environment import is_production
 from mini_app_polis.logger import (
     LOG_FAILURE,
     LOG_START,
@@ -51,9 +52,11 @@ from mini_app_polis.logger import (
     get_logger,
     with_log_prefix,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
 from ..config import Settings, get_settings
+from ..database import get_db_session
 from ..schemas import (
     Envelope,
     NotificationResult,
@@ -61,7 +64,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import discord
+from ..services import ci_signals, discord, signals
 
 router = APIRouter()
 logger = get_logger()
@@ -377,6 +380,7 @@ def decide(event: str, payload: dict[str, Any], default_branch: str) -> Decision
 async def github_webhook(
     request: Request,
     settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[NotificationResult]:
     """Filter one GitHub delivery and forward it if the policy says so.
 
@@ -428,6 +432,9 @@ async def github_webhook(
         raise api_error(400, "parse_error", "Body is not valid JSON") from None
     if not isinstance(payload, dict):
         raise api_error(400, "parse_error", "Body is not a JSON object")
+
+    if event == "workflow_run":
+        await _observe_ci(payload, session=session, settings=settings)
 
     if event not in settings.GITHUB_NOTIFY_EVENTS:
         # The outer gate, so an org webhook subscribed to more than this
@@ -487,6 +494,33 @@ async def github_webhook(
         reason="forwarded" if forwarded else "delivery_failed",
         forwarded=forwarded,
     )
+
+
+async def _observe_ci(
+    payload: dict[str, Any], *, session: AsyncSession, settings: Settings
+) -> None:
+    """Hand a workflow run to the signal engine. Never raises.
+
+    Independent of the Discord policy below, and production only: there is
+    one board, and a re-run acts on the real repository. A failure here is
+    logged and the delivery still answers 200, because GitHub disables a
+    webhook that keeps receiving 5xx.
+    """
+    if not is_production():
+        return
+    signal = ci_signals.signal_from_workflow_run(
+        payload, orgs=settings.SIGNAL_ORGS, branches=settings.SIGNAL_CI_BRANCHES
+    )
+    if signal is None:
+        return
+    try:
+        outcome = await signals.observe(
+            session, signal, rule=ci_signals.rule(settings), settings=settings
+        )
+    except Exception:  # noqa: BLE001 — see docstring
+        logger.exception("signals: could not observe %s", signal.key)
+        return
+    logger.info("signals: %s %s -> %s", signal.kind, signal.key, outcome)
 
 
 #: Run-report severities that are copied to the errors channel as well as

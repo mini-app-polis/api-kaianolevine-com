@@ -106,6 +106,23 @@ class Settings(BaseSettings):
     # silenced by a constant written here.
     GITHUB_DEFAULT_BRANCH: str = "main"
 
+    # ── Signals ───────────────────────────────────────────────────────────
+    # Detected problems that may become tasks (services.signals). Only
+    # production observes them: there is one board, and a re-run acts on the
+    # real repository.
+    #
+    # The orgs and branches whose CI runs are signals. Independent of what is
+    # announced on Discord, which stays on the default branch.
+    SIGNAL_ORGS: list[str] = ["mini-app-polis"]
+    SIGNAL_CI_BRANCHES: list[str] = ["main", "dev"]
+    # Re-run a failed run's jobs once before anything reaches the board, then
+    # escalate on the next failure of the same streak.
+    SIGNAL_CI_RERUN: bool = True
+    SIGNAL_CI_ESCALATE_AFTER: int = 2
+    # A token that may re-run Actions jobs in SIGNAL_ORGS (actions: write)
+    # and nothing more. Unset, a failure escalates without a re-run.
+    GITHUB_ACTIONS_TOKEN: str | None = None
+
     # ── The running list ──────────────────────────────────────────────────
     # Every committed data change and every server-side fault, in the same
     # Discord channel. See services.activity for what is and is not seen.
