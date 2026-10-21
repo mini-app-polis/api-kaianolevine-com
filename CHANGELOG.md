@@ -1,3 +1,10 @@
+# [2.22.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.3...v2.22.0) (2026-10-21)
+
+
+### Features
+
+* **identity:** transcription-cog may request tasks ([8373b1c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8373b1c4214893763d1fe95dfac5caaabe7a3f4d))
+
 ## [2.21.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.2...v2.21.3) (2026-10-20)
 
 
