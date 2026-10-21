@@ -3,12 +3,15 @@
 The engine runs against the real ``signal_streaks`` table; the queue and
 GitHub are stubbed at ``task_dispatch.dispatch_task`` and
 ``ci_signals.remediate``. The CI detector is exercised through the
-real webhook route, signature and all, and the cog-run detector through
-``POST /v1/notify``.
+real webhook route, signature and all, the cog-run detector through
+``POST /v1/notify``, and the api-fault detector through the app's own
+middleware.
 """
 
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
 import hashlib
 import hmac
 import json
@@ -16,13 +19,17 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import respx
-from httpx import AsyncClient, Response
+from fastapi.responses import JSONResponse
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api.config import get_settings
+from kaianolevine_api.main import app
 from kaianolevine_api.services import (
+    activity,
     ci_signals,
+    fault_signals,
     job_queue,
     run_signals,
     signals,
@@ -551,3 +558,167 @@ async def test_a_signal_error_never_fails_a_run_report(client: AsyncClient) -> N
     with patch.object(signals, "observe", AsyncMock(side_effect=RuntimeError("db"))):
         resp = await client.post("/v1/notify", json=_report("ERROR"))
     assert resp.status_code == 200
+
+
+# ── the quiet window ──────────────────────────────────────────────────────
+
+
+async def _age_streaks(session: AsyncSession, minutes: int) -> None:
+    await session.execute(
+        text(
+            "UPDATE signal_streaks SET last_seen_at = now() - "
+            "make_interval(mins => :m), opened_at = now() - make_interval(mins => :m)"
+        ),
+        {"m": minutes},
+    )
+    await session.commit()
+
+
+QUIET = signals.Rule(escalate_after=3, quiet_window=dt.timedelta(minutes=30))
+
+
+@pytest.mark.asyncio
+async def test_a_failure_within_the_window_bumps_the_streak(
+    db_session: AsyncSession, dispatch
+) -> None:
+    signal = _signal(kind="api-fault", key="GET /v1/x 500")
+    for _ in range(2):
+        await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
+    await _age_streaks(db_session, 10)
+    outcome = await signals.observe(
+        db_session, signal, rule=QUIET, settings=get_settings()
+    )
+
+    assert outcome == "escalated"
+    assert await _streaks(db_session) == [(3, 0, True, False)]
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_a_quiet_window_starts_a_new_streak(
+    db_session: AsyncSession, dispatch
+) -> None:
+    signal = _signal(kind="api-fault", key="GET /v1/x 500")
+    for _ in range(2):
+        await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
+    await _age_streaks(db_session, 45)
+    outcome = await signals.observe(
+        db_session, signal, rule=QUIET, settings=get_settings()
+    )
+
+    assert outcome == "opened"
+    dispatch.assert_not_awaited()
+    assert await _streaks(db_session) == [(2, 0, False, True), (1, 0, False, False)]
+    closed = await db_session.execute(
+        text(
+            "SELECT closed_at - last_seen_at FROM signal_streaks "
+            "WHERE closed_at IS NOT NULL"
+        )
+    )
+    assert closed.scalar_one() == dt.timedelta(minutes=30)
+
+
+# ── api faults ────────────────────────────────────────────────────────────
+
+
+def test_a_fault_is_keyed_by_route_template_not_url() -> None:
+    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500)
+    assert signal.kind == "api-fault"
+    assert signal.key == "GET /v1/sets/{set_id} 500"
+    assert signal.where == "api-kaianolevine-com"
+    assert signal.state == "failing"
+
+
+def test_a_request_that_matched_no_route_has_no_template() -> None:
+    assert fault_signals.route_template({}) == fault_signals.UNMATCHED
+
+
+async def _drain() -> None:
+    for _ in range(3):
+        if not activity._in_flight:
+            break
+        await asyncio.gather(*list(activity._in_flight), return_exceptions=True)
+    await asyncio.sleep(0)
+
+
+@pytest.fixture
+def faulty_routes():
+    """Two routes that fail on this side of the line: one answers, one raises."""
+
+    async def unavailable(item_id: str) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"item": item_id})
+
+    async def broken(item_id: str) -> None:
+        raise RuntimeError("boom")
+
+    before = list(app.router.routes)
+    app.add_api_route("/v1/test-faults/unavailable/{item_id}", unavailable)
+    app.add_api_route("/v1/test-faults/broken/{item_id}", broken)
+    yield
+    app.router.routes[:] = before
+
+
+@pytest.fixture
+async def raw_client(client: AsyncClient):
+    """The app without the client re-raising its unhandled exceptions."""
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+        yield c
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_repeated_5xx_from_one_route_become_one_task(
+    raw_client: AsyncClient, db_session: AsyncSession, dispatch, faulty_routes
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    for item in ("a", "b", "c", "d"):
+        resp = await raw_client.get(f"/v1/test-faults/unavailable/{item}")
+        assert resp.status_code == 503
+        await _drain()
+
+    dispatch.assert_awaited_once()
+    request = dispatch.await_args.args[0]
+    assert request.source == "api-fault"
+    assert request.external_id.startswith(
+        "api-fault.GET /v1/test-faults/unavailable/{item_id} 503#"
+    )
+    assert await _streaks(db_session) == [(4, 0, True, False)]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_an_unhandled_exception_is_a_500_fault(
+    raw_client: AsyncClient, db_session: AsyncSession, dispatch, faulty_routes
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    resp = await raw_client.get("/v1/test-faults/broken/a")
+    await _drain()
+
+    assert resp.status_code == 500
+    key = (await db_session.execute(text("SELECT key FROM signal_streaks"))).scalar()
+    assert key == "GET /v1/test-faults/broken/{item_id} 500"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_outside_production_a_fault_observes_nothing(
+    raw_client: AsyncClient, db_session: AsyncSession, faulty_routes, monkeypatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    await raw_client.get("/v1/test-faults/unavailable/a")
+    await _drain()
+
+    assert await _streaks(db_session) == []
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_signal_error_never_changes_the_answer(
+    raw_client: AsyncClient, faulty_routes
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    with patch.object(signals, "observe", AsyncMock(side_effect=RuntimeError("db"))):
+        resp = await raw_client.get("/v1/test-faults/unavailable/a")
+        await _drain()
+    assert resp.status_code == 503

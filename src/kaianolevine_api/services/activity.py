@@ -37,9 +37,10 @@ from mini_app_polis.activity import (
 #: The shared module's live delivery tasks, re-exported so a test can drain
 #: them from here.
 from mini_app_polis.activity import _in_flight as _in_flight
+from mini_app_polis.environment import is_production
 
 from ..config import Settings, get_settings
-from . import discord
+from . import discord, fault_signals
 
 __all__ = [
     "BULK",
@@ -145,6 +146,17 @@ async def emit_fault(
 _middleware = _activity.activity_middleware(lambda: _config(get_settings()))
 
 
+def _observe_fault(request: Request, status_code: int) -> None:
+    """Hand a 5xx to the signal engine, after the response. Production only."""
+    settings = get_settings()
+    if not is_production() or _excluded(request.url.path, settings):
+        return
+    signal = fault_signals.signal_for(
+        request.method, fault_signals.route_template(request.scope), status_code
+    )
+    _activity.dispatch(fault_signals.observe(signal, settings))
+
+
 async def activity_middleware(request: Request, call_next: Any) -> Any:
     """Open a recorder for the request, and report what it did on the way out.
 
@@ -153,5 +165,15 @@ async def activity_middleware(request: Request, call_next: Any) -> Any:
     actually went on the wire. It sits *inside* Starlette's server-error
     middleware, so an unhandled exception reaches here as a raise and is
     reported and re-raised unchanged.
+
+    A 5xx is also an api-fault signal (services/fault_signals.py), observed
+    in the background so the response does not wait on it.
     """
-    return await _middleware(request, call_next)
+    try:
+        response = await _middleware(request, call_next)
+    except Exception:
+        _observe_fault(request, 500)
+        raise
+    if response.status_code >= 500:
+        _observe_fault(request, response.status_code)
+    return response

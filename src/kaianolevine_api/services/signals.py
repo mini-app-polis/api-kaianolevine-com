@@ -15,7 +15,11 @@ workflow run or a finding is.
 open row per (kind, key) in ``signal_streaks``. A failure opens one or bumps
 the open one; a recovery closes it, so the next failure starts afresh.
 
-**A rule** per kind says when a streak escalates. A kind may have a
+**A rule** per kind says when a streak escalates. A kind with no recovery
+event of its own (a 5xx has no "and now it works") closes by a quiet window
+instead: a failure arriving after the window has passed with none closes the
+old streak and opens a new one. Nothing runs on a timer; the window is
+applied when the next failure arrives. A kind may have a
 remediation, tried before anything reaches the board: for CI, re-running the
 failed jobs once. A remediation that cannot start escalates at once rather
 than leaving the streak to wait on a failure that may never come. A streak
@@ -102,6 +106,9 @@ class Rule:
     #: Tried before escalating; at most ``max_remediations`` per streak.
     remediation: Remediation | None = None
     max_remediations: int = 0
+    #: For a kind with no recovery event: a streak with no failure for this
+    #: long is over, and the next failure starts a new one.
+    quiet_window: dt.timedelta | None = None
 
 
 def _cut(value: str, limit: int) -> str:
@@ -180,6 +187,43 @@ async def _recover(session: AsyncSession, signal: Signal) -> Outcome:
     return "recovered"
 
 
+async def _close_if_quiet(
+    session: AsyncSession, signal: Signal, window: dt.timedelta
+) -> None:
+    """Close the open streak if it has gone ``window`` without a failure.
+
+    Closed as of the end of its window, not now: that is when it was over.
+    """
+    row = (
+        await session.execute(
+            text(
+                """
+                UPDATE signal_streaks
+                SET closed_at = last_seen_at + make_interval(secs => :secs)
+                WHERE kind = :kind AND key = :key AND closed_at IS NULL
+                  AND last_seen_at < now() - make_interval(secs => :secs)
+                RETURNING escalated_at, failures
+                """
+            ),
+            {
+                "kind": signal.kind,
+                "key": signal.key,
+                "secs": window.total_seconds(),
+            },
+        )
+    ).first()
+    await session.commit()
+    if row is not None:
+        escalated_at, failures = row
+        logger.info(
+            "signals: %s %s went quiet after %d failure(s)%s",
+            signal.kind,
+            signal.key,
+            failures,
+            "" if escalated_at is not None else "; nothing reached the board",
+        )
+
+
 async def _escalate(
     session: AsyncSession,
     signal: Signal,
@@ -243,6 +287,9 @@ async def observe(
     """Record one signal under its kind's rule, and act on it."""
     if signal.state == "recovered":
         return await _recover(session, signal)
+
+    if rule.quiet_window is not None:
+        await _close_if_quiet(session, signal, rule.quiet_window)
 
     row = (
         await session.execute(
