@@ -268,6 +268,7 @@ _DEV_ROLES = {
     "deejay-trigger": ["deejay.runs.create"],
     "transcription-trigger": ["transcription.runs.create"],
     "task-requester": ["tasks.requests.create"],
+    "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
 }
 
 
