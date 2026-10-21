@@ -2,7 +2,7 @@
 
 The engine runs against the real ``signal_streaks`` table; the queue and
 GitHub are stubbed at ``task_dispatch.dispatch_task`` and
-``ci_signals.rerun_failed_jobs``. The CI detector is exercised through the
+``ci_signals.remediate``. The CI detector is exercised through the
 real webhook route, signature and all.
 """
 
@@ -290,9 +290,7 @@ async def test_the_webhook_reruns_then_escalates_a_failing_dev_build(
 ) -> None:
     """dev is not announced on Discord, and is still watched for problems."""
     discord = respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
-    with patch.object(
-        ci_signals, "rerun_failed_jobs", AsyncMock(return_value=True)
-    ) as rerun:
+    with patch.object(ci_signals, "remediate", AsyncMock(return_value=True)) as rerun:
         first = await _post(client, _run("failure"))
         second = await _post(client, _run("failure", attempt=2))
 
@@ -329,29 +327,88 @@ async def test_a_signal_error_never_fails_the_delivery(
 # ── the re-run call ───────────────────────────────────────────────────────
 
 
-@respx.mock
-@pytest.mark.asyncio
-async def test_the_rerun_asks_github_for_the_failed_jobs(monkeypatch) -> None:
+GH = "https://api.github.com/repos/mini-app-polis"
+JOBS = f"{GH}/infra/actions/runs/99/jobs"
+RERUN = f"{GH}/infra/actions/runs/99/rerun-failed-jobs"
+DISPATCH = f"{GH}/.github/actions/workflows/dependency-fix.yml/dispatches"
+
+
+@pytest.fixture
+def token(monkeypatch):
     monkeypatch.setenv("GITHUB_ACTIONS_TOKEN", "gh-test")
     get_settings.cache_clear()
-    route = respx.post(
-        "https://api.github.com/repos/mini-app-polis/infra/actions/runs/99/rerun-failed-jobs"
-    ).mock(return_value=Response(201))
+    yield
+    get_settings.cache_clear()
+
+
+def _jobs(*failed: str) -> Response:
+    jobs = [{"name": n, "conclusion": "failure"} for n in failed]
+    jobs.append({"name": "test / test", "conclusion": "success"})
+    return Response(200, json={"jobs": jobs})
+
+
+def _failing_signal() -> signals.Signal:
     signal = ci_signals.signal_from_workflow_run(
         _run("failure"), orgs=ORGS, branches=BRANCHES
     )
+    assert signal is not None
+    return signal
 
-    assert await ci_signals.rerun_failed_jobs(signal, get_settings()) is True
-    assert route.calls.last.request.headers["Authorization"] == "Bearer gh-test"
-    get_settings.cache_clear()
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_failed_build_is_re_run(token) -> None:
+    respx.get(url__startswith=JOBS).mock(return_value=_jobs("test / test"))
+    rerun = respx.post(RERUN).mock(return_value=Response(201))
+    dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
+
+    assert await ci_signals.remediate(_failing_signal(), get_settings()) is True
+    assert rerun.called and not dispatch.called
+    assert rerun.calls.last.request.headers["Authorization"] == "Bearer gh-test"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_failed_dependency_audit_dispatches_the_fix_instead(token) -> None:
+    """A re-run would fail the same way; the lock needs re-locking."""
+    respx.get(url__startswith=JOBS).mock(
+        return_value=_jobs("security / dependency audit (python)")
+    )
+    rerun = respx.post(RERUN).mock(return_value=Response(201))
+    dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
+
+    assert await ci_signals.remediate(_failing_signal(), get_settings()) is True
+    assert dispatch.called and not rerun.called
+    assert json.loads(dispatch.calls.last.request.content) == {
+        "ref": "main",
+        "inputs": {"repository": "infra"},
+    }
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_when_the_jobs_cannot_be_read_the_build_is_re_run(token) -> None:
+    respx.get(url__startswith=JOBS).mock(return_value=Response(502))
+    rerun = respx.post(RERUN).mock(return_value=Response(201))
+
+    assert await ci_signals.remediate(_failing_signal(), get_settings()) is True
+    assert rerun.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_refused_remedy_reports_that_none_started(token) -> None:
+    respx.get(url__startswith=JOBS).mock(
+        return_value=_jobs("security / dependency audit (python)")
+    )
+    respx.post(DISPATCH).mock(return_value=Response(403))
+
+    assert await ci_signals.remediate(_failing_signal(), get_settings()) is False
 
 
 @pytest.mark.asyncio
-async def test_without_a_token_there_is_no_rerun(monkeypatch) -> None:
+async def test_without_a_token_no_remedy_starts(monkeypatch) -> None:
     monkeypatch.delenv("GITHUB_ACTIONS_TOKEN", raising=False)
     get_settings.cache_clear()
-    signal = ci_signals.signal_from_workflow_run(
-        _run("failure"), orgs=ORGS, branches=BRANCHES
-    )
-    assert await ci_signals.rerun_failed_jobs(signal, get_settings()) is False
+    assert await ci_signals.remediate(_failing_signal(), get_settings()) is False
     get_settings.cache_clear()

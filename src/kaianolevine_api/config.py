@@ -115,12 +115,14 @@ class Settings(BaseSettings):
     # announced on Discord, which stays on the default branch.
     SIGNAL_ORGS: list[str] = ["mini-app-polis"]
     SIGNAL_CI_BRANCHES: list[str] = ["main", "dev"]
-    # Re-run a failed run's jobs once before anything reaches the board, then
-    # escalate on the next failure of the same streak.
+    # Try one remedy before anything reaches the board (a failed dependency
+    # audit dispatches the org's dependency-fix workflow; anything else is
+    # re-run), then escalate on the next failure of the same streak.
     SIGNAL_CI_RERUN: bool = True
     SIGNAL_CI_ESCALATE_AFTER: int = 2
-    # A token that may re-run Actions jobs in SIGNAL_ORGS (actions: write)
-    # and nothing more. Unset, a failure escalates without a re-run.
+    # A token that may run and re-run Actions workflows in SIGNAL_ORGS
+    # (actions: write) and nothing more. Unset, a failure escalates without a
+    # remedy.
     GITHUB_ACTIONS_TOKEN: str | None = None
 
     # ── The running list ──────────────────────────────────────────────────

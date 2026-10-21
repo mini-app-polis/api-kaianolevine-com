@@ -342,7 +342,7 @@ closes quietly and is only logged. Production only.
 
 | Kind | Key | Before a task | Closes on |
 |------|-----|---------------|-----------|
-| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` | the failed jobs are re-run once; the next failure escalates | a green run |
+| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
 escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a
