@@ -1,3 +1,20 @@
+# [2.27.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.26.0...v2.27.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.12.0 ([cfbae36](https://github.com/mini-app-polis/api-kaianolevine-com/commit/cfbae367be3d89d2898ff440b6368546f35d5873))
+
+
+### Features
+
+* **tasks:** hand grooming jobs to task-groomer-cog and its proposals back to task-manager-cog ([0ea7dad](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0ea7dad74ab38bc73cc5bdfe2e506b9a4aee0d1c))
+* **tasks:** hand grooming jobs to task-groomer-cog and its proposals back to task-manager-cog ([93e48e2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/93e48e2a160c5fa5dae7d3f688d1e8720f6d2c9c))
+* **tasks:** keep the task board's grooming records and the month's paid grooming ([6fc1540](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6fc15401e6ff50d9da029b363a323f45e0b2da0d))
+* **tasks:** keep the task board's grooming records and the month's paid grooming ([52270fb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/52270fbee34894c54fda75b3a46776d5733e462e))
+* **tasks:** remember what was last sent for grooming ([ee694e3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ee694e35dac4175a97553e892b3876fe549dae70))
+* **tasks:** remember what was last sent for grooming ([46eef5e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/46eef5ea86ed7c6e69482c7d69c1ab7e1d449d08))
+
 # [2.26.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.25.0...v2.26.0) (2026-10-21)
 
 
