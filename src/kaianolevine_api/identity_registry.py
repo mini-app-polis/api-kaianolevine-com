@@ -172,14 +172,31 @@ MACHINES: tuple[Machine, ...] = (
         roles=("wiki-operator", "notifier"),
         notes="POST /v1/wcs/wiki/admin/jobs (rebuild_every_page) from the deploy job.",
     ),
-    # task-manager-cog is the one writer to the task board. Nothing it does
-    # goes through this API but its run reports: the board is Asana, reached
-    # with its own token. It asks for no tasks itself, so it does not hold
-    # task-requester.
+    # task-manager-cog is the one writer to the task board, which is Asana,
+    # reached with its own token. Through this API it writes run reports and
+    # keeps its grooming records between sweeps. It asks for no tasks
+    # itself, so it does not hold task-requester.
     Machine(
         name="task-manager-cog",
-        roles=("pipeline-writer", "notifier"),
-        notes="POST /v1/evaluations, /v1/notify. Run reports only.",
+        roles=("pipeline-writer", "notifier", "task-groomer"),
+        notes=(
+            "POST /v1/evaluations, /v1/notify (run reports); GET and POST "
+            "/v1/tasks/groomings (grooming records); POST "
+            "/v1/tasks/groomings/jobs (sending a task for grooming)."
+        ),
+    ),
+    # task-groomer-cog reads a task and the code it names, and proposes what
+    # the task should say. It hands the proposal back through this API and
+    # never writes to the board. It records each paid run and reads the
+    # month's spend, which caps it.
+    Machine(
+        name="task-groomer-cog",
+        roles=("task-groomer", "pipeline-writer", "notifier"),
+        notes=(
+            "POST /v1/tasks/groomings/proposals, /v1/tasks/groomings/runs; "
+            "GET /v1/tasks/groomings/spend; POST /v1/evaluations, /v1/notify "
+            "(run reports)."
+        ),
     ),
     # watcher-cog polls Drive and turns a change in a watched folder into a
     # run of the cog that owns it by asking the API, which enqueues onto
