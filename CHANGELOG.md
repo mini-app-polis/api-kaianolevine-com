@@ -1,3 +1,15 @@
+# [2.24.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.23.0...v2.24.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.11.1 ([b0cf3b9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b0cf3b94d26a4cca96dd46e8b7a3a738fbe318e2))
+
+
+### Features
+
+* **signals:** a failed dependency audit dispatches the dependency fix instead of a re-run ([dc30d1f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dc30d1fd7f7f3c2767d45c80b60de49fede56f92))
+
 # [2.23.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.22.0...v2.23.0) (2026-10-21)
 
 
