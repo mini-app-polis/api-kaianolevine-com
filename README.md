@@ -333,8 +333,8 @@ duplicate `workflow_run`, and Discord renders none of the three.
 
 ### Signals: detected problems that may become tasks
 
-The same webhook feeds `services/signals.py`, independently of what is
-announced on Discord. A detector turns an event into a signal (a kind, a key
+The GitHub webhook and `POST /v1/notify` feed `services/signals.py`,
+independently of what is announced on Discord. A detector turns an event into a signal (a kind, a key
 naming the problem, failing or recovered); a streak holds one problem from its
 first failure until it recovers; and a streak becomes a task request for
 task-manager-cog only when its kind's rule says so. A streak that heals first
@@ -343,6 +343,7 @@ closes quietly and is only logged. Production only.
 | Kind | Key | Before a task | Closes on |
 |------|-----|---------------|-----------|
 | `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
+| `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
 escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a

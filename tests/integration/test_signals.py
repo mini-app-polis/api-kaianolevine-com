@@ -3,7 +3,8 @@
 The engine runs against the real ``signal_streaks`` table; the queue and
 GitHub are stubbed at ``task_dispatch.dispatch_task`` and
 ``ci_signals.remediate``. The CI detector is exercised through the
-real webhook route, signature and all.
+real webhook route, signature and all, and the cog-run detector through
+``POST /v1/notify``.
 """
 
 from __future__ import annotations
@@ -20,7 +21,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api.config import get_settings
-from kaianolevine_api.services import ci_signals, job_queue, signals, task_dispatch
+from kaianolevine_api.services import (
+    ci_signals,
+    job_queue,
+    run_signals,
+    signals,
+    task_dispatch,
+)
 
 SECRET = "test-github-secret"
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
@@ -412,3 +419,135 @@ async def test_without_a_token_no_remedy_starts(monkeypatch) -> None:
     get_settings.cache_clear()
     assert await ci_signals.remediate(_failing_signal(), get_settings()) is False
     get_settings.cache_clear()
+
+
+# ── cog runs ──────────────────────────────────────────────────────────────
+
+
+def _report(
+    severity: str,
+    *,
+    title: str = "db-ops · db-backup",
+    description: str = "pg_dump exited 1",
+) -> dict:
+    """A run report as mini_app_polis.pipeline_status renders one."""
+    return {
+        "embeds": [
+            {
+                "title": title,
+                "description": description,
+                "footer": {
+                    "text": f"{severity} · flow_inline · pipeline_reliability · run r1"
+                },
+            }
+        ],
+        "username": "db-ops",
+    }
+
+
+@pytest.mark.parametrize(
+    ("severity", "expected"),
+    [
+        ("ERROR", "failing"),
+        ("CRITICAL", "failing"),
+        ("WARN", "recovered"),
+        ("SUCCESS", "recovered"),
+        ("INFO", "recovered"),
+    ],
+)
+def test_a_run_reports_severity_is_the_signal(severity: str, expected: str) -> None:
+    signal = run_signals.signal_from_report(_report(severity)["embeds"])
+    assert signal is not None
+    assert signal.kind == "cog-run"
+    assert signal.key == "db-ops/db-backup"
+    assert signal.state == expected
+
+
+def test_a_failing_run_carries_what_a_task_needs() -> None:
+    signal = run_signals.signal_from_report(_report("ERROR")["embeds"])
+    assert signal is not None
+    assert signal.title == "db-ops: db-backup failing"
+    assert signal.where == "db-ops"
+    assert signal.details == "pg_dump exited 1"
+    assert ("Run", "r1") in signal.sections
+    assert not signal.remediable
+
+
+@pytest.mark.parametrize(
+    "embeds",
+    [
+        None,
+        [],
+        [{"title": "evaluator-cog · conformance-check"}],
+        [{"title": "no separator", "footer": {"text": "ERROR · flow_inline"}}],
+        [{"title": "db-ops · db-backup", "footer": {"text": "a note · x"}}],
+        _report("ERROR", title="[DEVELOPMENT] db-ops · db-backup")["embeds"],
+    ],
+)
+def test_anything_but_a_production_run_report_says_nothing(embeds) -> None:
+    assert run_signals.signal_from_report(embeds) is None
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_two_failing_runs_become_one_task(
+    client: AsyncClient, db_session: AsyncSession, dispatch
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    for _ in range(3):
+        resp = await client.post("/v1/notify", json=_report("ERROR"))
+        assert resp.status_code == 200
+
+    dispatch.assert_awaited_once()
+    request = dispatch.await_args.args[0]
+    assert request.source == "cog-run"
+    assert request.external_id.startswith("cog-run.db-ops/db-backup#")
+    assert request.draft.where == "db-ops"
+    assert await _streaks(db_session) == [(3, 0, True, False)]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_run_that_does_not_fail_closes_the_streak_quietly(
+    client: AsyncClient, db_session: AsyncSession, dispatch
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    await client.post("/v1/notify", json=_report("ERROR"))
+    await client.post("/v1/notify", json=_report("WARN"))
+    await client.post("/v1/notify", json=_report("ERROR"))
+
+    dispatch.assert_not_awaited()
+    assert await _streaks(db_session) == [(1, 0, False, True), (1, 0, False, False)]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_failing_run_is_seen_even_when_discord_is_down(
+    client: AsyncClient, db_session: AsyncSession, dispatch
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(500))
+    resp = await client.post("/v1/notify", json=_report("ERROR"))
+
+    assert resp.status_code == 502
+    assert await _streaks(db_session) == [(1, 0, False, False)]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_outside_production_a_run_report_observes_nothing(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    await client.post("/v1/notify", json=_report("ERROR"))
+
+    assert await _streaks(db_session) == []
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_signal_error_never_fails_a_run_report(client: AsyncClient) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    with patch.object(signals, "observe", AsyncMock(side_effect=RuntimeError("db"))):
+        resp = await client.post("/v1/notify", json=_report("ERROR"))
+    assert resp.status_code == 200
