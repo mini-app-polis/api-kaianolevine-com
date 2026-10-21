@@ -1,3 +1,16 @@
+# [2.23.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.22.0...v2.23.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.11.0 ([a6a5985](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a6a59859c737cbc7bc569af0712c6eaec82046b7))
+* **deps:** bump virtualenv for CVE-2026-113725 and related advisories ([a603d8e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a603d8e9b044ae7bbb81e89bbd844c8a0319bc1d))
+
+
+### Features
+
+* **signals:** failed CI runs become tasks once a re-run does not fix them ([df6ab71](https://github.com/mini-app-polis/api-kaianolevine-com/commit/df6ab7175d9b5c9581b20ba336ceca74f0891e33))
+
 # [2.22.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.21.3...v2.22.0) (2026-10-21)
 
 
