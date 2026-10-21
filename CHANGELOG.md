@@ -1,3 +1,10 @@
+# [2.26.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.25.0...v2.26.0) (2026-10-21)
+
+
+### Features
+
+* **signals:** repeated 5xx from one route become a task ([7ab0b30](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7ab0b30a0695db3e18af6cf403e3d6a96a817521))
+
 # [2.25.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.24.1...v2.25.0) (2026-10-21)
 
 
