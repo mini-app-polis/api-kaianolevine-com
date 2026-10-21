@@ -120,6 +120,9 @@ class Settings(BaseSettings):
     # re-run), then escalate on the next failure of the same streak.
     SIGNAL_CI_RERUN: bool = True
     SIGNAL_CI_ESCALATE_AFTER: int = 2
+    # Consecutive failing runs of one cog flow (run reports at ERROR or
+    # CRITICAL) before a task. There is no remedy: the next run is the retry.
+    SIGNAL_RUN_ESCALATE_AFTER: int = 2
     # A token that may run and re-run Actions workflows in SIGNAL_ORGS
     # (actions: write) and nothing more. Unset, a failure escalates without a
     # remedy.

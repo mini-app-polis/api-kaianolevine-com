@@ -130,6 +130,7 @@ export default defineRailway((ctx) => {
       SIGNAL_CI_BRANCHES: preserve(),
       SIGNAL_CI_RERUN: preserve(),
       SIGNAL_CI_ESCALATE_AFTER: preserve(),
+      SIGNAL_RUN_ESCALATE_AFTER: preserve(),
       GITHUB_DASHBOARD_CACHE_TTL_SECS: preserve(),
       NOTIFY_DATA_CHANGES: preserve(),
       NOTIFY_FAULTS: preserve(),

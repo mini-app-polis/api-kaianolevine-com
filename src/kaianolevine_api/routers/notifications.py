@@ -64,7 +64,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import ci_signals, discord, signals
+from ..services import ci_signals, discord, run_signals, signals
 
 router = APIRouter()
 logger = get_logger()
@@ -496,31 +496,41 @@ async def github_webhook(
     )
 
 
-async def _observe_ci(
-    payload: dict[str, Any], *, session: AsyncSession, settings: Settings
+async def _observe(
+    signal: signals.Signal | None,
+    rule: signals.Rule,
+    *,
+    session: AsyncSession,
+    settings: Settings,
 ) -> None:
-    """Hand a workflow run to the signal engine. Never raises.
+    """Hand one detected signal to the signal engine. Never raises.
 
-    Independent of the Discord policy below, and production only: there is
-    one board, and a re-run acts on the real repository. A failure here is
-    logged and the delivery still answers 200, because GitHub disables a
-    webhook that keeps receiving 5xx.
+    Independent of the Discord policy, and production only: there is one
+    board, and a remedy acts on the real repository. A failure here is
+    logged and the caller still answers as it would have: GitHub disables a
+    webhook that keeps receiving 5xx, and a cog's report reached Discord
+    whatever the engine made of it.
     """
-    if not is_production():
-        return
-    signal = ci_signals.signal_from_workflow_run(
-        payload, orgs=settings.SIGNAL_ORGS, branches=settings.SIGNAL_CI_BRANCHES
-    )
-    if signal is None:
+    if signal is None or not is_production():
         return
     try:
-        outcome = await signals.observe(
-            session, signal, rule=ci_signals.rule(settings), settings=settings
-        )
+        outcome = await signals.observe(session, signal, rule=rule, settings=settings)
     except Exception:  # noqa: BLE001 — see docstring
         logger.exception("signals: could not observe %s", signal.key)
         return
     logger.info("signals: %s %s -> %s", signal.kind, signal.key, outcome)
+
+
+async def _observe_ci(
+    payload: dict[str, Any], *, session: AsyncSession, settings: Settings
+) -> None:
+    """A workflow run, as a CI signal."""
+    signal = ci_signals.signal_from_workflow_run(
+        payload, orgs=settings.SIGNAL_ORGS, branches=settings.SIGNAL_CI_BRANCHES
+    )
+    await _observe(
+        signal, ci_signals.rule(settings), session=session, settings=settings
+    )
 
 
 #: Run-report severities that are copied to the errors channel as well as
@@ -564,13 +574,15 @@ def report_severity(payload: NotifyRequest) -> str | None:
         "errors channel. A run that died too hard to report itself is caught "
         "by its own cog's backstop where it has one — a queue-fed Lambda "
         "cog's dead-letter-queue and queue-stalled alarms, or watcher-cog's "
-        "failing-ticks alarm and Healthchecks check. Requires "
-        "notify.messages.send."
+        "failing-ticks alarm and Healthchecks check. In production, a run "
+        "report is also a cog-run signal: consecutive ERROR or CRITICAL "
+        "runs of one flow become a task. Requires notify.messages.send."
     ),
 )
 async def notify(
     payload: NotifyRequest = Body(..., embed=False),
     principal: Principal = Depends(require_scope("notify.messages.send")),
+    session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
 ) -> Envelope[NotificationResult]:
     """Post one message to the notification channel on the caller's behalf.
@@ -585,6 +597,14 @@ async def notify(
             LOG_START,
             f"notify requested principal={principal.display_name or principal.subject}",
         )
+    )
+
+    # Before delivery, so a Discord outage does not hide a failing run.
+    await _observe(
+        run_signals.signal_from_report(payload.embeds),
+        run_signals.rule(settings),
+        session=session,
+        settings=settings,
     )
 
     message = payload.to_discord()
