@@ -84,6 +84,11 @@ async def create_task_request(
     "/tasks/groomings",
     response_model=Envelope[list[GroomingRecord]],
     summary="Every task's grooming record",
+    description=(
+        "What the task manager last made of each task: the fingerprint of the "
+        "content it judged, the verdict and its problems, and whether it moved "
+        "the task to Ready."
+    ),
 )
 async def list_groomings(
     principal: Principal = Depends(require_scope("tasks.groomings.read")),
@@ -110,6 +115,7 @@ async def record_grooming(
     principal: Principal = Depends(require_scope("tasks.groomings.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingRecord]:
+    """Replace one task's record with what the sweep made of it now."""
     record = await groomings.write_record(session, payload)
     return success_envelope(
         record, count=1, total=1, version=get_settings().API_VERSION
@@ -121,12 +127,17 @@ async def record_grooming(
     response_model=Envelope[GroomingRunRecorded],
     status_code=201,
     summary="Record one paid grooming run",
+    description=(
+        "One model run's tokens and cost, recorded so the month's spend can "
+        "be capped. Recorded whether or not the run produced a proposal."
+    ),
 )
 async def record_grooming_run(
     payload: GroomingRunCreate,
     principal: Principal = Depends(require_scope("tasks.groomings.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingRunRecorded]:
+    """Record one paid run, for the month's spend."""
     run = await groomings.record_run(session, payload)
     return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
 
@@ -135,11 +146,16 @@ async def record_grooming_run(
     "/tasks/groomings/spend",
     response_model=Envelope[GroomingSpend],
     summary="This month's paid grooming, in total",
+    description=(
+        "The calendar month's paid runs and their cost so far (UTC). The "
+        "groomer reads it before each run and stops at its monthly cap."
+    ),
 )
 async def grooming_spend(
     principal: Principal = Depends(require_scope("tasks.groomings.read")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingSpend]:
+    """The month's paid runs and their cost so far."""
     spend = await groomings.month_spend(session)
     return success_envelope(spend, count=1, total=1, version=get_settings().API_VERSION)
 
