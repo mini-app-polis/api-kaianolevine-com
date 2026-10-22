@@ -91,6 +91,44 @@ def test_machine_without_a_key_is_dropped(monkeypatch: pytest.MonkeyPatch) -> No
     assert reg.machine_keys({"DEEJAY_COG_API_KEY": "   "}) == []
 
 
+class _Warnings:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def warning(self, message: str) -> None:
+        self.messages.append(message)
+
+
+@pytest.mark.parametrize(
+    ("environment", "warned"), [("production", False), ("development", True)]
+)
+def test_development_only_machine_warns_only_outside_production(
+    monkeypatch: pytest.MonkeyPatch, environment: str, warned: bool
+) -> None:
+    """In production its missing key is the guard, not a missing secret."""
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setattr(
+        reg,
+        "MACHINES",
+        (reg.Machine(name="contract-suite", roles=(), development_only=True),),
+    )
+    log = _Warnings()
+    monkeypatch.setattr(reg, "_log", log)
+    assert reg.machine_keys({}) == []
+    assert bool(log.messages) is warned
+
+
+def test_missing_key_still_warns_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    log = _Warnings()
+    monkeypatch.setattr(reg, "_log", log)
+    assert reg.machine_keys({}) == []
+    assert log.messages
+
+
 async def test_key_identifies_the_machine(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=("catalog-ingest",)),)
