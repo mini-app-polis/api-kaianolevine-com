@@ -74,6 +74,11 @@ def signal_from_report(embeds: list[dict[str, Any]] | None) -> Signal | None:
             title=f"{repo}: {flow} failing",
             where=repo,
             details=details or None,
+            done_when=f"A {flow} run of {repo} finishes without an error.",
+            constraints=(
+                "Fix the cause. Do not silence the error or lower its severity "
+                "to make the run pass."
+            ),
             sections=(
                 ("Flow", flow),
                 ("Severity", severity),

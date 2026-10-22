@@ -121,6 +121,8 @@ def test_a_failed_run_is_a_remediable_failing_signal() -> None:
     assert signal.title == "infra: CI failing on dev"
     assert signal.remediable is True
     assert signal.context == {"repo": "mini-app-polis/infra", "run_id": 99}
+    assert signal.done_when == "The CI workflow passes on dev again."
+    assert signal.constraints is not None
 
 
 @pytest.mark.parametrize(
@@ -199,6 +201,7 @@ async def test_a_failure_that_survives_its_rerun_becomes_one_task(
     assert request.external_id.startswith("ci.mini-app-polis/infra/CI@dev#")
     assert request.draft.title == "infra: CI failing on dev"
     assert any(s.label == "Streak" for s in request.draft.sections)
+    assert request.draft.effort == "S"
     assert await _streaks(db_session) == [(3, 1, True, False)]
 
 
@@ -478,6 +481,8 @@ def test_a_failing_run_carries_what_a_task_needs() -> None:
     assert signal.details == "pg_dump exited 1"
     assert ("Run", "r1") in signal.sections
     assert not signal.remediable
+    assert signal.done_when == "A db-backup run of db-ops finishes without an error."
+    assert signal.constraints is not None
 
 
 @pytest.mark.parametrize(
@@ -626,6 +631,22 @@ def test_a_fault_is_keyed_by_route_template_not_url() -> None:
     assert signal.key == "GET /v1/sets/{set_id} 500"
     assert signal.where == "api-kaianolevine-com"
     assert signal.state == "failing"
+    assert signal.done_when == "GET /v1/sets/{set_id} no longer answers 500."
+    assert signal.constraints is not None
+
+
+def test_an_escalated_task_carries_the_template_fields_the_detector_knows() -> None:
+    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500)
+    request = signals.request_for(
+        signal,
+        external_id="api-fault.GET /v1/sets/{set_id} 500#1",
+        failures=3,
+        opened_at=dt.datetime(2026, 10, 22, 18, 0, tzinfo=dt.UTC),
+    )
+    assert request.draft.done_when == signal.done_when
+    assert request.draft.constraints == signal.constraints
+    assert request.draft.effort == "S"
+    assert request.draft.where == "api-kaianolevine-com"
 
 
 def test_a_request_that_matched_no_route_has_no_template() -> None:
