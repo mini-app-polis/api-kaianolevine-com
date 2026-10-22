@@ -20,8 +20,8 @@ from kaianolevine_api.config import Settings
 RAILWAY_TS = Path(__file__).resolve().parents[2] / ".railway" / "railway.ts"
 
 #: Declared everywhere but keyed in development only (CD-033): in production
-#: it is meant not to authenticate.
-DEVELOPMENT_ONLY = {"contract-suite"}
+#: they are meant not to authenticate.
+DEVELOPMENT_ONLY = {m.name for m in identity_registry.MACHINES if m.development_only}
 
 #: Settings fields deliberately left out of railway.ts, each with the reason.
 #: Only a field with a default can be here: the value in config.py is the

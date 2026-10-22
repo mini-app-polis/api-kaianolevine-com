@@ -41,6 +41,7 @@ from identity.store import Issuer as IssuerRow
 from identity.store import Principal as PrincipalRow
 from identity.store import PrincipalRole
 from identity.store import Role as RoleRow
+from mini_app_polis.environment import is_production
 from mini_app_polis.logger import LOG_FAILURE, LOG_WARNING, get_logger, with_log_prefix
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +68,9 @@ class Machine:
     name: str
     roles: tuple[str, ...]
     notes: str = ""
+    #: Keyed in development configuration only. In production its missing key
+    #: is the intended state, so it is not reported as a missing secret.
+    development_only: bool = False
 
     @property
     def key_env_var(self) -> str:
@@ -246,6 +250,7 @@ MACHINES: tuple[Machine, ...] = (
             "GET /v1/wcs/wiki/export, /v1/evaluations; GET and POST "
             "/v1/wcs/wiki/state/*."
         ),
+        development_only=True,
     ),
 )
 
@@ -261,12 +266,19 @@ def machine_keys(env: Mapping[str, str]) -> list[MachineKey]:
     Machines declared with no roles are still given keys. A principal that can
     do nothing is the right state for a caller that asks for nothing, and it
     means the identity exists the moment that changes.
+
+    A missing key is logged as a warning, except a development-only machine's
+    in production: there it is the guard working, and warning on every boot
+    would teach the reader to skip the line a real missing secret shows up on.
     """
     keys: list[MachineKey] = []
+    production = is_production()
     for machine in MACHINES:
         value = (env.get(machine.key_env_var) or "").strip()
         if value:
             keys.append(MachineKey(name=machine.name, key=value))
+        elif machine.development_only and production:
+            continue
         else:
             _log.warning(
                 with_log_prefix(
