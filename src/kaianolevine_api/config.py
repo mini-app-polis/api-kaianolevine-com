@@ -183,7 +183,9 @@ class Settings(BaseSettings):
     # GITHUB_DASHBOARD_TOKEN is the dedicated name and the one to set when
     # the dashboard should read with narrower rights than whatever else is
     # in the environment: a fine-grained PAT with read access to metadata,
-    # issues, pull requests and checks is the whole requirement. Private
+    # contents, issues, pull requests, commit statuses and checks is the whole
+    # requirement. Contents is what the default branch and its branch count
+    # need; without it GitHub answers 200 and refuses those fields. Private
     # repos need to be in its scope only because they are counted — the
     # payload never carries their names.
     #
