@@ -29,6 +29,13 @@ that recovers before escalating closes quietly and is only logged.
 the external id is ``<kind>.<key>#<streak id>``, and the claim on the streak
 is atomic, so a delivery seen twice cannot ask twice. A request that does not
 land is reported, and the claim released for the next failure to retry.
+
+**The task arrives ready.** A detector knows what the board's template asks
+for: where the problem is, the outcome that ends it (the check passing
+again), and what a fix must not do (silence it). So it says so, and the
+task passes the definition of ready as it lands rather than waiting on a
+paid grooming run that could add nothing the detector does not know. Every
+escalated task is sized ``S``: one thing that worked has stopped working.
 """
 
 from __future__ import annotations
@@ -41,6 +48,7 @@ from typing import Any, Literal
 from mini_app_polis.api.contract import (
     TaskCreateRequest,
     TaskDraft,
+    TaskEffort,
     TaskLink,
     TaskSection,
 )
@@ -72,6 +80,10 @@ Outcome = Literal[
 _TITLE_MAX = 500
 _TEXT_MAX = 20_000
 _EXTERNAL_ID_MAX = 256
+_FIELD_MAX = 1000
+
+#: Every escalated task's size: one thing that worked has stopped working.
+EFFORT: TaskEffort = "S"
 
 
 @dataclass(frozen=True)
@@ -85,6 +97,10 @@ class Signal:
     where: str | None = None
     link: str | None = None
     details: str | None = None
+    #: The template's ``Done when``: the observable outcome that ends it.
+    done_when: str | None = None
+    #: The template's ``Constraints``: what a fix must not do.
+    constraints: str | None = None
     sections: tuple[tuple[str, str], ...] = ()
     #: Whether this event may be remediated (a re-run is pointless on a run
     #: that is itself a re-run).
@@ -148,6 +164,13 @@ def request_for(
                 title=_cut(signal.title, _TITLE_MAX),
                 where=_cut(signal.where, 200) if signal.where else None,
                 body=_cut(signal.details, _TEXT_MAX) if signal.details else None,
+                done_when=(
+                    _cut(signal.done_when, _FIELD_MAX) if signal.done_when else None
+                ),
+                constraints=(
+                    _cut(signal.constraints, _FIELD_MAX) if signal.constraints else None
+                ),
+                effort=EFFORT,
                 sections=sections,
                 links=links,
                 labels=[],

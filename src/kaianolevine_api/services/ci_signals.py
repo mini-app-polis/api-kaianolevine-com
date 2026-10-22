@@ -83,6 +83,10 @@ def signal_from_workflow_run(
         where=repo,
         link=str(run.get("html_url") or "") or None,
         details=f"{conclusion} on {sha}: {subject}".strip(),
+        done_when=f"The {workflow} workflow passes on {branch} again.",
+        constraints=(
+            "Fix the cause. Do not skip, disable or loosen the check to make it pass."
+        ),
         sections=(
             ("Workflow", workflow),
             ("Branch", branch),

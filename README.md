@@ -350,3 +350,9 @@ closes quietly and is only logged. Production only.
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
 escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a
 streak makes one task however many failures it sees.
+
+The task arrives ready. Each detector fills the template's `Done when` (the
+check passing again, the flow finishing without an error, the route no longer
+answering the status) and `Constraints` (fix the cause; do not silence the
+check), and every escalated task is sized `S`. So it passes task-manager-cog's
+definition of ready on arrival and needs no grooming run.

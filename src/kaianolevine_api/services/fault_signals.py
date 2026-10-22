@@ -61,6 +61,10 @@ def signal_for(method: str, route: str, status_code: int) -> Signal:
             f"{SERVICE} answered {status_code} to {method} {route}. The "
             "errors channel and Sentry hold each fault's exception type and id."
         ),
+        done_when=f"{method} {route} no longer answers {status_code}.",
+        constraints=(
+            "Fix the cause. Do not catch the error only to answer a different status."
+        ),
         sections=(
             ("Route", f"{method} {route}"),
             ("Status", str(status_code)),
