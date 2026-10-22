@@ -1,3 +1,10 @@
+## [2.27.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.2...v2.27.3) (2026-10-22)
+
+
+### Bug Fixes
+
+* **identity:** stop warning about development-only machines' keys in production ([4ffe960](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4ffe9604cd46669fead73d86aec669d444168c1e))
+
 ## [2.27.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.1...v2.27.2) (2026-10-22)
 
 
