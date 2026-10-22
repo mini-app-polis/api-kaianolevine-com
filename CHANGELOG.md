@@ -1,3 +1,10 @@
+## [2.27.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.1...v2.27.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **config:** read the Google service account from GOOGLE_CREDENTIALS_JSON ([cf0f58f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/cf0f58f5c19ca56172df66f5add340d64b84476f))
+
 ## [2.27.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.0...v2.27.1) (2026-10-21)
 
 
