@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 
 from mini_app_polis.environment import current_environment
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -268,9 +269,10 @@ class Settings(BaseSettings):
     # can be.
     SPOTIFY_TOKEN_CHECK_INTERVAL_SECS: int = 3600
 
-    # Google service account (Drive resume proxy)
-    GOOGLE_CLIENT_EMAIL: str | None = None
-    GOOGLE_PRIVATE_KEY: str | None = None  # PEM with literal \n — see validator
+    # Google service account (Drive resume proxy): the fleet's one service
+    # account, as the JSON key file Google issues — the same
+    # GOOGLE_CREDENTIALS_JSON every cog reads. See google_service_account.
+    GOOGLE_CREDENTIALS_JSON: str | None = None
     RESUME_FILE_ID: str | None = None
 
     # WCS Q&A retrieval / agent
@@ -319,13 +321,32 @@ class Settings(BaseSettings):
                 return candidate.strip()
         return None
 
-    @field_validator("GOOGLE_PRIVATE_KEY", mode="before")
-    @classmethod
-    def normalize_google_private_key_newlines(cls, v: str | None) -> str | None:
-        """Normalize escaped newlines in GOOGLE_PRIVATE_KEY values."""
-        if v is None or v == "":
-            return v
-        return v.replace("\\n", "\n")
+    @property
+    def google_service_account(self) -> tuple[str, str] | None:
+        """``(client_email, private_key)`` from ``GOOGLE_CREDENTIALS_JSON``.
+
+        None when it is unset, is not a JSON object, or lacks either field.
+        Parsed with ``strict=False``: Doppler stores the key's line breaks as
+        real newlines, which strict JSON rejects inside a string.
+        """
+        raw = (self.GOOGLE_CREDENTIALS_JSON or "").strip()
+        if not raw:
+            return None
+        try:
+            info = json.loads(raw, strict=False)
+        except ValueError:
+            return None
+        if not isinstance(info, dict):
+            return None
+        email, key = info.get("client_email"), info.get("private_key")
+        if (
+            not isinstance(email, str)
+            or not email
+            or not isinstance(key, str)
+            or not key
+        ):
+            return None
+        return email, key
 
     # The process environment only: Doppler supplies it (`doppler run`
     # locally, the Railway sync deployed). No .env file is read.

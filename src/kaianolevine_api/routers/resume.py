@@ -43,20 +43,22 @@ def _sign_jwt_rs256(private_key_pem: str, payload: dict[str, Any]) -> str:
 
 
 def _build_service_account_jwt(settings: Settings, now: int) -> str:
-    if not settings.GOOGLE_CLIENT_EMAIL or not settings.GOOGLE_PRIVATE_KEY:
+    account = settings.google_service_account
+    if account is None:
         msg = "Google service account credentials are not configured"
         raise HTTPException(
             status_code=502,
             detail={"code": "upstream_error", "message": msg},
         )
+    client_email, private_key = account
     payload = {
-        "iss": settings.GOOGLE_CLIENT_EMAIL,
+        "iss": client_email,
         "scope": "https://www.googleapis.com/auth/drive",
         "aud": "https://oauth2.googleapis.com/token",
         "iat": now,
         "exp": now + 3600,
     }
-    return _sign_jwt_rs256(settings.GOOGLE_PRIVATE_KEY, payload)
+    return _sign_jwt_rs256(private_key, payload)
 
 
 async def _fetch_oauth_access_token(settings: Settings) -> None:

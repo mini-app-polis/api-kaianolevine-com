@@ -44,8 +44,12 @@ async def test_resume_200_headers_and_streaming_body(
     monkeypatch: pytest.MonkeyPatch, client: AsyncClient
 ) -> None:
     monkeypatch.setenv("RESUME_FILE_ID", "file-abc")
-    monkeypatch.setenv("GOOGLE_CLIENT_EMAIL", "svc@proj.iam.gserviceaccount.com")
-    monkeypatch.setenv("GOOGLE_PRIVATE_KEY", "dummy")
+    monkeypatch.setenv(
+        "GOOGLE_CREDENTIALS_JSON",
+        json.dumps(
+            {"client_email": "svc@proj.iam.gserviceaccount.com", "private_key": "dummy"}
+        ),
+    )
     get_settings.cache_clear()
 
     file_id = "file-abc"
@@ -98,8 +102,12 @@ async def test_resume_502_when_drive_metadata_fails(
     monkeypatch: pytest.MonkeyPatch, client: AsyncClient
 ) -> None:
     monkeypatch.setenv("RESUME_FILE_ID", "file-abc")
-    monkeypatch.setenv("GOOGLE_CLIENT_EMAIL", "svc@proj.iam.gserviceaccount.com")
-    monkeypatch.setenv("GOOGLE_PRIVATE_KEY", "dummy")
+    monkeypatch.setenv(
+        "GOOGLE_CREDENTIALS_JSON",
+        json.dumps(
+            {"client_email": "svc@proj.iam.gserviceaccount.com", "private_key": "dummy"}
+        ),
+    )
     get_settings.cache_clear()
 
     file_id = "file-abc"
@@ -127,8 +135,12 @@ async def test_resume_502_when_drive_download_fails(
     monkeypatch: pytest.MonkeyPatch, client: AsyncClient
 ) -> None:
     monkeypatch.setenv("RESUME_FILE_ID", "file-abc")
-    monkeypatch.setenv("GOOGLE_CLIENT_EMAIL", "svc@proj.iam.gserviceaccount.com")
-    monkeypatch.setenv("GOOGLE_PRIVATE_KEY", "dummy")
+    monkeypatch.setenv(
+        "GOOGLE_CREDENTIALS_JSON",
+        json.dumps(
+            {"client_email": "svc@proj.iam.gserviceaccount.com", "private_key": "dummy"}
+        ),
+    )
     get_settings.cache_clear()
 
     file_id = "file-abc"
@@ -189,8 +201,10 @@ def _b64url_decode(part: str) -> bytes:
 
 def _configure(monkeypatch: pytest.MonkeyPatch, private_key: str) -> None:
     monkeypatch.setenv("RESUME_FILE_ID", "file-abc")
-    monkeypatch.setenv("GOOGLE_CLIENT_EMAIL", _SVC_EMAIL)
-    monkeypatch.setenv("GOOGLE_PRIVATE_KEY", private_key)
+    monkeypatch.setenv(
+        "GOOGLE_CREDENTIALS_JSON",
+        json.dumps({"client_email": _SVC_EMAIL, "private_key": private_key}),
+    )
     get_settings.cache_clear()
 
 
@@ -213,8 +227,7 @@ async def test_resume_exchanges_a_verifiable_rs256_assertion(
 ) -> None:
     """The assertion Google receives is an RS256 JWT signed by the configured key."""
     key = _rsa_key()
-    # The env form carries literal "\n"; Settings turns them back into newlines.
-    _configure(monkeypatch, _pem(key).replace("\n", "\\n"))
+    _configure(monkeypatch, _pem(key))
     token_route = respx.post(_TOKEN_URL).mock(
         return_value=Response(200, json={"access_token": "tok-1", "expires_in": 3600})
     )
@@ -312,13 +325,21 @@ async def test_resume_502_when_oauth_exchange_fails(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("missing", ["GOOGLE_CLIENT_EMAIL", "GOOGLE_PRIVATE_KEY"])
+@pytest.mark.parametrize(
+    "credentials",
+    [
+        "",
+        "not json",
+        json.dumps({"private_key": "KEY"}),
+        json.dumps({"client_email": _SVC_EMAIL}),
+    ],
+)
 @respx.mock
 async def test_resume_502_when_service_account_not_configured(
-    monkeypatch: pytest.MonkeyPatch, client: AsyncClient, missing: str
+    monkeypatch: pytest.MonkeyPatch, client: AsyncClient, credentials: str
 ) -> None:
     _configure(monkeypatch, _pem(_rsa_key()))
-    monkeypatch.setenv(missing, "")
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", credentials)
     get_settings.cache_clear()
     token_route = respx.post(_TOKEN_URL).mock(return_value=Response(200, json={}))
 
