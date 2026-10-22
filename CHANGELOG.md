@@ -1,3 +1,10 @@
+# [2.28.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.3...v2.28.0) (2026-10-22)
+
+
+### Features
+
+* **signals:** escalate tasks that arrive ready ([311c19e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/311c19ef30a24ff887152ebda16a405cc1ed97ee))
+
 ## [2.27.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.27.2...v2.27.3) (2026-10-22)
 
 
