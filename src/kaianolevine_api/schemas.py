@@ -10,6 +10,12 @@ from fastapi import HTTPException
 # so the cogs and this service validate against one definition. Re-exported
 # here so routers, services and tests keep importing from .schemas.
 from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
+    AgentResultAccepted,
+    AgentRun,
+    AgentRunCreate,
+    AgentRunFailure,
+    AgentRunResult,
+    AgentSpend,
     DeejayRunAccepted,
     DeejayRunRequest,
     DriveFileRef,
