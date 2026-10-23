@@ -1,3 +1,11 @@
+## [2.30.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.0...v2.30.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.20.0 ([d12ed17](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d12ed17b4e70bb9e6d832d634c13ee9db8d2c4d0))
+* **deps:** require miniapppolis-common-utils 6.21.0 for 25-child grooming proposals ([56c2393](https://github.com/mini-app-polis/api-kaianolevine-com/commit/56c239348c69fd777dd8a8d7f64c7bda2ad603b2))
+
 # [2.30.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.29.0...v2.30.0) (2026-10-23)
 
 
