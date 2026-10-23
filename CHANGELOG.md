@@ -1,3 +1,16 @@
+# [2.30.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.29.0...v2.30.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.18.0 ([7cb051b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7cb051b2fa488ef3d13727ba5bc8268b2b2662f0))
+* **deps:** bump miniapppolis-common-utils to 6.19.0 ([c7446a3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c7446a34e4544e29168e7f62f3fe64b1ab9a72f9))
+
+
+### Features
+
+* **tasks:** record agent runs that need grooming, with their questions ([bed5baf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bed5baf4532357cfe018381238063e163ea856e8))
+
 # [2.29.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.28.1...v2.29.0) (2026-10-23)
 
 
