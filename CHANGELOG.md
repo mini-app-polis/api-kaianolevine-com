@@ -1,3 +1,16 @@
+# [2.29.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.28.1...v2.29.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.16.2 ([daa8854](https://github.com/mini-app-polis/api-kaianolevine-com/commit/daa88544d9023a162e2867222b56930becff8889))
+* **deps:** bump miniapppolis-common-utils to 6.17.0 ([95d2a5a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/95d2a5a15b7833977e7c0a97fc680de646a10d1e))
+
+
+### Features
+
+* **tasks:** record agent runs, their spend and results ([cf07139](https://github.com/mini-app-polis/api-kaianolevine-com/commit/cf07139f4f70338e0a307ba8bd30db8949a5eb50))
+
 ## [2.28.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.28.0...v2.28.1) (2026-10-22)
 
 
