@@ -230,9 +230,61 @@ async def test_a_dropped_result_is_not_recorded(client, monkeypatch) -> None:
     assert again.status_code == 202
 
 
+async def test_a_run_that_needs_grooming_is_recorded_with_its_questions(
+    client, monkeypatch
+) -> None:
+    _aws(monkeypatch)
+    run = await _dispatch(client)
+    questions = ["Which env var replaces FOLDER_ID?", "Should infra change too?"]
+    result = {
+        "run_id": run["id"],
+        "outcome": "needs_grooming",
+        "cost_usd": 0.31,
+        "actions_run_url": RUN_URL,
+        "questions": questions,
+    }
+    with _queued("m-7") as dispatched:
+        response = await client.post("/v1/tasks/agent-runs/results", json=result)
+        again = await client.post("/v1/tasks/agent-runs/results", json=result)
+
+    assert response.status_code == 202, response.text
+    assert again.status_code == 409
+    queued: AgentRun = dispatched.await_args.args[0]
+    assert dispatched.await_count == 1
+    assert (queued.status, queued.questions, queued.pr_url) == (
+        "needs_grooming",
+        questions,
+        None,
+    )
+
+    (listed,) = (
+        await client.get("/v1/tasks/agent-runs", params={"status": "needs_grooming"})
+    ).json()["data"]
+    assert listed["questions"] == questions
+    assert listed["cost_usd"] == pytest.approx(0.31)
+    # It ended, so its repository is free again.
+    await _dispatch(client)
+    spend = (await client.get("/v1/tasks/agent-runs/spend")).json()["data"]
+    assert spend["cost_usd"] == pytest.approx(0.31)
+
+
+async def test_other_outcomes_are_recorded_with_no_questions(
+    client, monkeypatch
+) -> None:
+    _aws(monkeypatch)
+    run = await _dispatch(client)
+    failed = {"run_id": run["id"], "outcome": "failed", "reason": "tests failed"}
+    with _queued():
+        await client.post("/v1/tasks/agent-runs/results", json=failed)
+    (listed,) = (await client.get("/v1/tasks/agent-runs")).json()["data"]
+    assert listed["questions"] == []
+
+
 @pytest.mark.parametrize(
     "change",
     [
+        {"outcome": "needs_grooming"},  # no questions
+        {"outcome": "failed", "questions": ["Which one?"]},
         {"outcome": "succeeded"},  # no pull request
         {"outcome": "failed", "pr_url": PR},
         {"cost_usd": -1},

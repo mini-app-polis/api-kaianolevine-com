@@ -3,12 +3,14 @@
 task-manager-cog records a run before it starts one, and a run still
 ``dispatched`` is the lock on its repository: the table allows one per
 repository. A run ends once, with its workflow's result or with
-task-manager-cog marking it failed. See
+task-manager-cog marking it failed. A run that needs grooming ends with
+the questions it asked, for task-manager-cog to post on the task. See
 ``mini_app_polis.api.contract.agent_runs`` for what each field means.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from sqlalchemy import text
@@ -25,7 +27,7 @@ from ..schemas import (
 
 _COLUMNS = (
     "id, task_gid, task_id, repository, model, status, cost_usd, pr_url, "
-    "actions_run_url, reason, dispatched_at, finished_at"
+    "actions_run_url, reason, questions, dispatched_at, finished_at"
 )
 
 
@@ -46,6 +48,10 @@ def _run(row: Any) -> AgentRun:
     data["id"] = str(data["id"])
     if data["cost_usd"] is not None:
         data["cost_usd"] = float(data["cost_usd"])
+    questions = data["questions"]
+    data["questions"] = (
+        json.loads(questions) if isinstance(questions, str) else questions
+    )
     return AgentRun.model_validate(data)
 
 
@@ -102,6 +108,7 @@ async def _end(
     pr_url: str | None,
     actions_run_url: str | None,
     reason: str | None,
+    questions: list[str],
 ) -> AgentRun:
     """End a dispatched run, uncommitted. Raises RunNotFound, RunAlreadyEnded."""
     row = (
@@ -114,6 +121,7 @@ async def _end(
                   pr_url = :pr_url,
                   actions_run_url = coalesce(:actions_run_url, actions_run_url),
                   reason = :reason,
+                  questions = CAST(:questions AS jsonb),
                   finished_at = now()
                 WHERE id = CAST(:id AS uuid) AND status = 'dispatched'
                 RETURNING {_COLUMNS}
@@ -126,6 +134,7 @@ async def _end(
                 "pr_url": pr_url,
                 "actions_run_url": actions_run_url,
                 "reason": reason,
+                "questions": json.dumps(questions),
             },
         )
     ).one_or_none()
@@ -150,6 +159,7 @@ async def fail_run(session: AsyncSession, failure: AgentRunFailure) -> AgentRun:
         pr_url=None,
         actions_run_url=None,
         reason=failure.reason,
+        questions=[],
     )
     await session.commit()
     return run
@@ -167,6 +177,7 @@ async def end_run(session: AsyncSession, result: AgentRunResult) -> AgentRun:
         pr_url=result.pr_url,
         actions_run_url=result.actions_run_url,
         reason=result.reason,
+        questions=result.questions,
     )
 
 
