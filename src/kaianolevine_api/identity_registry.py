@@ -177,17 +177,30 @@ MACHINES: tuple[Machine, ...] = (
         notes="POST /v1/wcs/wiki/admin/jobs (rebuild_every_page) from the deploy job.",
     ),
     # task-manager-cog is the one writer to the task board, which is Asana,
-    # reached with its own token. Through this API it writes run reports and
-    # keeps its grooming records between sweeps. It asks for no tasks
-    # itself, so it does not hold task-requester.
+    # reached with its own token. Through this API it writes run reports,
+    # keeps its grooming records between sweeps, and records the agent runs
+    # it dispatches. It asks for no tasks itself, so it does not hold
+    # task-requester.
     Machine(
         name="task-manager-cog",
-        roles=("pipeline-writer", "notifier", "task-groomer"),
+        roles=("pipeline-writer", "notifier", "task-groomer", "agent-dispatcher"),
         notes=(
             "POST /v1/evaluations, /v1/notify (run reports); GET and POST "
             "/v1/tasks/groomings (grooming records); POST "
-            "/v1/tasks/groomings/jobs (sending a task for grooming)."
+            "/v1/tasks/groomings/jobs (sending a task for grooming); GET and "
+            "POST /v1/tasks/agent-runs, GET /v1/tasks/agent-runs/spend, POST "
+            "/v1/tasks/agent-runs/failures (agent runs)."
         ),
+    ),
+    # task-agent is the agent's GitHub Actions workflow. Its key is an org
+    # secret visible only to the repositories the agent may change, and it
+    # is used only by the workflow's last step, never by the model. Beyond
+    # notifier, which every machine holds, it may post a run's result and
+    # nothing else.
+    Machine(
+        name="task-agent",
+        roles=("agent-reporter", "notifier"),
+        notes="POST /v1/tasks/agent-runs/results (a run's result).",
     ),
     # task-groomer-cog reads a task and the code it names, and proposes what
     # the task should say. It hands the proposal back through this API and

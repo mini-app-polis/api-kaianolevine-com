@@ -269,6 +269,8 @@ _DEV_ROLES = {
     "transcription-trigger": ["transcription.runs.create"],
     "task-requester": ["tasks.requests.create"],
     "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
+    "agent-dispatcher": ["tasks.agent-runs.read", "tasks.agent-runs.write"],
+    "agent-reporter": ["tasks.agent-runs.report"],
 }
 
 

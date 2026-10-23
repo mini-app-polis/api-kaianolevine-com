@@ -9,11 +9,18 @@ The ``/v1/tasks/groomings`` routes are task-manager-cog's memory between
 sweeps of the board, the month's paid grooming, and the hand-offs between
 task-manager-cog and task-groomer-cog (services/grooming_dispatch.py). See
 ``mini_app_polis.api.contract.groomings``.
+
+The ``/v1/tasks/agent-runs`` routes record the agent runs task-manager-cog
+dispatches for Ready tasks, their month's spend, and each run's result,
+which the run's workflow posts and this API hands to task-manager-cog
+(services/agent_dispatch.py). See ``mini_app_polis.api.contract.agent_runs``.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +28,12 @@ from ..auth import require_scope
 from ..config import get_settings
 from ..database import get_db_session
 from ..schemas import (
+    AgentResultAccepted,
+    AgentRun,
+    AgentRunCreate,
+    AgentRunFailure,
+    AgentRunResult,
+    AgentSpend,
     Envelope,
     GroomingJobAccepted,
     GroomingJobRequest,
@@ -36,7 +49,14 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import grooming_dispatch, groomings, job_queue, task_dispatch
+from ..services import (
+    agent_dispatch,
+    agent_runs,
+    grooming_dispatch,
+    groomings,
+    job_queue,
+    task_dispatch,
+)
 
 router = APIRouter()
 
@@ -218,5 +238,142 @@ async def submit_grooming_proposal(
     data = GroomingProposalAccepted(
         message_id=str(accepted.get("message_id") or ""),
         task_gid=payload.task_gid,
+    )
+    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+
+
+@router.post(
+    "/tasks/agent-runs",
+    response_model=Envelope[AgentRun],
+    status_code=201,
+    summary="Record an agent run about to be started",
+    description=(
+        "Written by task-manager-cog before it starts a run. A repository "
+        "with a run in flight is given no second one: that is a 409."
+    ),
+)
+async def record_agent_run(
+    payload: AgentRunCreate,
+    principal: Principal = Depends(require_scope("tasks.agent-runs.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[AgentRun]:
+    """Record one run; refuse a second in flight in the same repository."""
+    try:
+        run = await agent_runs.create_run(session, payload)
+    except agent_runs.RunInFlight as exc:
+        raise api_error(
+            409, "run_in_flight", f"{payload.repository} already has a run in flight"
+        ) from exc
+    return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
+
+
+@router.get(
+    "/tasks/agent-runs",
+    response_model=Envelope[list[AgentRun]],
+    summary="Agent runs, newest first",
+    description=(
+        "Narrowed by status and repository when given. The runs in flight "
+        "are status=dispatched."
+    ),
+)
+async def list_agent_runs(
+    status: Annotated[str | None, Query(max_length=20)] = None,
+    repository: Annotated[str | None, Query(max_length=100)] = None,
+    principal: Principal = Depends(require_scope("tasks.agent-runs.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[AgentRun]]:
+    """The runs that match, newest first."""
+    runs = await agent_runs.list_runs(session, status=status, repository=repository)
+    return success_envelope(
+        runs, count=len(runs), total=len(runs), version=get_settings().API_VERSION
+    )
+
+
+@router.get(
+    "/tasks/agent-runs/spend",
+    response_model=Envelope[AgentSpend],
+    summary="This month's agent runs, in total",
+    description=(
+        "The calendar month's runs and their known cost so far (UTC). "
+        "task-manager-cog reads it before each dispatch and stops at its "
+        "monthly cap."
+    ),
+)
+async def agent_spend(
+    principal: Principal = Depends(require_scope("tasks.agent-runs.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[AgentSpend]:
+    """The month's runs and their cost so far."""
+    spend = await agent_runs.month_spend(session)
+    return success_envelope(spend, count=1, total=1, version=get_settings().API_VERSION)
+
+
+def _ended_error(exc: Exception, run_id: str) -> Exception:
+    if isinstance(exc, agent_runs.RunNotFound):
+        return api_error(404, "run_not_found", f"No agent run {run_id}")
+    return api_error(409, "run_ended", f"Agent run {run_id} has already ended")
+
+
+@router.post(
+    "/tasks/agent-runs/failures",
+    response_model=Envelope[AgentRun],
+    summary="Mark a dispatched agent run failed",
+    description=(
+        "For a run that could not be started, or that never reported. Its "
+        "cost is unknown. A run that has already ended is a 409."
+    ),
+)
+async def fail_agent_run(
+    payload: AgentRunFailure,
+    principal: Principal = Depends(require_scope("tasks.agent-runs.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[AgentRun]:
+    """End one dispatched run as failed."""
+    try:
+        run = await agent_runs.fail_run(session, payload)
+    except (agent_runs.RunNotFound, agent_runs.RunAlreadyEnded) as exc:
+        raise _ended_error(exc, payload.run_id) from exc
+    return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
+
+
+@router.post(
+    "/tasks/agent-runs/results",
+    response_model=Envelope[AgentResultAccepted],
+    status_code=202,
+    summary="Record how an agent run ended, and hand it to task-manager-cog",
+    description=(
+        "Posted once by the run's workflow. The result is recorded and "
+        "queued for task-manager-cog, which moves the task. A second result "
+        "for the same run is a 409, so a repeated post cannot count its cost "
+        "twice."
+    ),
+)
+async def submit_agent_result(
+    payload: AgentRunResult,
+    request: Request,
+    principal: Principal = Depends(require_scope("tasks.agent-runs.report")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[AgentResultAccepted]:
+    """Record the result and queue it; commit only once it is queued.
+
+    A dropped result is a 502 and is not recorded, so the run stays in
+    flight and the workflow's post can be made again.
+    """
+    settings = get_settings()
+    try:
+        run = await agent_runs.end_run(session, payload)
+    except (agent_runs.RunNotFound, agent_runs.RunAlreadyEnded) as exc:
+        raise _ended_error(exc, payload.run_id) from exc
+    try:
+        accepted = await agent_dispatch.dispatch_result(run, settings=settings)
+    except agent_dispatch.DispatchError as exc:
+        await session.rollback()
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502, "dispatch_failed", f"The agent result was not enqueued: {exc}"
+        ) from exc
+    await session.commit()
+    data = AgentResultAccepted(
+        message_id=str(accepted.get("message_id") or ""), run_id=payload.run_id
     )
     return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
