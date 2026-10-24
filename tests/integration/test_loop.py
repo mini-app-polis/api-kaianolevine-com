@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kaianolevine_api.agents.wcs_qa.config import AgentConfig
 from kaianolevine_api.agents.wcs_qa.loop import AgentResult, run_agent
-from kaianolevine_api.models import LegacyWcsNote, WcsTranscript
+from kaianolevine_api.models import WcsSource, WcsTranscript
 from kaianolevine_api.retrieval.wcs.convergence import refresh_embeddings
 from tests.integration.conftest import grant_role
 
@@ -39,7 +39,6 @@ def _config(
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         embedding_model="text-embedding-3-small",
-        flattener_version=1,
         chunking_version=1,
         site_url="https://wcs.example.com",
     )
@@ -137,50 +136,41 @@ def embedder() -> KeywordEmbedder:
     return KeywordEmbedder()
 
 
-async def _seed_one_note(db_session: AsyncSession) -> LegacyWcsNote:
+async def _seed_one_lesson(db_session: AsyncSession) -> WcsSource:
+    """One private lesson, its transcript owned by the transcription cog."""
     transcript = WcsTranscript(
-        owner_id="dev-owner",
+        owner_id="mch_transcription_test",
         raw_text="Working with Sarah on anchor step timing today.",
         source_type="plaud",
         source_filename="2024-03-08.txt",
         drive_file_id="d-1",
     )
     db_session.add(transcript)
-    await db_session.commit()
-    await db_session.refresh(transcript)
-
-    note = LegacyWcsNote(
-        owner_id="dev-owner",
+    await db_session.flush()
+    source = WcsSource(
+        owner_id="mch_transcription_test",
         transcript_id=transcript.id,
         title="Anchor step deep dive",
         session_date=dt.date(2024, 3, 8),
         session_type="private_lesson",
-        visibility="private",
-        model="claude-sonnet-4-6",
-        provider="anthropic",
-        notes_json={
-            "summary": "Worked on anchor step timing.",
-            "key_concepts": ["anchor"],
-        },
-        instructors=["Kyle"],
-        students=["Sarah"],
-        organization="",
+        instructors_raw=["Kyle"],
+        students_raw=["Sarah"],
         is_default_visible=False,
     )
-    db_session.add(note)
+    db_session.add(source)
     await db_session.commit()
-    await db_session.refresh(note)
-    return note
+    await db_session.refresh(source)
+    return source
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
 async def test_simple_end_turn_with_valid_citations(db_session, embedder) -> None:
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     answer = (
         f"The anchor step lands on counts 5-and-6 [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -198,7 +188,6 @@ async def test_simple_end_turn_with_valid_citations(db_session, embedder) -> Non
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert isinstance(result, AgentResult)
     assert "[1]" in result.answer
@@ -212,19 +201,18 @@ async def test_simple_end_turn_with_valid_citations(db_session, embedder) -> Non
 
 
 async def test_tool_call_then_end_turn(db_session, embedder) -> None:
-    note = await _seed_one_note(db_session)
-    # Run convergence so search_notes finds the note.
+    lesson = await _seed_one_lesson(db_session)
+    # Run convergence so search_transcripts finds the lesson.
     await refresh_embeddings(
         session=db_session,
         embedder=embedder,
         embedding_model="text-embedding-3-small",
-        flattener_version=1,
         chunking_version=1,
     )
 
     final = (
         f"Per [1], the anchor lands on 5-and-6.\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -232,7 +220,7 @@ async def test_tool_call_then_end_turn(db_session, embedder) -> None:
                 content=[
                     _tool_use_block(
                         id="toolu_1",
-                        name="search_notes",
+                        name="search_transcripts",
                         input={"query": "anchor step"},
                     )
                 ],
@@ -253,7 +241,6 @@ async def test_tool_call_then_end_turn(db_session, embedder) -> None:
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.tool_calls_made == 1
     assert len(result.citations) == 1
@@ -271,11 +258,11 @@ async def test_tool_call_then_end_turn(db_session, embedder) -> None:
 
 async def test_tool_error_serialized_and_loop_continues(db_session, embedder) -> None:
     """Tool error → tool_result with is_error=True → model can recover."""
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     bad_uuid = str(_uuid.uuid4())  # not in DB
     final = (
         f"Per [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -283,8 +270,8 @@ async def test_tool_error_serialized_and_loop_continues(db_session, embedder) ->
                 content=[
                     _tool_use_block(
                         id="toolu_1",
-                        name="get_note",
-                        input={"note_id": bad_uuid},
+                        name="get_transcript_window",
+                        input={"chunk_id": f"{bad_uuid}:0"},
                     )
                 ],
                 stop_reason="tool_use",
@@ -298,13 +285,12 @@ async def test_tool_error_serialized_and_loop_continues(db_session, embedder) ->
         ]
     )
     result = await run_agent(
-        question="Tell me about that note",
+        question="Tell me about that lesson",
         session=db_session,
         embedder=embedder,
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.tool_calls_made == 1
     # Verify the tool error was sent back as is_error=True.
@@ -322,10 +308,10 @@ async def test_tool_error_serialized_and_loop_continues(db_session, embedder) ->
 
 async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
     """When cap is 1 and the model wants another tool call, exhaustion kicks in."""
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     final = (
         f"Best effort answer [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -334,7 +320,7 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
                 content=[
                     _tool_use_block(
                         id="t1",
-                        name="search_notes",
+                        name="search_transcripts",
                         input={"query": "anchor"},
                     )
                 ],
@@ -346,7 +332,7 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
                 content=[
                     _tool_use_block(
                         id="t2",
-                        name="search_notes",
+                        name="search_transcripts",
                         input={"query": "more"},
                     )
                 ],
@@ -365,7 +351,6 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
         session=db_session,
         embedder=embedder,
         embedding_model="text-embedding-3-small",
-        flattener_version=1,
         chunking_version=1,
     )
     result = await run_agent(
@@ -375,7 +360,6 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
         anthropic_client=client,
         config=_config(max_tool_calls=1),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.budget_exhausted is True
     # Final call must have tools=[] (exhaustion path).
@@ -393,10 +377,10 @@ async def test_tool_call_cap_triggers_exhaustion(db_session, embedder) -> None:
 
 async def test_token_cap_triggers_exhaustion(db_session, embedder) -> None:
     """Cumulative tokens >= cap → exhaustion path runs."""
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     final = (
         f"Short answer [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -405,7 +389,7 @@ async def test_token_cap_triggers_exhaustion(db_session, embedder) -> None:
                 content=[
                     _tool_use_block(
                         id="t1",
-                        name="search_notes",
+                        name="search_transcripts",
                         input={"query": "x"},
                     )
                 ],
@@ -424,7 +408,6 @@ async def test_token_cap_triggers_exhaustion(db_session, embedder) -> None:
         session=db_session,
         embedder=embedder,
         embedding_model="text-embedding-3-small",
-        flattener_version=1,
         chunking_version=1,
     )
     result = await run_agent(
@@ -434,17 +417,16 @@ async def test_token_cap_triggers_exhaustion(db_session, embedder) -> None:
         anthropic_client=client,
         config=_config(max_input_tokens=1000),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.budget_exhausted is True
 
 
 async def test_corrective_retry_on_missing_block(db_session, embedder) -> None:
     """First response missing block → retry message → valid block returned."""
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     valid = (
         f"Answer [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note.id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}}]\n[[CITATIONS_END]]'
     )
     client = StubAnthropic(
         [
@@ -467,7 +449,6 @@ async def test_corrective_retry_on_missing_block(db_session, embedder) -> None:
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.citation_parse_failed is False
     assert len(result.citations) == 1
@@ -505,7 +486,6 @@ async def test_corrective_retry_fails_returns_empty_citations(
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert result.citation_parse_failed is True
     assert result.citations == []
@@ -514,13 +494,13 @@ async def test_corrective_retry_fails_returns_empty_citations(
 
 async def test_invalid_citation_id_dropped(db_session, embedder) -> None:
     """Citation block with a bogus ID — entry is dropped, marker stays in text."""
-    note = await _seed_one_note(db_session)
+    lesson = await _seed_one_lesson(db_session)
     bogus = str(_uuid.uuid4())
     answer = (
         f"Real answer [1] and ghost reference [2].\n\n"
         f"[[CITATIONS_BEGIN]]\n["
-        f'{{"marker": 1, "type": "note", "id": "{note.id}"}},\n'
-        f'{{"marker": 2, "type": "note", "id": "{bogus}"}}'
+        f'{{"marker": 1, "type": "lesson", "id": "{lesson.id}"}},\n'
+        f'{{"marker": 2, "type": "lesson", "id": "{bogus}"}}'
         f"]\n[[CITATIONS_END]]"
     )
     client = StubAnthropic(
@@ -539,7 +519,6 @@ async def test_invalid_citation_id_dropped(db_session, embedder) -> None:
         anthropic_client=client,
         config=_config(),
         viewer_id="dev-owner",
-        owner_id="dev-owner",
     )
     assert len(result.citations) == 1
     assert result.citations[0].marker == 1

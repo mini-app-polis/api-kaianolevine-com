@@ -2,8 +2,9 @@
 
 The judge decides whether every claim in an answer is backed by a cited
 source, so it is given what those sources say: each cited wiki
-page, note and transcript window, read through the same tools the agent
-uses and as the asker sees them.
+page, lesson and transcript window, read through the same tools the agent
+uses and as the asker sees them. A lesson cited whole is given as its
+transcript, cut at :data:`LESSON_CHARS`.
 """
 
 from __future__ import annotations
@@ -15,9 +16,14 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api.config import Settings
+from kaianolevine_api.models import WcsTranscript
+from kaianolevine_api.retrieval.wcs.queries import fetch_visible_source
 from kaianolevine_api.retrieval.wcs.schemas import ToolError
-from kaianolevine_api.retrieval.wcs.tools import get_note, get_transcript_window
+from kaianolevine_api.retrieval.wcs.tools import get_transcript_window, lesson_title
 from kaianolevine_api.retrieval.wcs.wiki_pages import get_wiki_page
+
+#: How much of a lesson's transcript the judge is given for a lesson citation.
+LESSON_CHARS = 12_000
 
 
 async def cited_sources_text(
@@ -50,17 +56,20 @@ async def _read(
             name=c["id"],
         )
         return json.dumps(page.model_dump(mode="json", exclude_none=True), indent=1)
-    if c["type"] == "note":
-        note = await get_note(
-            session=session,
-            viewer_id=viewer_id,
-            site_url=settings.WCS_SITE_URL,
-            note_id=uuid.UUID(c["id"]),
-        )
-        return json.dumps(note.model_dump(mode="json"), indent=1)
+    if c["type"] == "lesson":
+        try:
+            source_id = uuid.UUID(c["id"])
+        except ValueError as exc:
+            raise ToolError("invalid_input", f"Bad lesson id: {c['id']!r}") from exc
+        source = await fetch_visible_source(session, source_id, viewer_id)
+        if source is None:
+            raise ToolError("not_found", f"Lesson {c['id']} not found")
+        transcript = await session.get(WcsTranscript, source.transcript_id)
+        text = transcript.raw_text if transcript is not None else ""
+        return f"{lesson_title(source, transcript)}\n\n{text[:LESSON_CHARS]}"
     window = await get_transcript_window(
         session=session,
-        owner_id=viewer_id,
+        viewer_id=viewer_id,
         site_url=settings.WCS_SITE_URL,
         embedding_model=settings.WCS_QA_EMBEDDING_MODEL,
         chunking_version=settings.WCS_QA_CHUNKING_VERSION,

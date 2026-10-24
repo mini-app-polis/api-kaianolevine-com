@@ -8,7 +8,7 @@ Routes are mounted at `/v1` (see `main.py`):
 
 | Method | Path | Auth | Purpose |
 | ------ | ---- | ---- | ------- |
-| `POST` | `/v1/wcs/embeddings/refresh` | `wcs.embeddings.write` (`wcs-admin`, `wcs-writer`) | Run the embedding convergence flow synchronously; returns counts of notes/transcripts embedded vs skipped. |
+| `POST` | `/v1/wcs/embeddings/refresh` | `wcs.embeddings.write` (`wcs-admin`, `wcs-writer`) | Run the embedding convergence flow synchronously; returns counts of transcripts and wiki pages embedded vs skipped. |
 | `POST` | `/v1/wcs/ask` | `wcs.notes.read` (every human, via `wcs-reader`) | Single-turn Q&A: run the agent loop and return answer + enriched citations + usage/cost. Retrieval is visibility-filtered per caller. |
 
 **Ask request body:** `{ "question": "<string, 1–5000 chars>" }` — no conversation history in v1.
@@ -25,18 +25,16 @@ Routes are mounted at `/v1` (see `main.py`):
 
 ## Corpus and scope
 
-v1 retrieval reads the **legacy notes + transcripts tables**, not the entity substrate (`wcs_sources`, attributions, etc.):
+Retrieval reads the **lessons** and the **wiki**:
 
-- **Notes:** `LegacyWcsNote` → table `_legacy_wcs_notes` (renamed from `wcs_notes` in migration 019). Structured `notes_json` from LLM extraction.
-- **Transcripts:** `WcsTranscript` → `wcs_transcripts`, chunked into `wcs_transcript_chunks` for search.
-
+- **Lessons:** `WcsSource` → `wcs_sources`. Each lesson's transcript (`WcsTranscript` → `wcs_transcripts`) is chunked into `wcs_transcript_chunks` for search. A lesson's title, date, type, instructors, students and organization come from the source, and its page on the site is `/notes/detail?id=<source id>`.
 - **Wiki pages:** `WcsWikiPageRow` → `wcs_wiki_pages`, the page documents wiki-curator-cog builds, embedded into `wcs_wiki_page_embeddings` (migration 063).
 
 ADR-0002 describes a future move to entity-grain retrieval tools; that migration is not implemented in the Q&A agent yet.
 
 ## Retrieval surface
 
-The agent exposes **six tools** to the model (`agents/wcs_qa/loop.py` → `retrieval/wcs/tools.py`, and `retrieval/wcs/wiki_pages.py` for the two over the wiki):
+The agent exposes **four tools** to the model (`agents/wcs_qa/loop.py` → `retrieval/wcs/tools.py`, and `retrieval/wcs/wiki_pages.py` for the two over the wiki):
 
 ### `search_wiki(query, k?)` and `get_wiki_page(name)`
 
@@ -45,32 +43,21 @@ The agent exposes **six tools** to the model (`agents/wcs_qa/loop.py` → `retri
 - Visibility is the /wiki routes' rule (`services/wcs_wiki_pages.py`): a page with no evidence, or with a source the asker can see, links to hidden sources reduced to their label. An admin sees every page, as on /admin/wiki.
 - The prompt starts questions about an idea at the wiki, then backs the answer with lessons, and answers first with the pages numbered ahead of the lessons.
 
-### `search_notes(query, k?, filters?)`
-
-- Embeds `query` via OpenAI, then **pgvector cosine distance** over `wcs_note_embeddings` joined to `_legacy_wcs_notes` (Postgres).
-- Returns up to `k` hits (default 10, max 25) with title, session metadata, snippet (~200 chars of flattened note text), and similarity `score`.
-- **No `source_url` on hits** — the model must call `get_note` before citing.
-- **Visibility:** same as the rest of WCS notes — default-visible OR admin OR explicit `wcs_note_grants` grant (`user_can_see_note`).
-- **Filters:** `date_from`, `date_to`, `instructors`, `session_type`, `organization`.
-
 ### `search_transcripts(query, k?, filters?)`
 
-- Vector search over `wcs_transcript_chunks` joined to `wcs_transcripts` (and optionally linked notes for metadata filters).
-- Each hit includes `chunk_id` as `"<transcript_uuid>:<chunk_index>"`, linked note title/date when available, and a snippet.
+- Vector search over `wcs_transcript_chunks`, joined to `wcs_transcripts` and each transcript's lesson (`wcs_sources`).
+- Each hit includes `chunk_id` as `"<transcript_uuid>:<chunk_index>"`, the lesson's `source_id`, title, date, type, instructors, students and organization, and a snippet.
 - **No `source_url` on hits** — use `get_transcript_window` before citing.
-- **Visibility:** **owner-scoped** — only chunks whose `owner_id` matches the authenticated caller. No grant model for transcripts in v1.
-- **Filters:** `date_from`, `date_to`, `instructors` (via linked note).
-
-### `get_note(note_id)`
-
-- Loads full structured note (`notes_json`) and `source_url` (`{WCS_SITE_URL}/notes/{uuid}`).
-- Returns `not_found` (via `ToolError`) if the note is missing or not visible to the viewer — no existence leak.
+- **Filters:** `date_from`, `date_to`, `instructors`, read from the lesson.
 
 ### `get_transcript_window(chunk_id, before?, after?)`
 
-- Fetches consecutive chunks around `chunk_id` (defaults: 1 before, 1 after).
-- Owner must match the transcript chunk's `owner_id`.
-- `source_url` in the window is set only when the transcript has exactly one linked legacy note.
+- Fetches consecutive chunks around `chunk_id` (defaults: 1 before, 1 after), with the lesson they belong to and its `source_url`.
+- Returns `not_found` (via `ToolError`) when the chunk is missing or its lesson is not visible to the asker — no existence leak.
+
+### Visibility
+
+A lesson is visible exactly as the wiki decides it (`services/wcs_source_visibility.visible_sources_clause`): every lesson for an asker whose roles carry `wcs.corpus.read`; otherwise the default-visible lessons and those granted to the asker (`wcs_source_grants`). The chunks' `owner_id` is still written but never decides visibility — every chunk is owned by the transcription cog's machine principal, so an owner filter would match no person.
 
 There is **no hybrid RRF or keyword fusion** in v1 — retrieval is embedding similarity only.
 
@@ -96,21 +83,19 @@ The system prompt (`agents/wcs_qa/prompts.py`) requires:
 [[CITATIONS_BEGIN]]
 [
   {"marker": 1, "type": "page", "id": "<page-slug>"},
-  {"marker": 2, "type": "note", "id": "<note-uuid>"},
+  {"marker": 2, "type": "lesson", "id": "<source-uuid>"},
   {"marker": 3, "type": "chunk", "id": "<transcript-uuid>:<chunk_index>"}
 ]
 [[CITATIONS_END]]
 ```
 
-Parsing is in `agents/wcs_qa/citations.py` (`SENTINEL_RE`, `parse_citations_block`). Valid `type` values: `page`, `note`, `chunk`. A page citation carries the page's name as `title`, its `kind`, and its /wiki `source_url`; one the asker may not see is dropped. The API strips the entire sentinel block from `answer` and returns enriched metadata per marker (`title`, `session_date`, instructors/students/organization, `source_url` where applicable).
-
-Chunk citations get `source_url` only when the transcript has exactly one linked legacy note; otherwise `source_url` is null in v1.
+Parsing is in `agents/wcs_qa/citations.py` (`SENTINEL_RE`, `parse_citations_block`). Valid `type` values: `page`, `lesson`, `chunk`. A lesson citation names a lesson by its source id; a chunk citation names a passage the agent read. Both carry the lesson's metadata and link to its page; one whose lesson the asker may not see, or a chunk whose transcript has no lesson, is dropped. A page citation carries the page's name as `title`, its `kind`, and its /wiki `source_url`; one the asker may not see is dropped. The API strips the entire sentinel block from `answer` and returns enriched metadata per marker (`title`, `session_date`, instructors/students/organization, `source_url` where applicable).
 
 ## Evaluation
 
 Offline eval lives under `tests/evals/` (not part of normal CI unless keys are present).
 
-**Question set:** `tests/evals/questions.yaml` — each entry has `id`, `question`, `ideal_answer`, and `ideal_source_ids` (`notes` / `chunks` UUID lists and `pages` slugs, for metric computation).
+**Question set:** `tests/evals/questions.yaml` — each entry has `id`, `question`, `ideal_answer`, and `ideal_source_ids` (`lessons` source UUIDs, `chunks` ids and `pages` slugs, for metric computation; runs recorded earlier carry `notes`).
 
 **Harness:** `tests/evals/test_harness.py`, run locally with:
 
@@ -135,18 +120,18 @@ Schema: migration `017_wcs_qa_embeddings.sql`.
 
 | Table | Grain | Key |
 | ----- | ----- | --- |
-| `wcs_note_embeddings` | One row per `(note_id, embedding_model, flattener_version)` | Embeds flattened note text |
 | `wcs_transcript_chunks` | One row per chunk × `(embedding_model, chunking_version)` | Chunk text + offsets + embedding |
 
 Vectors are **1536-dimensional** (`vector` extension). v1 uses **exact cosine search** (no ANN index) — acceptable at current corpus size.
 
 **Population:** `refresh_embeddings` (`retrieval/wcs/convergence.py`). It runs by itself after content changes (`retrieval/wcs/auto_refresh.py`): storing a transcript or a note, an admin edit to a note, or a page write that created, changed or removed a wiki page requests a refresh, which runs off the request path after `WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so one lesson's writes give one refresh. Every start requests one too, for anything a stopped process left. A failed refresh is retried, then reported to Discord's errors channel and Sentry. A Postgres advisory lock keeps refreshes one at a time across processes. `POST /v1/wcs/embeddings/refresh` still runs one on demand.
 
-- Computes canonical text per source (notes via `flatten_note` / `FLATTENER_VERSION`; transcripts via `chunk_transcript` / `chunking_version`; wiki pages via `wiki_pages.flatten_page` / `page_flattener_version`).
+- Computes canonical text per source (transcripts via `chunk_transcript` / `chunking_version`, each chunk embedded under its lesson's title, or the transcript's filename when the lesson has none; wiki pages via `wiki_pages.flatten_page` / `page_flattener_version`).
+- The legacy notes are no longer embedded: their table is empty and nothing searches it. `wcs_note_embeddings` remains in the schema, unused.
 - Stores `content_sha`; re-embeds only when the hash changes (idempotent).
 - Transcripts: if SHA mismatches, deletes existing chunks for that transcript at the current config and re-chunks + re-embeds.
 
-Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_FLATTENER_VERSION`, `WCS_QA_CHUNKING_VERSION`, `WCS_QA_PAGE_FLATTENER_VERSION`, `WCS_QA_REFRESH_DEBOUNCE_SECS` (listed in `.env.example`; defaults in `config.py`).
+Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_CHUNKING_VERSION`, `WCS_QA_PAGE_FLATTENER_VERSION`, `WCS_QA_REFRESH_DEBOUNCE_SECS` (listed in `.env.example`; defaults in `config.py`).
 
 During `ask`, the user's question is embedded on each `search_*` call; there is no separate index refresh in the ask path.
 

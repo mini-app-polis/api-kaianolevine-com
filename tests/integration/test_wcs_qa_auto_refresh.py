@@ -15,17 +15,35 @@ from kaianolevine_api.retrieval.wcs.convergence import RefreshSummary
 
 from .test_wcs_qa import (  # noqa: F401 - the seed fixture is autouse
     StubEmbedder,
-    _create_note,
+    _create_lesson,
     _create_transcript,
     seed_dev_owner_wcs_admin,
 )
 
 
+async def _create_note(client, transcript_id: str) -> None:
+    """A second write for the same lesson, through the notes route."""
+    resp = await client.post(
+        "/v1/wcs/notes",
+        json={
+            "transcript_id": transcript_id,
+            "title": "Frame and axis",
+            "session_date": "2024-03-08",
+            "session_type": "private_lesson",
+            "instructors": ["Kaiano"],
+            "students": ["Sarah"],
+            "organization": "",
+            "visibility": "private",
+            "model": "claude-sonnet-4-6",
+            "provider": "anthropic",
+            "notes_json": {"summary": "Worked on anchor step timing."},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def _summary() -> RefreshSummary:
     return RefreshSummary(
-        notes_total=0,
-        notes_embedded=0,
-        notes_skipped=0,
         transcripts_total=0,
         transcripts_embedded=0,
         transcripts_skipped=0,
@@ -161,17 +179,17 @@ async def test_refresh_once_embeds_under_the_lock(
         lambda t: [Chunk(chunk_index=0, start_offset=0, end_offset=len(t), text=t)],
     )
     transcript = await _create_transcript(client)
-    await _create_note(client, transcript["id"])
+    await _create_lesson(async_engine, transcript["id"])
     # The key only now, so the writes above requested nothing.
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     get_settings.cache_clear()
     settings = get_settings()
 
     summary = await auto_refresh.refresh_once(settings)
-    assert summary.notes_embedded == 1
+    assert summary.transcripts_embedded == 1
     assert summary.chunks_embedded == 1
     again = await auto_refresh.refresh_once(settings)
-    assert again.notes_embedded == 0
+    assert again.transcripts_embedded == 0
     assert again.chunks_embedded == 0
     async with async_engine.connect() as conn:
         held = await conn.scalar(

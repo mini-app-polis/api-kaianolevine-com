@@ -1,7 +1,7 @@
 """Convergence flow for WCS Q&A embeddings.
 
 Treats the embedding tables as a cache of the source corpus under a given
-(embedding_model, flattener_version, chunking_version) configuration. On every
+(embedding_model, chunking_version, page_flattener_version) configuration. On every
 run, computes the canonical text for each source row, hashes it, and embeds
 only rows whose stored hash doesn't match. No backfill step — the first run
 embeds everything; subsequent runs no-op for unchanged rows.
@@ -10,7 +10,8 @@ Wiki pages are keyed on (embedding_model, page_flattener_version)
 and hashed over the page text the Q&A searches (``wiki_pages.flatten_page``).
 
 For transcripts, content_sha is computed at the transcript level
-(sha256(title + raw_text)) and stored on every chunk. A transcript is "fresh"
+(sha256(title + raw_text)) and stored on every chunk. The title is the
+lesson's (its ``WcsSource``), or the transcript's filename when it has none. A transcript is "fresh"
 iff at least one of its chunks at the current config carries the matching SHA;
 otherwise we delete its existing chunks and re-chunk + re-embed from scratch.
 """
@@ -27,15 +28,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models import (
-    LegacyWcsNote,
-    WcsNoteEmbedding,
+    WcsSource,
     WcsTranscript,
     WcsTranscriptChunk,
     WcsWikiPageEmbedding,
     WcsWikiPageRow,
 )
 from .chunker import chunk_transcript
-from .flatten import flatten_note
 
 
 class Embedder(Protocol):
@@ -56,29 +55,11 @@ class RefreshSummary(BaseModel):
     """Counts and timing returned by ``refresh_embeddings``.
 
     All counters are scoped to the current ``(embedding_model,
-    flattener_version, chunking_version)`` configuration. ``embedded``
+    chunking_version, page_flattener_version)`` configuration. ``embedded``
     counts how many source rows had their embeddings recomputed;
     ``skipped`` counts rows whose stored content_sha already matched.
     """
 
-    notes_total: int = Field(
-        ...,
-        description=(
-            "Total number of WCS notes considered for refresh under the "
-            "current ``(embedding_model, flattener_version)`` config."
-        ),
-    )
-    notes_embedded: int = Field(
-        ...,
-        description="Notes whose embeddings were recomputed during this run.",
-    )
-    notes_skipped: int = Field(
-        ...,
-        description=(
-            "Notes left untouched because their stored content_sha already "
-            "matched the freshly computed flattened text."
-        ),
-    )
     transcripts_total: int = Field(
         ...,
         description=(
@@ -124,7 +105,7 @@ class RefreshSummary(BaseModel):
         ...,
         description=(
             "Wall-clock time, in milliseconds, that the refresh took end to "
-            "end (notes + transcripts + wiki pages)."
+            "end (transcripts + wiki pages)."
         ),
     )
 
@@ -134,26 +115,19 @@ async def refresh_embeddings(
     session: AsyncSession,
     embedder: Embedder,
     embedding_model: str,
-    flattener_version: int,
     chunking_version: int,
     page_flattener_version: int = 1,
 ) -> RefreshSummary:
-    """Embed every note, transcript chunk and wiki page pending under the config.
+    """Embed every transcript chunk and wiki page pending under the config.
 
     Treats the embedding tables as a content-addressed cache keyed on
-    ``(embedding_model, flattener_version, chunking_version)`` plus the
+    ``(embedding_model, chunking_version, page_flattener_version)`` plus the
     source row's flattened content. Rows whose stored ``content_sha``
     already matches are skipped; rows whose hash differs (or are missing)
     are re-embedded. Idempotent — re-running on unchanged content is a
     no-op. Returns a ``RefreshSummary`` with counts and timing.
     """
     started = dt.datetime.now(dt.UTC)
-    notes_stats = await _converge_notes(
-        session=session,
-        embedder=embedder,
-        embedding_model=embedding_model,
-        flattener_version=flattener_version,
-    )
     transcripts_stats = await _converge_transcripts(
         session=session,
         embedder=embedder,
@@ -168,9 +142,6 @@ async def refresh_embeddings(
     )
     duration_ms = int((dt.datetime.now(dt.UTC) - started).total_seconds() * 1000)
     return RefreshSummary(
-        notes_total=notes_stats["total"],
-        notes_embedded=notes_stats["embedded"],
-        notes_skipped=notes_stats["skipped"],
         transcripts_total=transcripts_stats["total"],
         transcripts_embedded=transcripts_stats["embedded"],
         transcripts_skipped=transcripts_stats["skipped"],
@@ -278,79 +249,6 @@ async def _converge_pages(
     }
 
 
-async def _converge_notes(
-    *,
-    session: AsyncSession,
-    embedder: Embedder,
-    embedding_model: str,
-    flattener_version: int,
-) -> dict[str, int]:
-    notes_q = await session.execute(select(LegacyWcsNote))
-    notes = list(notes_q.scalars().all())
-    if not notes:
-        return {"total": 0, "embedded": 0, "skipped": 0}
-
-    flats: dict[uuid.UUID, str] = {}
-    shas: dict[uuid.UUID, str] = {}
-    for n in notes:
-        flat = flatten_note(
-            title=n.title,
-            instructors=list(n.instructors or []),
-            students=list(n.students or []),
-            organization=n.organization,
-            session_date=n.session_date,
-            notes_json=n.notes_json or {},
-        )
-        flats[n.id] = flat
-        shas[n.id] = hashlib.sha256(flat.encode("utf-8")).hexdigest()
-
-    existing_q = await session.execute(
-        select(WcsNoteEmbedding.note_id, WcsNoteEmbedding.content_sha).where(
-            WcsNoteEmbedding.embedding_model == embedding_model,
-            WcsNoteEmbedding.flattener_version == flattener_version,
-        )
-    )
-    existing: dict[uuid.UUID, str] = {row[0]: row[1] for row in existing_q.all()}
-
-    pending = [n for n in notes if existing.get(n.id) != shas[n.id]]
-    if not pending:
-        return {"total": len(notes), "embedded": 0, "skipped": len(notes)}
-
-    pending_texts = [flats[n.id] for n in pending]
-    vectors = await embedder.embed(pending_texts)
-    if len(vectors) != len(pending):
-        raise RuntimeError(
-            f"Embedder returned {len(vectors)} vectors for {len(pending)} notes"
-        )
-
-    pending_ids = [n.id for n in pending]
-    await session.execute(
-        delete(WcsNoteEmbedding).where(
-            WcsNoteEmbedding.note_id.in_(pending_ids),
-            WcsNoteEmbedding.embedding_model == embedding_model,
-            WcsNoteEmbedding.flattener_version == flattener_version,
-        )
-    )
-    for n, vec in zip(pending, vectors, strict=True):
-        session.add(
-            WcsNoteEmbedding(
-                note_id=n.id,
-                owner_id=n.owner_id,
-                embedding=vec,
-                embedding_model=embedding_model,
-                flattener_version=flattener_version,
-                content_sha=shas[n.id],
-            )
-        )
-    await session.commit()
-
-    return {
-        "total": len(notes),
-        "embedded": len(pending),
-        "skipped": len(notes) - len(pending),
-    }
-
-
 async def _converge_transcripts(
     *,
     session: AsyncSession,
@@ -448,17 +346,24 @@ async def _converge_transcripts(
 async def _resolve_transcript_title(
     session: AsyncSession, transcript: WcsTranscript
 ) -> str:
-    """Title for embedding composition.
+    """The title a transcript's chunks are embedded under.
 
-    Uses the linked note's title when the transcript has exactly one note
-    with a non-empty title; falls back to source_filename otherwise. This
-    gives more semantic retrieval grounding when a note exists, while
-    staying deterministic for transcripts with zero or multiple notes.
+    The lesson's title (its ``WcsSource``), so a search for a lesson's
+    subject finds its chunks; the transcript's source filename when the
+    lesson has no title or the transcript no lesson.
     """
-    notes_q = await session.execute(
-        select(LegacyWcsNote.title).where(LegacyWcsNote.transcript_id == transcript.id)
+    titles = (
+        (
+            await session.execute(
+                select(WcsSource.title)
+                .where(WcsSource.transcript_id == transcript.id)
+                .order_by(WcsSource.id)
+                .limit(1)
+            )
+        )
+        .scalars()
+        .all()
     )
-    titles = [row[0] for row in notes_q.all()]
-    if len(titles) == 1 and titles[0]:
+    if titles and titles[0]:
         return titles[0]
     return transcript.source_filename

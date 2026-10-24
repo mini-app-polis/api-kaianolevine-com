@@ -1,7 +1,8 @@
 """Q&A embeddings refresh themselves when content changes.
 
 A write that changes what the Q&A searches — a transcript, a note, an admin
-edit to a note, or a page write that created, changed or removed a wiki page
+edit to a note, a lesson (source) composed or its metadata corrected, or a
+page write that created, changed or removed a wiki page
 — calls :func:`request_refresh` after it commits. The refresh runs off the request path, in this process,
 after :data:`Settings.WCS_QA_REFRESH_DEBOUNCE_SECS` of quiet, so a lesson's
 transcript, note and source arriving together give one refresh, not three.
@@ -138,7 +139,6 @@ async def refresh_once(settings: Settings) -> RefreshSummary:
                     session=session,
                     embedder=embedder,
                     embedding_model=settings.WCS_QA_EMBEDDING_MODEL,
-                    flattener_version=settings.WCS_QA_FLATTENER_VERSION,
                     chunking_version=settings.WCS_QA_CHUNKING_VERSION,
                     page_flattener_version=settings.WCS_QA_PAGE_FLATTENER_VERSION,
                 )
@@ -147,8 +147,8 @@ async def refresh_once(settings: Settings) -> RefreshSummary:
     logger.info(
         with_log_prefix(
             LOG_SUCCESS,
-            f"wcs embeddings refresh notes={summary.notes_embedded}/"
-            f"{summary.notes_total} chunks={summary.chunks_embedded} "
+            f"wcs embeddings refresh transcripts={summary.transcripts_embedded}/"
+            f"{summary.transcripts_total} chunks={summary.chunks_embedded} "
             f"pages={summary.pages_embedded}/{summary.pages_total} "
             f"duration_ms={summary.duration_ms}",
         )

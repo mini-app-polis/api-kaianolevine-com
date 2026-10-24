@@ -281,7 +281,6 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     WCS_QA_EMBEDDING_MODEL: str = "text-embedding-3-small"
-    WCS_QA_FLATTENER_VERSION: int = 1
     WCS_QA_CHUNKING_VERSION: int = 1
     WCS_QA_PAGE_FLATTENER_VERSION: int = 1
     # Quiet period before an automatic embeddings refresh: the

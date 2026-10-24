@@ -5,9 +5,13 @@ from __future__ import annotations
 from tests.evals.metrics import flatten_ids, source_precision, source_recall
 
 
-def test_flatten_ids_combines_notes_and_chunks() -> None:
-    out = flatten_ids({"notes": ["a", "b"], "chunks": ["c:0", "d:1"]})
-    assert out == {"a", "b", "c:0", "d:1"}
+def test_flatten_ids_combines_lessons_chunks_and_pages() -> None:
+    out = flatten_ids({"lessons": ["a", "b"], "chunks": ["c:0", "d:1"], "pages": ["p"]})
+    assert out == {"a", "b", "c:0", "d:1", "p"}
+
+
+def test_flatten_ids_still_reads_runs_recorded_with_notes() -> None:
+    assert flatten_ids({"notes": ["a"], "chunks": ["c:0"]}) == {"a", "c:0"}
 
 
 def test_flatten_ids_handles_none_and_missing() -> None:

@@ -63,27 +63,22 @@ async def _create_transcript(client, **overrides) -> dict:
     return resp.json()["data"]
 
 
-async def _create_note(client, transcript_id: str, **overrides) -> dict:
-    payload = {
-        "transcript_id": transcript_id,
-        "title": "Frame and axis",
-        "session_date": "2024-03-08",
-        "session_type": "private_lesson",
-        "instructors": ["Kaiano"],
-        "students": ["Sarah"],
-        "organization": "",
-        "visibility": "private",
-        "model": "claude-sonnet-4-6",
-        "provider": "anthropic",
-        "notes_json": {
-            "summary": "Worked on anchor step timing.",
-            "key_concepts": ["frame", "axis"],
-        },
-    }
-    payload.update(overrides)
-    resp = await client.post("/v1/wcs/notes", json=payload)
-    assert resp.status_code == 200, resp.text
-    return resp.json()["data"]
+async def _create_lesson(
+    async_engine, transcript_id: str, *, title: str | None = "Frame and axis"
+) -> str:
+    """A lesson (a WcsSource) on the transcript; returns its id."""
+    source_id = _uuid.uuid4()
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_sources (id, owner_id, transcript_id, title, "
+                "session_date, session_type, instructors_raw, students_raw) "
+                "VALUES (:id, 'mch_transcription_test', :tid, :title, "
+                "'2024-03-08', 'private_lesson', ARRAY['Kaiano'], ARRAY['Sarah'])"
+            ),
+            {"id": source_id, "tid": _uuid.UUID(transcript_id), "title": title},
+        )
+    return str(source_id)
 
 
 # ── Auth + plumbing ───────────────────────────────────────────────────────────
@@ -123,76 +118,64 @@ async def test_refresh_with_empty_corpus(client, stub_embedder) -> None:
     resp = await client.post("/v1/wcs/embeddings/refresh")
     assert resp.status_code == 200
     summary = resp.json()["data"]
-    assert summary["notes_total"] == 0
-    assert summary["notes_embedded"] == 0
     assert summary["transcripts_total"] == 0
     assert summary["transcripts_embedded"] == 0
     assert summary["chunks_embedded"] == 0
     assert stub_embedder.calls == []
 
 
-async def test_refresh_embeds_notes_and_transcripts(
-    client, stub_embedder, async_engine
-) -> None:
+async def test_refresh_embeds_transcripts(client, stub_embedder, async_engine) -> None:
     transcript = await _create_transcript(client)
-    await _create_note(client, transcript["id"])
+    await _create_lesson(async_engine, transcript["id"])
 
     resp = await client.post("/v1/wcs/embeddings/refresh")
     assert resp.status_code == 200, resp.text
     s = resp.json()["data"]
 
-    assert s["notes_total"] == 1
-    assert s["notes_embedded"] == 1
-    assert s["notes_skipped"] == 0
     assert s["transcripts_total"] == 1
     assert s["transcripts_embedded"] == 1
     assert s["chunks_embedded"] >= 1
 
     async with async_engine.begin() as conn:
-        ne = (
-            await conn.execute(text("SELECT count(*) FROM wcs_note_embeddings"))
-        ).scalar()
         tc = (
             await conn.execute(text("SELECT count(*) FROM wcs_transcript_chunks"))
         ).scalar()
-    assert ne == 1
     assert tc == s["chunks_embedded"]
 
 
-async def test_refresh_idempotent_when_nothing_changed(client, stub_embedder) -> None:
+async def test_refresh_idempotent_when_nothing_changed(
+    client, stub_embedder, async_engine
+) -> None:
     t = await _create_transcript(client)
-    await _create_note(client, t["id"])
+    await _create_lesson(async_engine, t["id"])
 
     first = (await client.post("/v1/wcs/embeddings/refresh")).json()["data"]
     second = (await client.post("/v1/wcs/embeddings/refresh")).json()["data"]
 
-    assert first["notes_embedded"] == 1
-    assert second["notes_embedded"] == 0
-    assert second["notes_skipped"] == first["notes_total"]
+    assert first["transcripts_embedded"] == 1
+    assert second["transcripts_skipped"] == first["transcripts_total"]
     assert second["transcripts_embedded"] == 0
     assert second["chunks_embedded"] == 0
 
 
-async def test_refresh_re_embeds_after_note_edit(
+async def test_refresh_re_embeds_after_the_lessons_title_changes(
     client, stub_embedder, async_engine
 ) -> None:
     t = await _create_transcript(client)
-    note = await _create_note(client, t["id"])
+    lesson_id = await _create_lesson(async_engine, t["id"])
 
     await client.post("/v1/wcs/embeddings/refresh")
 
     async with async_engine.begin() as conn:
         await conn.execute(
-            text("UPDATE _legacy_wcs_notes SET title = 'New title' WHERE id = :id"),
-            {"id": _uuid.UUID(note["id"])},
+            text("UPDATE wcs_sources SET title = 'New title' WHERE id = :id"),
+            {"id": _uuid.UUID(lesson_id)},
         )
 
     resp = await client.post("/v1/wcs/embeddings/refresh")
     s = resp.json()["data"]
-    assert s["notes_embedded"] == 1
-    assert s["notes_skipped"] == 0
-    # The transcript itself didn't change, but its derived title did (since
-    # convergence falls back to the linked note's title). Expected to re-embed.
+    # The transcript itself didn't change, but its title (the lesson's) did,
+    # and the chunks are embedded under it. Expected to re-embed.
     assert s["transcripts_embedded"] == 1
 
 
@@ -200,7 +183,7 @@ async def test_refresh_re_embeds_after_transcript_edit(
     client, stub_embedder, async_engine
 ) -> None:
     t = await _create_transcript(client)
-    await _create_note(client, t["id"])
+    await _create_lesson(async_engine, t["id"])
     await client.post("/v1/wcs/embeddings/refresh")
 
     async with async_engine.begin() as conn:
@@ -215,11 +198,12 @@ async def test_refresh_re_embeds_after_transcript_edit(
     s = resp.json()["data"]
     assert s["transcripts_embedded"] == 1
     assert s["chunks_embedded"] >= 1
-    assert s["notes_embedded"] == 0
 
 
-async def test_refresh_uses_source_filename_when_no_note(client, stub_embedder) -> None:
-    """Transcript without a linked note falls back to source_filename for title."""
+async def test_refresh_uses_source_filename_when_no_lesson(
+    client, stub_embedder
+) -> None:
+    """A transcript with no lesson is embedded under its source_filename."""
     await _create_transcript(client, source_filename="naked-transcript.txt")
     await client.post("/v1/wcs/embeddings/refresh")
 
@@ -230,28 +214,32 @@ async def test_refresh_uses_source_filename_when_no_note(client, stub_embedder) 
     )
 
 
-async def test_refresh_handles_two_notes_falls_back_to_filename(
-    client, stub_embedder
+async def test_refresh_embeds_chunks_under_the_lessons_title(
+    client, stub_embedder, async_engine
 ) -> None:
-    """Two notes per transcript — title resolution falls back to source_filename."""
-    t = await _create_transcript(client, source_filename="ambiguous.txt")
-    await _create_note(client, t["id"], title="Title A")
-    await _create_note(client, t["id"], title="Title B")
+    t = await _create_transcript(client, source_filename="plain.txt")
+    await _create_lesson(async_engine, t["id"], title="Weighted connection")
     await client.post("/v1/wcs/embeddings/refresh")
-    assert any(
-        any("ambiguous.txt" in inp for inp in batch) for batch in stub_embedder.calls
-    )
+    inputs = [inp for batch in stub_embedder.calls for inp in batch]
+    assert inputs and all(inp.startswith("Weighted connection\n\n") for inp in inputs)
 
 
-async def test_refresh_summary_shape(client, stub_embedder) -> None:
+async def test_refresh_falls_back_to_the_filename_for_an_untitled_lesson(
+    client, stub_embedder, async_engine
+) -> None:
+    t = await _create_transcript(client, source_filename="untitled.txt")
+    await _create_lesson(async_engine, t["id"], title=None)
+    await client.post("/v1/wcs/embeddings/refresh")
+    inputs = [inp for batch in stub_embedder.calls for inp in batch]
+    assert inputs and all(inp.startswith("untitled.txt\n\n") for inp in inputs)
+
+
+async def test_refresh_summary_shape(client, stub_embedder, async_engine) -> None:
     t = await _create_transcript(client)
-    await _create_note(client, t["id"])
+    await _create_lesson(async_engine, t["id"])
     resp = await client.post("/v1/wcs/embeddings/refresh")
     s = resp.json()["data"]
     expected_keys = {
-        "notes_total",
-        "notes_embedded",
-        "notes_skipped",
         "transcripts_total",
         "transcripts_embedded",
         "transcripts_skipped",
@@ -405,15 +393,16 @@ async def test_ask_happy_path_returns_envelope(
         assert usage["cost_usd"] >= 0.0
 
 
-async def test_ask_returns_enriched_citations(client, stub_embedder) -> None:
-    """End-to-end: seed a note, the agent cites it, response has full citation."""
+async def test_ask_returns_enriched_citations(
+    client, stub_embedder, async_engine
+) -> None:
+    """End-to-end: seed a lesson, the agent cites it, response has full citation."""
     transcript = await _create_transcript(client)
-    note = await _create_note(client, transcript["id"])
-    note_id = note["id"]
+    lesson_id = await _create_lesson(async_engine, transcript["id"])
 
     answer = (
         f"The anchor step lands on counts 5-and-6 [1].\n\n"
-        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "note", "id": "{note_id}"}}]\n[[CITATIONS_END]]'
+        f'[[CITATIONS_BEGIN]]\n[{{"marker": 1, "type": "lesson", "id": "{lesson_id}"}}]\n[[CITATIONS_END]]'
     )
     _override_anthropic(
         [
@@ -435,10 +424,11 @@ async def test_ask_returns_enriched_citations(client, stub_embedder) -> None:
         assert len(data["citations"]) == 1
         c = data["citations"][0]
         assert c["marker"] == 1
-        assert c["type"] == "note"
-        assert c["id"] == note_id
-        assert c["source_url"].endswith(f"/notes/detail?id={note_id}")
-        # Notes don't carry transcript_id — exclude_none drops it.
+        assert c["type"] == "lesson"
+        assert c["id"] == lesson_id
+        assert c["title"] == "Frame and axis"
+        assert c["source_url"].endswith(f"/notes/detail?id={lesson_id}")
+        # A lesson citation carries no transcript_id — exclude_none drops it.
         assert "transcript_id" not in c
     finally:
         app.dependency_overrides.pop(get_anthropic_client, None)
@@ -464,7 +454,7 @@ async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> No
                     {
                         "type": "tool_use",
                         "id": "t1",
-                        "name": "search_notes",
+                        "name": "search_transcripts",
                         "input": {"query": "anchor"},
                     }
                 ],
@@ -476,7 +466,7 @@ async def test_ask_budget_exhausted_flag_propagates(client, stub_embedder) -> No
                     {
                         "type": "tool_use",
                         "id": "t2",
-                        "name": "search_notes",
+                        "name": "search_transcripts",
                         "input": {"query": "more"},
                     }
                 ],

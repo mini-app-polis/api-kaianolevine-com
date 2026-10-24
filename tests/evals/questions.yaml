@@ -7,8 +7,8 @@
 #   question          Natural-language question as a user would type it.
 #   ideal_answer      Substantive minimum a correct response should contain.
 #                     The Opus judge compares the agent's answer against this.
-#   ideal_source_ids  - notes:  list of note UUIDs from wcs_notes
-#                     - chunks: list of "<transcript_uuid>:<chunk_index>" composite IDs
+#   ideal_source_ids  - lessons: list of lesson (wcs_sources) UUIDs
+#                     - chunks:  list of "<transcript_uuid>:<chunk_index>" composite IDs
 #                     - pages:  list of wiki page slugs
 #                     Used for source_recall / source_precision.
 #   difficulty        easy   = single source, direct lookup
@@ -21,7 +21,7 @@
 # - Roughly 1/3 easy, 1/3 medium, 1/3 hard. Mix categories within each band.
 # - Include "no answer in corpus" questions: empty ideal_source_ids,
 #   ideal_answer like "There is no information about X in the available
-#   notes or transcripts." Tests hallucination resistance.
+#   lessons." Tests hallucination resistance.
 # - Vary date specificity (explicit, rough range, none) to exercise filters.
 # - Use real UUIDs once Step 3 has populated the corpus. Don't fabricate.
 
@@ -33,8 +33,8 @@
     a step. Prematurely committing weight on the "and" is a common mistake
     and breaks the connection.
   ideal_source_ids:
-    notes:
-      - "REPLACE_WITH_REAL_NOTE_UUID"
+    lessons:
+      - "REPLACE_WITH_REAL_SOURCE_UUID"
     chunks:
       - "REPLACE_WITH_REAL_TRANSCRIPT_UUID:4"
       - "REPLACE_WITH_REAL_TRANSCRIPT_UUID:5"
@@ -42,10 +42,11 @@
   category: factual
   notes: |
     Single-instructor, single-lesson, single-topic with explicit date.
-    Tests basic retrieval path: search_notes with date filter, get_note for
-    the match, search_transcripts for the same date, get_transcript_window.
-    If this fails, retrieval is broken — not the reasoning. Once corpus is
-    embedded, replace placeholder UUIDs with real values from the DB.
+    Tests basic retrieval path: search_transcripts with a date filter, then
+    get_transcript_window for the match, cited as the lesson and its chunks.
+    If this fails, retrieval is broken — not the reasoning. Replace the
+    placeholder ids with the lesson's source id and its chunk ids from the
+    production corpus.
 
 # ── Wiki pages ────────────────────────────────────────────────────────────────
 # Questions whose best answer is a wiki page. Slugs and ideal answers are from

@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import require_scope
 from ..config import get_settings
 from ..database import get_db_session
+from ..retrieval.wcs import auto_refresh
 from ..schemas import (
     Envelope,
     WcsSourceCreate,
@@ -117,6 +118,8 @@ async def create_source(
         source.id,
         composition.attributions_written,
     )
+    # The Q&A embeds a transcript's chunks under its lesson's title.
+    auto_refresh.request_refresh(settings)
     # Into the wiki, when that is switched on. After the commit, so the job
     # finds the composed source; and never failing the ingest — a dropped job
     # is reported, and the source waits for the next local run.
