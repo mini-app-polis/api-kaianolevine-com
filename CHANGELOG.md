@@ -1,3 +1,10 @@
+## [2.30.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.3...v2.30.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **wcs-qa:** lessons are visible by source, not by owner ([cf57712](https://github.com/mini-app-polis/api-kaianolevine-com/commit/cf5771283a19e6b35c435b685ba7f2af347b675a))
+
 ## [2.30.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.2...v2.30.3) (2026-10-24)
 
 
