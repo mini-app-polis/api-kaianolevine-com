@@ -6,6 +6,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mini_app_polis.api.contract import TaskGroomMessage, TaskGroomProposalMessage
+from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -225,6 +227,10 @@ async def test_a_job_goes_to_the_groomers_queue(monkeypatch) -> None:
     assert "MessageGroupId" not in sent
     body = json.loads(sent["MessageBody"])
     assert (body["type"], body["version"]) == ("task.groom", 1)
+    # What task-groomer-cog's worker reads it as.
+    assert parse_message(sent["MessageBody"], TaskGroomMessage).payload == (
+        GroomingJobRequest.model_validate(JOB)
+    )
     assert GroomingJobRequest.model_validate(body["payload"]) == (
         GroomingJobRequest.model_validate(JOB)
     )
@@ -243,6 +249,10 @@ async def test_a_proposal_goes_to_the_task_managers_queue(monkeypatch) -> None:
     assert sent["MessageGroupId"] == "task-manager"
     body = json.loads(sent["MessageBody"])
     assert (body["type"], body["version"]) == ("task.groom-proposal", 1)
+    # What task-manager-cog's worker reads it as.
+    assert parse_message(sent["MessageBody"], TaskGroomProposalMessage).payload == (
+        GroomingProposal.model_validate(PROPOSAL)
+    )
 
 
 async def test_the_groomer_proposes_and_never_asks_for_tasks() -> None:

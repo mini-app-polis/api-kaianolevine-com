@@ -11,6 +11,8 @@ import httpx
 import pytest
 from identity.store.models import Principal, PrincipalRole
 from identity.types import VerifiedSubject
+from mini_app_polis.api.contract import TaskAgentResultMessage
+from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -324,6 +326,8 @@ async def test_a_result_goes_to_the_task_managers_queue(monkeypatch) -> None:
     body = json.loads(sent["MessageBody"])
     assert (body["type"], body["version"]) == ("task.agent-result", 1)
     assert AgentRun.model_validate(body["payload"]) == run
+    # What task-manager-cog's worker reads it as.
+    assert parse_message(sent["MessageBody"], TaskAgentResultMessage).payload == run
 
 
 # ── spend ─────────────────────────────────────────────────────────────────

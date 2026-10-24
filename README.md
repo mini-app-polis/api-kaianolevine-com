@@ -194,6 +194,10 @@ Required environment variables:
   Doppler-managed. Key material is never stored in the database, hashed
   or otherwise; the principal store holds names and grants only.
 
+Every variable the service reads, auth's included, is listed with whether it
+is required in [`.env.example`](.env.example); defaults are in
+`src/kaianolevine_api/config.py`.
+
 Machine principals and their roles are declared in code and reconciled
 into the store at boot. Adding a cog is a reviewed code change, not a
 row inserted by hand.

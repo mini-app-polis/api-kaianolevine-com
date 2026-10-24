@@ -253,7 +253,7 @@ async def test_every_message_is_a_repository_message(monkeypatch) -> None:
         await dispatch.dispatch_fleet(job, settings=get_settings())
 
     kinds = {call.args[0]["type"] for call in enqueue.await_args_list}
-    assert kinds == {dispatch.TYPE_REPOSITORY}
+    assert kinds == {"evaluation.repository"}
 
 
 async def test_a_partial_fan_out_reports_but_does_not_raise(monkeypatch) -> None:

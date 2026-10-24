@@ -40,6 +40,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from mini_app_polis import activity
+from mini_app_polis.api.contract import (
+    EvaluationIntrospectionMessage,
+    EvaluationIntrospectionPayload,
+    EvaluationRepositoryMessage,
+    EvaluationRepositoryPayload,
+)
 from mini_app_polis.logger import get_logger
 
 from ..config import Settings
@@ -51,28 +57,15 @@ logger = get_logger()
 #: How the errors channel names a dropped evaluation.
 _HEADING = "Evaluation not dispatched"
 
-#: Schema version carried on every message.
-#:
-#: A consumer that speaks a different version refuses the message rather
-#: than misreading it. That matters most on a redeploy, where a producer
-#: and a consumer are briefly on different builds.
-MESSAGE_VERSION = 1
 
-#: Message types.
-#:
-#: One queue per cog, not one queue for the fleet. An earlier draft said
-#: the opposite and it cannot work: SQS has no selective receive, so a
-#: consumer takes whatever it is handed. On a shared queue this cog's
-#: consumer would receive another cog's message, fail to recognise the
-#: type, and its redrive policy would put that cog's job in *this* cog's
-#: dead-letter queue — every consumer doing it to every other, with the
-#: winner decided by a race.
-#:
-#: The discriminator still earns its place on a cog's own queue: an
-#: unrecognised type there means a producer bug, and dead-lettering it
-#: deliberately beats guessing at it.
-TYPE_REPOSITORY = "evaluation.repository"
-TYPE_INTROSPECTION = "evaluation.introspection"
+def _repository_message(payload: dict[str, Any]) -> dict[str, Any]:
+    """One ``evaluation.repository`` message carrying ``payload``.
+
+    Fields the payload leaves out stay out, rather than being sent as null.
+    """
+    return EvaluationRepositoryMessage(
+        payload=EvaluationRepositoryPayload.model_validate(payload)
+    ).model_dump(mode="json", exclude_none=True)
 
 
 @dataclass(frozen=True)
@@ -87,7 +80,7 @@ class EvaluationJob:
     run_id: str | None = None
 
     def as_message(self) -> dict[str, Any]:
-        """Render this job as one ``TYPE_REPOSITORY`` queue message.
+        """Render this job as one ``evaluation.repository`` queue message.
 
         Optional fields are omitted rather than sent as null, so the
         payload carries only what the caller actually supplied.
@@ -102,7 +95,7 @@ class EvaluationJob:
             payload["repo_id"] = self.repo_id
         if self.run_id:
             payload["run_id"] = self.run_id
-        return {"type": TYPE_REPOSITORY, "version": MESSAGE_VERSION, "payload": payload}
+        return _repository_message(payload)
 
 
 @dataclass(frozen=True)
@@ -157,13 +150,7 @@ class FleetJob:
                 payload["monorepo"] = unit.monorepo
             if self.standards_version:
                 payload["standards_version"] = self.standards_version
-            out.append(
-                {
-                    "type": TYPE_REPOSITORY,
-                    "version": MESSAGE_VERSION,
-                    "payload": payload,
-                }
-            )
+            out.append(_repository_message(payload))
         return out
 
 
@@ -191,7 +178,7 @@ class IntrospectionJob:
     standards_version: str = ""
 
     def as_message(self) -> dict[str, Any]:
-        """Render this job as one ``TYPE_INTROSPECTION`` queue message.
+        """Render this job as one ``evaluation.introspection`` queue message.
 
         ``pass_run_id`` and ``standards_version`` are omitted when unset;
         the class docstring says what an omitted ``pass_run_id`` means.
@@ -201,11 +188,9 @@ class IntrospectionJob:
             payload["pass_run_id"] = self.pass_run_id
         if self.standards_version:
             payload["standards_version"] = self.standards_version
-        return {
-            "type": TYPE_INTROSPECTION,
-            "version": MESSAGE_VERSION,
-            "payload": payload,
-        }
+        return EvaluationIntrospectionMessage(
+            payload=EvaluationIntrospectionPayload.model_validate(payload)
+        ).model_dump(mode="json", exclude_none=True)
 
 
 async def dispatch_evaluation(job: EvaluationJob, *, settings: Settings) -> dict:

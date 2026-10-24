@@ -31,7 +31,7 @@ def _configured(monkeypatch) -> None:
 def test_the_job_carries_its_own_run_id() -> None:
     message = dispatch.IntrospectionJob(run_id="introspection-7.0.0-abc").as_message()
 
-    assert message["type"] == dispatch.TYPE_INTROSPECTION
+    assert message["type"] == "evaluation.introspection"
     assert message["payload"]["run_id"] == "introspection-7.0.0-abc"
 
 

@@ -45,6 +45,7 @@ import uuid
 import zlib
 from typing import Any
 
+from mini_app_polis.api.contract import WikiJobMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,8 +58,6 @@ from .job_queue import DispatchError
 __all__ = [
     "COG",
     "FLAG",
-    "MESSAGE_VERSION",
-    "TYPE_JOB",
     "DispatchError",
     "as_message",
     "dispatch_wiki_job",
@@ -68,11 +67,6 @@ __all__ = [
 #: The cog's queue name prefix: ``wiki-curator-jobs.fifo`` in production.
 #: Must match infra's cog-worker ``name`` and job_queue.FIFO_COGS.
 COG = "wiki-curator"
-
-#: Must match wiki-curator-cog's worker. A mismatch is a message the
-#: consumer refuses rather than misreads.
-MESSAGE_VERSION = 1
-TYPE_JOB = "wiki.job"
 
 #: Message groups materialise jobs spread over. How many actually run at
 #: once is the smaller of this and the curator's concurrency ceiling (infra
@@ -101,12 +95,8 @@ async def jobs_enabled(session: AsyncSession) -> bool:
 
 
 def as_message(job: WcsWikiJob) -> dict[str, Any]:
-    """One ``TYPE_JOB`` queue message; the payload is the job, nulls left out."""
-    return {
-        "type": TYPE_JOB,
-        "version": MESSAGE_VERSION,
-        "payload": job.model_dump(mode="json", exclude_none=True),
-    }
+    """One ``wiki.job`` queue message; the payload is the job, nulls left out."""
+    return WikiJobMessage(payload=job).model_dump(mode="json", exclude_none=True)
 
 
 #: How long SQS treats an identical message body as the same message: the

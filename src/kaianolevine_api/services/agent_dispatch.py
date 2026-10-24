@@ -11,35 +11,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from mini_app_polis.api.contract import AgentRun
+from mini_app_polis.api.contract import AgentRun, TaskAgentResultMessage
 
 from ..config import Settings
 from . import job_queue
 from .job_queue import DispatchError
 
 __all__ = [
-    "MESSAGE_VERSION",
-    "TYPE_RESULT",
     "DispatchError",
     "dispatch_result",
     "result_message",
 ]
 
-#: Schema version carried on the message. A consumer refuses a version it
-#: does not speak rather than misreading it.
-MESSAGE_VERSION = 1
-
-#: A run's result, on task-manager-jobs.fifo beside task.create and task.sweep.
-TYPE_RESULT = "task.agent-result"
-
 
 def result_message(run: AgentRun) -> dict[str, Any]:
-    """Render one ended run as a ``TYPE_RESULT`` queue message."""
-    return {
-        "type": TYPE_RESULT,
-        "version": MESSAGE_VERSION,
-        "payload": run.model_dump(mode="json", exclude_none=True),
-    }
+    """Render one ended run as a ``task.agent-result`` queue message."""
+    return TaskAgentResultMessage(payload=run).model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 async def dispatch_result(run: AgentRun, *, settings: Settings) -> dict:

@@ -146,7 +146,7 @@ Vectors are **1536-dimensional** (`vector` extension). v1 uses **exact cosine se
 - Stores `content_sha`; re-embeds only when the hash changes (idempotent).
 - Transcripts: if SHA mismatches, deletes existing chunks for that transcript at the current config and re-chunks + re-embeds.
 
-Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_FLATTENER_VERSION`, `WCS_QA_CHUNKING_VERSION`, `WCS_QA_PAGE_FLATTENER_VERSION`, `WCS_QA_REFRESH_DEBOUNCE_SECS` (see `config.py`).
+Config knobs: `WCS_QA_EMBEDDING_MODEL`, `WCS_QA_FLATTENER_VERSION`, `WCS_QA_CHUNKING_VERSION`, `WCS_QA_PAGE_FLATTENER_VERSION`, `WCS_QA_REFRESH_DEBOUNCE_SECS` (listed in `.env.example`; defaults in `config.py`).
 
 During `ask`, the user's question is embedded on each `search_*` call; there is no separate index refresh in the ask path.
 
