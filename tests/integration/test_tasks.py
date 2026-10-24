@@ -15,6 +15,8 @@ import httpx
 import pytest
 from identity.store.models import Principal, PrincipalRole
 from identity.types import VerifiedSubject
+from mini_app_polis.api.contract import TaskCreateMessage
+from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api import auth as auth_mod
@@ -190,6 +192,10 @@ async def test_a_request_goes_to_the_task_managers_queue(monkeypatch) -> None:
     body = json.loads(sent["MessageBody"])
     assert body["type"] == "task.create"
     assert body["version"] == 1
+    # What task-manager-cog's worker reads it as.
+    assert parse_message(sent["MessageBody"], TaskCreateMessage).payload == (
+        TaskCreateRequest.model_validate(VOICENOTE)
+    )
     assert TaskCreateRequest.model_validate(body["payload"]) == (
         TaskCreateRequest.model_validate(VOICENOTE)
     )

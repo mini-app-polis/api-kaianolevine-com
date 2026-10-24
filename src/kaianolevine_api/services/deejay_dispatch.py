@@ -22,27 +22,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from mini_app_polis.api.contract import DeejayRunMessage, DeejayRunPayload
+
 from ..config import Settings
 from . import job_queue
 from .job_queue import DispatchError
 
 __all__ = [
-    "MESSAGE_VERSION",
-    "TYPE_RUN",
     "DeejayJob",
     "DispatchError",
     "dispatch_deejay",
 ]
-
-#: Schema version carried on every message. The consumer refuses a version
-#: it does not speak rather than misreading it, which is what makes a
-#: producer/consumer redeploy safe.
-MESSAGE_VERSION = 1
-
-#: The one message type on deejay-jobs. It is a producer-bug detector, not
-#: a router: the queue is deejay's own, so an unrecognised type there is
-#: something enqueued wrongly. ``mode`` in the payload is what routes.
-TYPE_RUN = "deejay.run"
 
 
 @dataclass(frozen=True)
@@ -52,12 +42,10 @@ class DeejayJob:
     mode: str
 
     def as_message(self) -> dict[str, Any]:
-        """Render this job as one ``TYPE_RUN`` queue message."""
-        return {
-            "type": TYPE_RUN,
-            "version": MESSAGE_VERSION,
-            "payload": {"mode": self.mode},
-        }
+        """Render this job as one ``deejay.run`` queue message."""
+        return DeejayRunMessage(payload=DeejayRunPayload(mode=self.mode)).model_dump(
+            mode="json", exclude_none=True
+        )
 
 
 async def dispatch_deejay(job: DeejayJob, *, settings: Settings) -> dict:

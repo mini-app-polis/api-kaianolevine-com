@@ -1306,7 +1306,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44.0.1,<51.0" },
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
-    { name = "miniapppolis-common-utils", specifier = ">=6.21.0,<7" },
+    { name = "miniapppolis-common-utils", specifier = ">=6.22.0,<7" },
     { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.1.6,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.2" },
     { name = "openai", specifier = ">=1.40,<4.0" },

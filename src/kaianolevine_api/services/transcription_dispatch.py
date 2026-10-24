@@ -29,28 +29,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from mini_app_polis.api.contract import (
+    TranscriptionRunMessage,
+    TranscriptionRunPayload,
+)
+
 from ..config import Settings
 from . import job_queue
 from .job_queue import DispatchError
 
 __all__ = [
-    "MESSAGE_VERSION",
-    "TYPE_RUN",
     "DispatchError",
     "TranscriptionJob",
     "dispatch_transcription",
 ]
-
-#: Schema version carried on every message. The consumer refuses a version
-#: it does not speak rather than misreading it, which is what makes a
-#: producer/consumer redeploy safe.
-MESSAGE_VERSION = 1
-
-#: The one message type on transcription-jobs. It is a producer-bug
-#: detector, not a router: the queue is transcription's own, so an
-#: unrecognised type there is something enqueued wrongly. ``mode`` in the
-#: payload is what routes.
-TYPE_RUN = "transcription.run"
 
 
 @dataclass(frozen=True)
@@ -65,17 +57,15 @@ class TranscriptionJob:
     note: dict[str, str] | None = None
 
     def as_message(self) -> dict[str, Any]:
-        """Render this job as one ``TYPE_RUN`` queue message."""
+        """Render this job as one ``transcription.run`` queue message."""
         payload: dict[str, Any] = {"mode": self.mode}
         if self.drive_file_id:
             payload["drive_file_id"] = self.drive_file_id
         if self.note is not None:
             payload["note"] = self.note
-        return {
-            "type": TYPE_RUN,
-            "version": MESSAGE_VERSION,
-            "payload": payload,
-        }
+        return TranscriptionRunMessage(
+            payload=TranscriptionRunPayload.model_validate(payload)
+        ).model_dump(mode="json", exclude_none=True)
 
     def describe(self) -> str:
         """How this job reads in a log line or a drop report."""

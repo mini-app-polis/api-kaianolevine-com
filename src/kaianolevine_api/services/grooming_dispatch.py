@@ -18,16 +18,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from mini_app_polis.api.contract import GroomingJobRequest, GroomingProposal
+from mini_app_polis.api.contract import (
+    GroomingJobRequest,
+    GroomingProposal,
+    TaskGroomMessage,
+    TaskGroomProposalMessage,
+)
 
 from ..config import Settings
 from . import job_queue
 from .job_queue import DispatchError
 
 __all__ = [
-    "MESSAGE_VERSION",
-    "TYPE_GROOM",
-    "TYPE_PROPOSAL",
     "DispatchError",
     "dispatch_job",
     "dispatch_proposal",
@@ -35,33 +37,17 @@ __all__ = [
     "proposal_message",
 ]
 
-#: Schema version carried on both messages. A consumer refuses a version it
-#: does not speak rather than misreading it.
-MESSAGE_VERSION = 1
-
-#: The one message type on task-groomer-jobs.
-TYPE_GROOM = "task.groom"
-
-#: A proposal, on task-manager-jobs.fifo beside task.create and task.sweep.
-TYPE_PROPOSAL = "task.groom-proposal"
-
 
 def job_message(job: GroomingJobRequest) -> dict[str, Any]:
-    """Render one job as a ``TYPE_GROOM`` queue message."""
-    return {
-        "type": TYPE_GROOM,
-        "version": MESSAGE_VERSION,
-        "payload": job.model_dump(mode="json", exclude_none=True),
-    }
+    """Render one job as a ``task.groom`` queue message."""
+    return TaskGroomMessage(payload=job).model_dump(mode="json", exclude_none=True)
 
 
 def proposal_message(proposal: GroomingProposal) -> dict[str, Any]:
-    """Render one proposal as a ``TYPE_PROPOSAL`` queue message."""
-    return {
-        "type": TYPE_PROPOSAL,
-        "version": MESSAGE_VERSION,
-        "payload": proposal.model_dump(mode="json", exclude_none=True),
-    }
+    """Render one proposal as a ``task.groom-proposal`` queue message."""
+    return TaskGroomProposalMessage(payload=proposal).model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 async def dispatch_job(job: GroomingJobRequest, *, settings: Settings) -> dict:

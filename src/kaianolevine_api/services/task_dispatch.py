@@ -21,35 +21,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from mini_app_polis.api.contract import TaskCreateRequest
+from mini_app_polis.api.contract import TaskCreateMessage, TaskCreateRequest
 
 from ..config import Settings
 from . import job_queue
 from .job_queue import DispatchError
 
 __all__ = [
-    "MESSAGE_VERSION",
-    "TYPE_CREATE",
     "DispatchError",
     "as_message",
     "dispatch_task",
 ]
 
-#: Schema version carried on every message. The consumer refuses a version
-#: it does not speak rather than misreading it.
-MESSAGE_VERSION = 1
-
-#: The one message type on task-manager-jobs.
-TYPE_CREATE = "task.create"
-
 
 def as_message(request: TaskCreateRequest) -> dict[str, Any]:
-    """Render one request as a ``TYPE_CREATE`` queue message."""
-    return {
-        "type": TYPE_CREATE,
-        "version": MESSAGE_VERSION,
-        "payload": request.model_dump(mode="json", exclude_none=True),
-    }
+    """Render one request as a ``task.create`` queue message."""
+    return TaskCreateMessage(payload=request).model_dump(mode="json", exclude_none=True)
 
 
 async def dispatch_task(request: TaskCreateRequest, *, settings: Settings) -> dict:

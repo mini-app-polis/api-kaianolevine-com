@@ -131,8 +131,8 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     # A standard queue refuses a message group; evaluations run in parallel.
     assert "MessageGroupId" not in sent
     assert json.loads(sent["MessageBody"]) == {
-        "type": dispatch.TYPE_REPOSITORY,
-        "version": dispatch.MESSAGE_VERSION,
+        "type": "evaluation.repository",
+        "version": 1,
         "payload": {
             "repo": "mono",
             "ref": "v2",
@@ -143,9 +143,7 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     }
     # Readable without parsing the body — one queue serves the whole fleet,
     # so a consumer has to recognise a shape it does not handle.
-    assert sent["MessageAttributes"]["type"]["StringValue"] == (
-        dispatch.TYPE_REPOSITORY
-    )
+    assert sent["MessageAttributes"]["type"]["StringValue"] == ("evaluation.repository")
 
 
 async def test_development_cannot_reach_the_production_queue(monkeypatch) -> None:
