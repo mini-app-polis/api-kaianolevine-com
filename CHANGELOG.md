@@ -1,3 +1,10 @@
+## [2.30.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.4...v2.30.5) (2026-10-24)
+
+
+### Bug Fixes
+
+* **signals:** keep repeated Dependabot update runs in one CI streak ([a87c390](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a87c39009ad5e97eb7f6bb57bedcb0c0308e0b06))
+
 ## [2.30.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.3...v2.30.4) (2026-10-24)
 
 
