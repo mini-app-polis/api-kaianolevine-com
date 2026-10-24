@@ -1,3 +1,12 @@
+## [2.30.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.2...v2.30.3) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.22.1 ([a90b7b4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a90b7b47e2a0b5018f50f4dcf26b3e0fd54dbdc6))
+* **deps:** bump miniapppolis-common-utils to 6.22.2 ([7e3d7e2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7e3d7e28447826e4b23c91bd75f427bf2b685c13))
+* **dispatch:** build queue messages from the shared envelope models ([76c2ab6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/76c2ab69145c2ee08db124b67559b03a90543804))
+
 ## [2.30.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.1...v2.30.2) (2026-10-23)
 
 
