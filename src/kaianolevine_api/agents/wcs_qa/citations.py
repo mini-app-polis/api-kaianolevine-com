@@ -20,17 +20,21 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models import LegacyWcsNote, WcsTranscript, WcsTranscriptChunk
+from ...models import WcsSource, WcsTranscript, WcsTranscriptChunk
+from ...retrieval.wcs.queries import (
+    fetch_visible_source,
+    fetch_visible_source_for_transcript,
+)
 from ...retrieval.wcs.schemas import ToolError
+from ...retrieval.wcs.tools import lesson_title, lesson_url
 from ...retrieval.wcs.wiki_pages import get_wiki_page
-from ...services.wcs_access import user_can_see_note
 
 SENTINEL_RE = re.compile(
     r"\[\[CITATIONS_BEGIN\]\](.*?)\[\[CITATIONS_END\]\]",
     re.DOTALL,
 )
 
-VALID_TYPES = {"note", "chunk", "page"}
+VALID_TYPES = {"lesson", "chunk", "page"}
 
 
 @dataclass
@@ -64,10 +68,10 @@ class CitationParseError:
 class EnrichedCitation(BaseModel):
     """Final citation shape rendered into the API response.
 
-    `transcript_id` is populated only for type=chunk citations. `source_url`
-    is None for chunk citations whose transcript has zero or multiple linked
-    notes (no clean URL to point at in v1). JSON serialization uses
-    `exclude_none=True` so absent optional fields don't appear in the response.
+    `transcript_id` is populated only for type=chunk citations. A lesson or
+    chunk citation carries its lesson's metadata and points at the lesson's
+    page. JSON serialization uses `exclude_none=True` so absent optional
+    fields don't appear in the response.
     """
 
     marker: int = Field(
@@ -77,18 +81,18 @@ class EnrichedCitation(BaseModel):
             "``[N]`` reference in the answer text."
         ),
     )
-    type: Literal["note", "chunk", "page"] = Field(
+    type: Literal["lesson", "chunk", "page"] = Field(
         ...,
         description=(
-            "Citation kind. ``note`` points at a structured WCS lesson note; "
-            "``chunk`` points at a transcript chunk; ``page`` points at a wiki "
-            "page."
+            "Citation kind. ``lesson`` points at a lesson (a WCS source); "
+            "``chunk`` points at a passage of a lesson's transcript; ``page`` "
+            "points at a wiki page."
         ),
     )
     id: str = Field(
         ...,
         description=(
-            "Stable identifier of the cited resource. UUID for notes; "
+            "Stable identifier of the cited resource. The source's UUID for lessons; "
             "``<transcript_uuid>:<chunk_index>`` for chunks; the page's slug "
             "for pages."
         ),
@@ -96,23 +100,23 @@ class EnrichedCitation(BaseModel):
     transcript_id: str | None = Field(
         None,
         description=(
-            "UUID of the transcript a chunk citation belongs to. Always None "
-            "for ``type=note`` citations."
+            "UUID of the transcript a chunk citation belongs to. None for "
+            "lesson and page citations."
         ),
     )
     title: str | None = Field(
         None,
         description=(
-            "Display title for the cited resource — the linked note's title "
-            "when one exists, otherwise the transcript's source filename; a "
-            "page's display name."
+            "Display title for the cited resource — the lesson's title, or its "
+            "transcript's source filename when it has none; a page's display "
+            "name."
         ),
     )
     kind: str | None = Field(
         None,
         description=(
             "For ``type=page``: concept, technique, pattern or drill. None "
-            "for notes and chunks."
+            "for lessons and chunks."
         ),
     )
     session_date: dt.date | None = Field(
@@ -122,8 +126,8 @@ class EnrichedCitation(BaseModel):
             "client to render a date alongside the citation."
         ),
     )
-    # Lesson metadata mirrored from the underlying note (or, for chunks, the
-    # single linked note when there is exactly one). These let the client
+    # Lesson metadata mirrored from the lesson (the source; for a chunk, its
+    # transcript's lesson). These let the client
     # render citations using the same label process as the /notes page:
     # date + session-type badge, primary label = students (for private
     # lessons) or organization, with "[with instructors]" appended.
@@ -132,32 +136,27 @@ class EnrichedCitation(BaseModel):
     ) = Field(
         None,
         description=(
-            "Session type from the underlying note. None for chunk citations "
-            "with no linked note."
+            "Session type of the lesson. None for pages, or a value outside "
+            "the known set."
         ),
     )
     instructors: list[str] = Field(
         default_factory=list,
-        description=(
-            "Instructors on the underlying note. Empty list when no linked note."
-        ),
+        description=("Instructors on the lesson. Empty for pages."),
     )
     students: list[str] = Field(
         default_factory=list,
-        description=(
-            "Students on the underlying note. Empty list when no linked note."
-        ),
+        description=("Students on the lesson. Empty for pages."),
     )
     organization: str | None = Field(
         None,
-        description=("Organization on the underlying note. None when no linked note."),
+        description="Organization on the lesson. None for pages, or when unrecorded.",
     )
     source_url: str | None = Field(
         None,
         description=(
-            "Public URL where the cited resource can be read. None for chunk "
-            "citations whose transcript has zero or multiple linked notes "
-            "(no clean v1 target)."
+            "Public URL where the cited resource can be read: the lesson's "
+            "page for lessons and chunks, the wiki page for pages."
         ),
     )
 
@@ -228,14 +227,13 @@ async def enrich_citations(
     session: AsyncSession,
     entries: list[dict],
     viewer_id: str,
-    owner_id: str,
     site_url: str,
 ) -> tuple[list[EnrichedCitation], list[str]]:
     """Enrich each entry with display metadata; drop invalid or invisible IDs.
 
-    Returns (enriched, dropped_ids). Dropped IDs cover: malformed UUID,
-    note not in DB, note not visible to viewer, chunk not in DB, chunk owned
-    by another user, page with no wiki page or none of it visible.
+    Returns (enriched, dropped_ids). Dropped IDs cover: a malformed id, a
+    lesson or chunk that does not exist, a lesson (or a chunk's lesson) the
+    viewer may not see, and a page with no wiki page or none of it visible.
     """
     enriched: list[EnrichedCitation] = []
     dropped: list[str] = []
@@ -245,26 +243,7 @@ async def enrich_citations(
         ent_type = entry["type"]
         marker = entry["marker"]
 
-        if ent_type == "note":
-            note = await _resolve_note(session, ent_id, viewer_id)
-            if note is None:
-                dropped.append(ent_id)
-                continue
-            enriched.append(
-                EnrichedCitation(
-                    marker=marker,
-                    type="note",
-                    id=ent_id,
-                    title=note.title,
-                    session_date=note.session_date,
-                    session_type=note.session_type,
-                    instructors=list(note.instructors or []),
-                    students=list(note.students or []),
-                    organization=note.organization or None,
-                    source_url=_note_url(site_url, note.id),
-                )
-            )
-        elif ent_type == "page":
+        if ent_type == "page":
             try:
                 page = await get_wiki_page(
                     session=session,
@@ -285,48 +264,39 @@ async def enrich_citations(
                     source_url=page.source_url,
                 )
             )
+            continue
+
+        if ent_type == "lesson":
+            resolved = await _resolve_lesson(session, ent_id, viewer_id)
+            transcript_id = None
         else:  # chunk
-            resolved = await _resolve_chunk(session, ent_id, owner_id)
-            if resolved is None:
-                dropped.append(ent_id)
-                continue
-            source_url = (
-                _note_url(site_url, resolved.linked_note_id)
-                if resolved.linked_note_id is not None
-                else None
+            resolved = await _resolve_chunk(session, ent_id, viewer_id)
+            transcript_id = resolved[1].id if resolved is not None else None
+        if resolved is None:
+            dropped.append(ent_id)
+            continue
+        source, transcript = resolved
+        enriched.append(
+            EnrichedCitation(
+                marker=marker,
+                type=ent_type,
+                id=ent_id if ent_type == "chunk" else str(source.id),
+                transcript_id=str(transcript_id) if transcript_id else None,
+                title=lesson_title(source, transcript),
+                session_date=source.session_date,
+                session_type=(
+                    source.session_type
+                    if _is_session_type(source.session_type)
+                    else None
+                ),
+                instructors=list(source.instructors_raw or []),
+                students=list(source.students_raw or []),
+                organization=source.organization or None,
+                source_url=lesson_url(site_url, source.id),
             )
-            enriched.append(
-                EnrichedCitation(
-                    marker=marker,
-                    type="chunk",
-                    id=ent_id,
-                    transcript_id=str(resolved.transcript_id),
-                    title=resolved.title,
-                    session_date=resolved.session_date,
-                    session_type=resolved.session_type,
-                    instructors=resolved.instructors,
-                    students=resolved.students,
-                    organization=resolved.organization,
-                    source_url=source_url,
-                )
-            )
+        )
 
     return enriched, dropped
-
-
-async def _resolve_note(
-    session: AsyncSession, note_id_str: str, viewer_id: str
-) -> LegacyWcsNote | None:
-    try:
-        note_uuid = uuid.UUID(note_id_str)
-    except (ValueError, TypeError):
-        return None
-    note = await session.get(LegacyWcsNote, note_uuid)
-    if note is None:
-        return None
-    if not await user_can_see_note(session, viewer_id, note):
-        return None
-    return note
 
 
 _SessionType = Literal["private_lesson", "group_class", "correction", "other"]
@@ -335,7 +305,7 @@ _SESSION_TYPES: frozenset[str] = frozenset(
 )
 
 
-def _is_session_type(value: str) -> TypeGuard[_SessionType]:
+def _is_session_type(value: str | None) -> TypeGuard[_SessionType]:
     """True when a stored session_type is one of those the API serves.
 
     The column is free text, so a value outside the set is possible; it is
@@ -345,96 +315,52 @@ def _is_session_type(value: str) -> TypeGuard[_SessionType]:
     return value in _SESSION_TYPES
 
 
-@dataclass
-class _ChunkResolution:
-    """Result of resolving a chunk citation against the DB.
-
-    Lesson-metadata fields (``session_type``, ``instructors``, ``students``,
-    ``organization``) are populated only when the chunk's transcript has
-    exactly one linked note (and ``linked_note_id`` is set); they are empty
-    / None otherwise. Callers should treat those as "no linked lesson
-    context" and fall back to the transcript filename.
-    """
-
-    transcript_id: uuid.UUID
-    chunk_index: int
-    title: str
-    session_date: dt.date | None
-    linked_note_id: uuid.UUID | None
-    session_type: Literal["private_lesson", "group_class", "correction", "other"] | None
-    instructors: list[str]
-    students: list[str]
-    organization: str | None
+async def _resolve_lesson(
+    session: AsyncSession, source_id_str: str, viewer_id: str
+) -> tuple[WcsSource, WcsTranscript | None] | None:
+    """A lesson citation's source and transcript, if the viewer may see it."""
+    try:
+        source_id = uuid.UUID(source_id_str)
+    except (ValueError, TypeError):
+        return None
+    source = await fetch_visible_source(session, source_id, viewer_id)
+    if source is None:
+        return None
+    return source, await session.get(WcsTranscript, source.transcript_id)
 
 
 async def _resolve_chunk(
-    session: AsyncSession, chunk_id: str, owner_id: str
-) -> _ChunkResolution | None:
-    """Resolve a chunk citation against the DB.
-
-    ``linked_note_id`` and the lesson-metadata fields are populated only when
-    the transcript has exactly one linked note — that's the chunk's
-    ``source_url`` target and the source for lesson display labels.
-    """
+    session: AsyncSession, chunk_id: str, viewer_id: str
+) -> tuple[WcsSource, WcsTranscript] | None:
+    """A chunk citation's lesson and transcript, if the viewer may see it."""
     transcript_id_str, _, idx_str = chunk_id.partition(":")
     if not transcript_id_str or not idx_str:
         return None
     try:
         transcript_uuid = uuid.UUID(transcript_id_str)
-        chunk_index = int(idx_str)
+        int(idx_str)
     except (ValueError, TypeError):
         return None
 
-    chunk_q = await session.execute(
-        select(WcsTranscriptChunk).where(WcsTranscriptChunk.chunk_id == chunk_id)
+    chunk = (
+        (
+            await session.execute(
+                select(WcsTranscriptChunk).where(
+                    WcsTranscriptChunk.chunk_id == chunk_id
+                )
+            )
+        )
+        .scalars()
+        .first()
     )
-    chunk = chunk_q.scalars().first()
-    if chunk is None or chunk.owner_id != owner_id:
+    if chunk is None or chunk.transcript_id != transcript_uuid:
         return None
-
     transcript = await session.get(WcsTranscript, transcript_uuid)
-    note_q = await session.execute(
-        select(LegacyWcsNote).where(LegacyWcsNote.transcript_id == transcript_uuid)
+    if transcript is None:
+        return None
+    source = await fetch_visible_source_for_transcript(
+        session, transcript_uuid, viewer_id
     )
-    notes = list(note_q.scalars().all())
-    if len(notes) == 1:
-        single_note = notes[0]
-        title = single_note.title or (
-            transcript.source_filename if transcript is not None else chunk_id
-        )
-        return _ChunkResolution(
-            transcript_id=transcript_uuid,
-            chunk_index=chunk_index,
-            title=title,
-            session_date=single_note.session_date,
-            linked_note_id=single_note.id,
-            session_type=(
-                single_note.session_type
-                if _is_session_type(single_note.session_type)
-                else None
-            ),
-            instructors=list(single_note.instructors or []),
-            students=list(single_note.students or []),
-            organization=single_note.organization or None,
-        )
-
-    title = transcript.source_filename if transcript is not None else chunk_id
-    return _ChunkResolution(
-        transcript_id=transcript_uuid,
-        chunk_index=chunk_index,
-        title=title,
-        session_date=None,
-        linked_note_id=None,
-        session_type=None,
-        instructors=[],
-        students=[],
-        organization=None,
-    )
-
-
-def _note_url(site_url: str, note_id: uuid.UUID) -> str:
-    # /notes/detail?id=, not /notes/<id>. The site is a static build and cannot
-    # serve a path-shaped id without a rewrite; the rewrite that used to do it
-    # looped in production and was removed. This function mints links into that
-    # site, so it has to speak the site's URL shape.
-    return f"{site_url.rstrip('/')}/notes/detail?id={note_id}"
+    if source is None:
+        return None
+    return source, transcript

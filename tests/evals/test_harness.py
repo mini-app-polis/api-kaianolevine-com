@@ -197,7 +197,9 @@ async def test_eval_question(
             git_sha=git_sha,
             agent_answer=data["answer"],
             cited_source_ids={
-                "notes": [c["id"] for c in data["citations"] if c["type"] == "note"],
+                "lessons": [
+                    c["id"] for c in data["citations"] if c["type"] == "lesson"
+                ],
                 "chunks": [c["id"] for c in data["citations"] if c["type"] == "chunk"],
                 "pages": [c["id"] for c in data["citations"] if c["type"] == "page"],
             },

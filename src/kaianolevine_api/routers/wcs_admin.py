@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import require_scope
 from ..config import get_settings
 from ..database import get_db_session
+from ..retrieval.wcs import auto_refresh
 from ..schemas import (
     Envelope,
     WcsAdminCorrectionResult,
@@ -101,6 +102,8 @@ async def patch_source_admin(
     if item is None:
         raise api_error(404, "source_not_found", "Source not found")
     await session.commit()
+    # A changed title changes what the Q&A embeds the lesson's chunks under.
+    auto_refresh.request_refresh(settings)
     return success_envelope(item, count=1, total=1, version=settings.API_VERSION)
 
 
@@ -189,6 +192,8 @@ async def create_metadata_correction(
         session, owner_id, payload
     )
     await session.commit()
+    # A corrected title changes what the Q&A embeds the lesson's chunks under.
+    auto_refresh.request_refresh(settings)
     result = WcsAdminCorrectionResult(
         id=row.id,
         field=payload.field,

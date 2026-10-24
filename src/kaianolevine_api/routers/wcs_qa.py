@@ -1,8 +1,8 @@
 """WCS Q&A endpoints.
 
 POST /v1/wcs/embeddings/refresh — admin-only. Runs the convergence flow that
-embeds every note and chunks/embeds every transcript pending under the
-current (model, flattener_version, chunking_version) configuration.
+chunks/embeds every transcript and embeds every wiki page pending under the
+current (model, chunking_version, page_flattener_version) configuration.
 
 POST /v1/wcs/ask — authed users. Runs the WCS Q&A agent loop end-to-end
 against the corpus and returns the citation-enriched answer.
@@ -166,8 +166,8 @@ class AskResponse(BaseModel):
     response_model=Envelope[RefreshSummary],
     summary="Refresh WCS embeddings",
     description=(
-        "Admin-only. Embeds notes and transcript chunks pending under the "
-        "current (embedding_model, flattener_version, chunking_version) config. "
+        "Admin-only. Embeds transcript chunks and wiki pages pending under the "
+        "current (embedding_model, chunking_version, page_flattener_version) config. "
         "Idempotent — re-running embeds nothing if no source content has changed."
     ),
 )
@@ -180,25 +180,24 @@ async def refresh_wcs_embeddings(
     """Run the convergence flow synchronously and return counts."""
     _ = admin_id_principal.subject
     log.info(
-        "%s WCS embedding refresh model=%s flat_v=%d chunk_v=%d",
+        "%s WCS embedding refresh model=%s chunk_v=%d page_v=%d",
         LOG_START,
         settings.WCS_QA_EMBEDDING_MODEL,
-        settings.WCS_QA_FLATTENER_VERSION,
         settings.WCS_QA_CHUNKING_VERSION,
+        settings.WCS_QA_PAGE_FLATTENER_VERSION,
     )
     summary = await refresh_embeddings(
         session=session,
         embedder=embedder,
         embedding_model=settings.WCS_QA_EMBEDDING_MODEL,
-        flattener_version=settings.WCS_QA_FLATTENER_VERSION,
         chunking_version=settings.WCS_QA_CHUNKING_VERSION,
         page_flattener_version=settings.WCS_QA_PAGE_FLATTENER_VERSION,
     )
     log.info(
-        "%s WCS embedding refresh notes=%d/%d chunks=%d pages=%d/%d duration_ms=%d",
+        "%s WCS embedding refresh transcripts=%d/%d chunks=%d pages=%d/%d duration_ms=%d",
         LOG_SUCCESS,
-        summary.notes_embedded,
-        summary.notes_total,
+        summary.transcripts_embedded,
+        summary.transcripts_total,
         summary.chunks_embedded,
         summary.pages_embedded,
         summary.pages_total,
@@ -213,10 +212,10 @@ async def refresh_wcs_embeddings(
     response_model_exclude_none=True,
     summary="WCS Q&A — single-turn ask",
     description=(
-        "Authed users. Runs the WCS Q&A agent loop with the four retrieval tools, "
-        "returns the citation-enriched answer. Visibility uses the same rules as "
-        "the rest of the WCS site: default-visible OR admin OR explicit grant for "
-        "notes; owner-scoped for transcripts."
+        "Authed users. Runs the WCS Q&A agent loop over the wiki and the lessons, "
+        "returns the citation-enriched answer. Visibility is the wiki's: the whole "
+        "corpus for wcs.corpus.read, otherwise default-visible lessons and the "
+        "asker's grants."
     ),
 )
 async def ask(
@@ -248,7 +247,6 @@ async def ask(
             anthropic_client=anthropic_client,
             config=config,
             viewer_id=owner_id,
-            owner_id=owner_id,
         )
     except Exception:
         log.exception(

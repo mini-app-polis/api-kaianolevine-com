@@ -80,7 +80,6 @@ async def _embed(session: AsyncSession, embedder: StubEmbedder) -> Any:
         session=session,
         embedder=embedder,
         embedding_model="m",
-        flattener_version=1,
         chunking_version=1,
         page_flattener_version=1,
     )
@@ -184,7 +183,6 @@ async def test_a_cited_page_carries_its_wiki_link(
             {"marker": 2, "type": "page", "id": "secret-drill"},
         ],
         viewer_id=READER,
-        owner_id=READER,
         site_url=SITE,
     )
     assert dropped == ["secret-drill"]
@@ -225,7 +223,6 @@ async def test_the_agent_can_read_a_page(db_session: AsyncSession, seeded) -> No
         max_input_tokens=1000,
         max_output_tokens=100,
         embedding_model="m",
-        flattener_version=1,
         chunking_version=1,
         site_url=SITE,
     )
@@ -235,7 +232,6 @@ async def test_the_agent_can_read_a_page(db_session: AsyncSession, seeded) -> No
         session=db_session,
         embedder=StubEmbedder(),
         viewer_id=READER,
-        owner_id=READER,
         config=config,
     )
     assert out["slug"] == "anchor-step"

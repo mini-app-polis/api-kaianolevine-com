@@ -27,14 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...retrieval.wcs.convergence import Embedder
 from ...retrieval.wcs.schemas import (
-    NoteFilters,
     ToolError,
     TranscriptFilters,
 )
 from ...retrieval.wcs.tools import (
-    get_note,
     get_transcript_window,
-    search_notes,
     search_transcripts,
 )
 from ...retrieval.wcs.wiki_pages import get_wiki_page, search_wiki
@@ -91,17 +88,6 @@ class AgentResult:
 
 # ── Tool definitions ──────────────────────────────────────────────────────────
 
-_NOTE_FILTERS_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "date_from": {"type": "string", "format": "date"},
-        "date_to": {"type": "string", "format": "date"},
-        "instructors": {"type": "array", "items": {"type": "string"}},
-        "session_type": {"type": "string"},
-        "organization": {"type": "string"},
-    },
-}
-
 _TRANSCRIPT_FILTERS_SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -115,28 +101,12 @@ _TRANSCRIPT_FILTERS_SCHEMA: dict = {
 def _tool_definitions() -> list[dict]:
     return [
         {
-            "name": "search_notes",
-            "description": (
-                "Vector search over WCS lesson notes (flattened summary, key concepts, drills, etc). "
-                "Returns up to k hits with title, session_date, instructors, students, organization, "
-                "and a snippet. No source_url on hits — use get_note before citing."
-            ),
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "k": {"type": "integer", "description": "Default 10, max 25."},
-                    "filters": _NOTE_FILTERS_SCHEMA,
-                },
-                "required": ["query"],
-            },
-        },
-        {
             "name": "search_transcripts",
             "description": (
-                "Vector search over raw transcript chunks. Each hit has chunk_id "
-                '("<transcript_uuid>:<chunk_index>"), linked note title and date, and a snippet. '
-                "No source_url on hits — use get_transcript_window before citing."
+                "Vector search over the lessons: their transcripts, in chunks. Each hit has "
+                'chunk_id ("<transcript_uuid>:<chunk_index>"), the lesson\'s source_id, title, '
+                "date, type, instructors, students and organization, and a snippet. No "
+                "source_url on hits — use get_transcript_window before citing."
             ),
             "input_schema": {
                 "type": "object",
@@ -146,15 +116,6 @@ def _tool_definitions() -> list[dict]:
                     "filters": _TRANSCRIPT_FILTERS_SCHEMA,
                 },
                 "required": ["query"],
-            },
-        },
-        {
-            "name": "get_note",
-            "description": "Fetch the full structured note by id. Returns notes_json and source_url.",
-            "input_schema": {
-                "type": "object",
-                "properties": {"note_id": {"type": "string"}},
-                "required": ["note_id"],
             },
         },
         {
@@ -189,8 +150,9 @@ def _tool_definitions() -> list[dict]:
         {
             "name": "get_transcript_window",
             "description": (
-                "Fetch a window of consecutive transcript chunks around the target chunk_id. "
-                "before/after specify how many chunks on each side."
+                "Fetch a window of consecutive transcript chunks around the target chunk_id, "
+                "with the lesson it comes from and the lesson's source_url. before/after "
+                "specify how many chunks on each side."
             ),
             "input_schema": {
                 "type": "object",
@@ -215,25 +177,9 @@ async def _dispatch_tool(
     session: AsyncSession,
     embedder: Embedder,
     viewer_id: str,
-    owner_id: str,
     config: AgentConfig,
 ) -> dict:
     """Dispatch a tool call to the underlying retrieval function."""
-    if name == "search_notes":
-        note_filters = (
-            NoteFilters(**inputs["filters"]) if inputs.get("filters") else None
-        )
-        note_hits = await search_notes(
-            session=session,
-            embedder=embedder,
-            viewer_id=viewer_id,
-            embedding_model=config.embedding_model,
-            flattener_version=config.flattener_version,
-            query=inputs["query"],
-            k=int(inputs.get("k", 10)),
-            filters=note_filters,
-        )
-        return {"hits": [h.model_dump(mode="json") for h in note_hits]}
     if name == "search_transcripts":
         transcript_filters = (
             TranscriptFilters(**inputs["filters"]) if inputs.get("filters") else None
@@ -242,7 +188,6 @@ async def _dispatch_tool(
             session=session,
             embedder=embedder,
             viewer_id=viewer_id,
-            owner_id=owner_id,
             embedding_model=config.embedding_model,
             chunking_version=config.chunking_version,
             query=inputs["query"],
@@ -250,24 +195,10 @@ async def _dispatch_tool(
             filters=transcript_filters,
         )
         return {"hits": [h.model_dump(mode="json") for h in transcript_hits]}
-    if name == "get_note":
-        try:
-            note_uuid = uuid.UUID(inputs["note_id"])
-        except (ValueError, TypeError, KeyError) as e:
-            raise ToolError(
-                "invalid_input", f"Bad note_id: {inputs.get('note_id')!r}"
-            ) from e
-        note = await get_note(
-            session=session,
-            viewer_id=viewer_id,
-            site_url=config.site_url,
-            note_id=note_uuid,
-        )
-        return note.model_dump(mode="json")
     if name == "get_transcript_window":
         window = await get_transcript_window(
             session=session,
-            owner_id=owner_id,
+            viewer_id=viewer_id,
             site_url=config.site_url,
             embedding_model=config.embedding_model,
             chunking_version=config.chunking_version,
@@ -406,7 +337,6 @@ async def run_agent(
     anthropic_client: Any,
     config: AgentConfig,
     viewer_id: str,
-    owner_id: str,
 ) -> AgentResult:
     """Run the WCS Q&A tool-use loop end-to-end."""
     tool_trace_id = uuid.uuid4().hex
@@ -492,7 +422,6 @@ async def run_agent(
                         session=session,
                         embedder=embedder,
                         viewer_id=viewer_id,
-                        owner_id=owner_id,
                         config=config,
                     )
                     tool_results.append(
@@ -601,7 +530,6 @@ async def run_agent(
         session=session,
         entries=parsed.raw_entries,
         viewer_id=viewer_id,
-        owner_id=owner_id,
         site_url=config.site_url,
     )
 
