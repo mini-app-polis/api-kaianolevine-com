@@ -1,3 +1,10 @@
+# [2.31.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.5...v2.31.0) (2026-10-24)
+
+
+### Features
+
+* **notifications:** add a per-environment Discord event allow-list and drop data-changed messages in development ([a29a0d8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a29a0d8de9c61ca4f7d07a10ad8c45af1cebbc6d))
+
 ## [2.30.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.30.4...v2.30.5) (2026-10-24)
 
 
