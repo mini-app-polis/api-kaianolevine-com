@@ -9,7 +9,8 @@ Importing this module imports that one, which is what registers the
 listeners.
 
 What stays here is this service's policy, read from ``Settings`` on every
-request: ``NOTIFY_*`` switches, suppressed tables and excluded paths, its
+request: ``NOTIFY_*`` switches, the per-environment event allow-list
+(``DISCORD_NOTIFY_EVENTS``), suppressed tables and excluded paths, its
 machine callers (``request.state.caller_kind``, stamped by ``auth``), and
 delivery through ``services.discord`` so webhooks resolve from
 ``Settings``. Every message's footer names ``api-kaianolevine-com`` and
@@ -45,15 +46,37 @@ from . import discord, fault_signals
 __all__ = [
     "BULK",
     "CREATED",
+    "DATA_CHANGED",
     "DELETED",
+    "FAULT",
+    "NOTIFY_EVENTS",
     "UPDATED",
     "Recorder",
     "activity_middleware",
     "emit_change",
     "emit_fault",
+    "event_enabled",
     "is_notifiable_fault",
     "record_fault_detail",
 ]
+
+#: The running list's message kinds, as ``DISCORD_NOTIFY_EVENTS`` names them:
+#: the summary of what a request committed, and a fault (a 5xx, or a 4xx to
+#: a machine caller).
+DATA_CHANGED = "data_changed"
+FAULT = "fault"
+NOTIFY_EVENTS = (DATA_CHANGED, FAULT)
+
+
+def event_enabled(event: str, settings: Settings) -> bool:
+    """Whether ``settings.ENVIRONMENT`` posts ``event`` to Discord.
+
+    An environment with no entry in ``DISCORD_NOTIFY_EVENTS`` posts every
+    event. The ``NOTIFY_*`` switches are a separate gate.
+    """
+    lists = {k.lower(): v for k, v in settings.DISCORD_NOTIFY_EVENTS.items()}
+    allowed = lists.get(settings.ENVIRONMENT.lower())
+    return allowed is None or event in allowed
 
 
 def _is_machine(request: Any) -> bool:
@@ -74,8 +97,9 @@ def _config(settings: Settings) -> _activity.ActivityConfig:
         environment=settings.ENVIRONMENT,
         suppressed_tables=frozenset(settings.NOTIFY_SUPPRESSED_TABLES),
         excluded_paths=tuple(settings.NOTIFY_EXCLUDED_PATHS),
-        report_changes=settings.NOTIFY_DATA_CHANGES,
-        report_faults=settings.NOTIFY_FAULTS,
+        report_changes=settings.NOTIFY_DATA_CHANGES
+        and event_enabled(DATA_CHANGED, settings),
+        report_faults=settings.NOTIFY_FAULTS and event_enabled(FAULT, settings),
         is_machine=_is_machine if settings.NOTIFY_MACHINE_CLIENT_ERRORS else None,
         send=send,
         label=True,
@@ -89,7 +113,7 @@ def is_notifiable_fault(
     return _activity.is_notifiable_fault(
         status_code,
         machine=settings.NOTIFY_MACHINE_CLIENT_ERRORS and caller_kind == "machine",
-        report_faults=settings.NOTIFY_FAULTS,
+        report_faults=settings.NOTIFY_FAULTS and event_enabled(FAULT, settings),
     )
 
 

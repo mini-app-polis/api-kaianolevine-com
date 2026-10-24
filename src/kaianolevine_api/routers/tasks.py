@@ -97,7 +97,7 @@ async def create_task_request(
         source=payload.source,
         external_id=payload.external_id,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -120,7 +120,6 @@ async def list_groomings(
         records,
         count=len(records),
         total=len(records),
-        version=get_settings().API_VERSION,
     )
 
 
@@ -137,9 +136,7 @@ async def record_grooming(
 ) -> Envelope[GroomingRecord]:
     """Replace one task's record with what the sweep made of it now."""
     record = await groomings.write_record(session, payload)
-    return success_envelope(
-        record, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(record, count=1, total=1)
 
 
 @router.post(
@@ -159,7 +156,7 @@ async def record_grooming_run(
 ) -> Envelope[GroomingRunRecorded]:
     """Record one paid run, for the month's spend."""
     run = await groomings.record_run(session, payload)
-    return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(run, count=1, total=1)
 
 
 @router.get(
@@ -177,7 +174,7 @@ async def grooming_spend(
 ) -> Envelope[GroomingSpend]:
     """The month's paid runs and their cost so far."""
     spend = await groomings.month_spend(session)
-    return success_envelope(spend, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(spend, count=1, total=1)
 
 
 @router.post(
@@ -208,7 +205,7 @@ async def request_grooming(
         message_id=str(accepted.get("message_id") or ""),
         task_gid=payload.task.task_gid,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.post(
@@ -239,7 +236,7 @@ async def submit_grooming_proposal(
         message_id=str(accepted.get("message_id") or ""),
         task_gid=payload.task_gid,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.post(
@@ -264,7 +261,7 @@ async def record_agent_run(
         raise api_error(
             409, "run_in_flight", f"{payload.repository} already has a run in flight"
         ) from exc
-    return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(run, count=1, total=1)
 
 
 @router.get(
@@ -284,9 +281,7 @@ async def list_agent_runs(
 ) -> Envelope[list[AgentRun]]:
     """The runs that match, newest first."""
     runs = await agent_runs.list_runs(session, status=status, repository=repository)
-    return success_envelope(
-        runs, count=len(runs), total=len(runs), version=get_settings().API_VERSION
-    )
+    return success_envelope(runs, count=len(runs), total=len(runs))
 
 
 @router.get(
@@ -305,7 +300,7 @@ async def agent_spend(
 ) -> Envelope[AgentSpend]:
     """The month's runs and their cost so far."""
     spend = await agent_runs.month_spend(session)
-    return success_envelope(spend, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(spend, count=1, total=1)
 
 
 def _ended_error(exc: Exception, run_id: str) -> Exception:
@@ -333,7 +328,7 @@ async def fail_agent_run(
         run = await agent_runs.fail_run(session, payload)
     except (agent_runs.RunNotFound, agent_runs.RunAlreadyEnded) as exc:
         raise _ended_error(exc, payload.run_id) from exc
-    return success_envelope(run, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(run, count=1, total=1)
 
 
 @router.post(
@@ -376,4 +371,4 @@ async def submit_agent_result(
     data = AgentResultAccepted(
         message_id=str(accepted.get("message_id") or ""), run_id=payload.run_id
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

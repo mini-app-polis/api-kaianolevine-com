@@ -63,7 +63,6 @@ async def patch_source_default_visibility(
 ) -> Envelope[WcsSourceItem]:
     """Set catalog default visibility for a specific WCS source."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     item = await wiki_svc.patch_source_default_visible(
         session,
         source_id=source_id,
@@ -72,7 +71,7 @@ async def patch_source_default_visibility(
     if item is None:
         raise api_error(404, "source_not_found", "Source not found")
     await session.commit()
-    return success_envelope(item, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(item, count=1, total=1)
 
 
 @router.patch(
@@ -104,7 +103,7 @@ async def patch_source_admin(
     await session.commit()
     # A changed title changes what the Q&A embeds the lesson's chunks under.
     auto_refresh.request_refresh(settings)
-    return success_envelope(item, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(item, count=1, total=1)
 
 
 @router.post(
@@ -121,7 +120,6 @@ async def create_name_correction(
     """Record a name correction and recompose affected sources (deferred when global)."""
     owner_id = owner_id_principal.subject
     log.info("%s name correction raw=%s", LOG_START, payload.raw_name)
-    settings = get_settings()
     await _require_source(session, payload.source_id)
     row, recomposed, deferred, message = await admin_svc.create_name_correction(
         session, owner_id, payload
@@ -135,7 +133,7 @@ async def create_name_correction(
         message=message,
     )
     log.info("%s name correction id=%s", LOG_SUCCESS, row.id)
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -155,7 +153,6 @@ async def create_attribution_correction(
 ) -> Envelope[WcsAdminCorrectionResult]:
     """Record an attribution correction and recompose the affected source."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_attribution_correction(
         session, owner_id, payload
@@ -166,7 +163,7 @@ async def create_attribution_correction(
         field=payload.field,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -199,7 +196,7 @@ async def create_metadata_correction(
         field=payload.field,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -218,7 +215,6 @@ async def create_attribution_addition(
 ) -> Envelope[WcsAdminCorrectionResult]:
     """Append an admin-authored attribution to a source and recompose."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_attribution_addition(
         session, owner_id, payload
@@ -228,7 +224,7 @@ async def create_attribution_addition(
         id=row.id,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -247,7 +243,6 @@ async def create_drill_purpose_addition(
 ) -> Envelope[WcsAdminCorrectionResult]:
     """Append an admin-authored drill-purpose pairing to a source and recompose."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_drill_purpose_addition(
         session, owner_id, payload
@@ -257,7 +252,7 @@ async def create_drill_purpose_addition(
         id=row.id,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -276,7 +271,6 @@ async def create_technique_requirement_addition(
 ) -> Envelope[WcsAdminCorrectionResult]:
     """Append an admin-authored technique requirement to a source and recompose."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     await _require_source(session, payload.source_id)
     row, recomposed = await admin_svc.create_technique_requirement_addition(
         session, owner_id, payload
@@ -286,7 +280,7 @@ async def create_technique_requirement_addition(
         id=row.id,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -305,7 +299,6 @@ async def create_entity_relation_addition(
 ) -> Envelope[WcsAdminCorrectionResult]:
     """Append an admin-authored entity-to-entity relation to a source and recompose."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     row, recomposed = await admin_svc.create_entity_relation_addition(
         session, owner_id, payload
     )
@@ -314,7 +307,7 @@ async def create_entity_relation_addition(
         id=row.id,
         recomposed_source_ids=recomposed,
     )
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(
@@ -336,7 +329,6 @@ async def recompose_source(
     """Re-run composition for the given source and return the row counts written."""
     _ = admin_id_principal.subject
     log.info("%s recompose source_id=%s", LOG_START, source_id)
-    settings = get_settings()
     composition = await admin_svc.recompose_source(session, source_id)
     if composition is None:
         raise api_error(404, "source_not_found", "Source not found")
@@ -351,7 +343,7 @@ async def recompose_source(
         references_written=composition.references_written,
     )
     log.info("%s recompose done source_id=%s", LOG_SUCCESS, source_id)
-    return success_envelope(result, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.get(
@@ -370,15 +362,12 @@ async def gaps_orphan_entities(
 ) -> Envelope[list[WcsGapItem]]:
     """List entities with no attribution rows pointing at them."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     rows = await wiki_svc.list_orphan_entities(session)
     data = [
         WcsGapItem(slug=s, name=n, kind=k, count=0, detail="no attributions")
         for s, n, k in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -396,7 +385,6 @@ async def gaps_stub_entities(
 ) -> Envelope[list[WcsGapItem]]:
     """List entities flagged as stubs or with fewer than two attributions."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     rows = await wiki_svc.list_stub_entities(session)
     data = [
         WcsGapItem(
@@ -408,9 +396,7 @@ async def gaps_stub_entities(
         )
         for s, n, k, cnt in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -428,15 +414,12 @@ async def gaps_skills_unpaired(
 ) -> Envelope[list[WcsGapItem]]:
     """List skill slugs that appear on only one side of the drill/technique split."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     rows = await wiki_svc.list_unpaired_skill_slugs(session)
     data = [
         WcsGapItem(slug=s, name="", kind="skill", count=0, detail=detail)
         for s, detail in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -455,12 +438,9 @@ async def gaps_sources_uncomposed(
 ) -> Envelope[list[WcsGapItem]]:
     """List sources with extraction present but no attributions written."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     rows = await wiki_svc.list_uncomposed_sources(session)
     data = [
         WcsGapItem(slug=source_id, name=title, kind="source", count=0)
         for source_id, title in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))

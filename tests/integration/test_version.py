@@ -43,3 +43,10 @@ async def test_openapi_version_matches_version_endpoint(client) -> None:
     assert version_resp.status_code == 200
     assert openapi_resp.status_code == 200
     assert version_resp.json()["version"] == openapi_resp.json()["info"]["version"]
+
+
+async def test_envelope_meta_version_matches_version_endpoint(client) -> None:
+    version_resp = await client.get("/version")
+    flags_resp = await client.get("/v1/flags")
+    assert flags_resp.status_code == 200
+    assert flags_resp.json()["meta"]["version"] == version_resp.json()["version"]

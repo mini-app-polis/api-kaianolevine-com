@@ -9,7 +9,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
@@ -43,7 +42,6 @@ async def list_catalog(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[CatalogListItem]]:
     """TODO: describe this function."""
-    settings = get_settings()
 
     stmt = select(DbCatalog).order_by(
         DbCatalog.play_count.desc(),
@@ -95,9 +93,7 @@ async def list_catalog(
         for row in rows
     ]
 
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.get(
@@ -111,7 +107,6 @@ async def get_catalog(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[CatalogDetail]:
     """List catalog tracks with optional filtering and pagination."""
-    settings = get_settings()
 
     catalog = await session.get(DbCatalog, id)
     if catalog is None:
@@ -157,7 +152,7 @@ async def get_catalog(
         play_history=play_history,
     )
 
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.patch(

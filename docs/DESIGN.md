@@ -20,7 +20,9 @@ available at `/openapi.json`. All three reflect the currently deployed package v
 
 All endpoints return the standard success envelope:
 
-`{ "data": ..., "meta": { "count": <n>, "total": <n>, "version": "<API_VERSION>" } }`
+`{ "data": ..., "meta": { "count": <n>, "total": <n>, "version": "<package version>" } }`
+
+`meta.version` is the deployed package version, the same value `GET /version` reports.
 
 Errors return:
 

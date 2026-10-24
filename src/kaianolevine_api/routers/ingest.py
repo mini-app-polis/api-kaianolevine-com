@@ -9,7 +9,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
 from ..schemas import Envelope, IngestResponseData, IngestSet, success_envelope
@@ -51,7 +50,6 @@ async def ingest_set(
         principal.display_name or principal.subject,
     )
 
-    settings = get_settings()
     if not await is_enabled("flags.deejay_api.ingest_enabled", session):
         log.warning("%s ingest disabled by feature flag", LOG_WARNING)
         raise HTTPException(
@@ -133,4 +131,4 @@ async def ingest_set(
         catalog_updated=result.catalog_updated,
         catalog_unchanged=result.catalog_unchanged,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

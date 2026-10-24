@@ -90,9 +90,7 @@ async def create_transcription_run(
                 drive_file_id=payload.drive_file_id,
                 deduplicated=True,
             )
-            return success_envelope(
-                data, count=1, total=1, version=settings.API_VERSION
-            )
+            return success_envelope(data, count=1, total=1)
 
     try:
         accepted = await transcription_dispatch.dispatch_transcription(
@@ -117,4 +115,4 @@ async def create_transcription_run(
         mode=payload.mode,
         drive_file_id=payload.drive_file_id,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

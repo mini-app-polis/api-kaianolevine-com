@@ -29,8 +29,6 @@ DEVELOPMENT_ONLY = {m.name for m in identity_registry.MACHINES if m.development_
 #: sets — a secret, a URL, or a switch the docs say is flipped without a
 #: deploy — is declared in railway.ts instead.
 NOT_DECLARED: dict[str, str] = {
-    "API_VERSION": "code constant, reported by /version",
-    "STANDARDS_VERSION": "code constant, the standards release conformed to",
     "HTTP_CLIENT_TIMEOUT_SECS": "overridden by tests only",
     "GITHUB_DEFAULT_BRANCH": "fallback for payloads without a default branch",
     "SPOTIFY_DOPPLER_PROJECT": "the code default is the production project",

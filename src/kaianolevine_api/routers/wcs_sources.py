@@ -127,4 +127,4 @@ async def create_source(
         source.id, session=session, settings=settings
     )
     data = _source_item(source)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

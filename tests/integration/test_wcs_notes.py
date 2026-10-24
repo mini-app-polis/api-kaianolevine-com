@@ -502,53 +502,17 @@ async def test_get_note_not_found(client) -> None:
 # ── PATCH /v1/wcs/notes/{id} ─────────────────────────────────────────────────
 
 
-async def test_patch_note_visibility(client) -> None:
-    transcript = await _create_transcript(client)
-    note = await _create_note(client, transcript["id"], visibility="private")
-    assert note["visibility"] == "private"
-
-    resp = await client.patch(
-        f"/v1/wcs/notes/{note['id']}",
-        json={"visibility": "public"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["data"]["visibility"] == "public"
-
-
-async def test_patch_note_visibility_toggle_private_public_and_back(client) -> None:
+async def test_notes_patch_is_not_routed(client) -> None:
     transcript = await _create_transcript(client)
     note = await _create_note(client, transcript["id"], visibility="private")
 
-    pub = await client.patch(
+    resp = await client.patch(
         f"/v1/wcs/notes/{note['id']}",
         json={"visibility": "public"},
     )
-    assert pub.status_code == 200
-    assert pub.json()["data"]["visibility"] == "public"
+    assert resp.status_code == 405
 
-    priv = await client.patch(
-        f"/v1/wcs/notes/{note['id']}",
-        json={"visibility": "private"},
-    )
-    assert priv.status_code == 200
-    assert priv.json()["data"]["visibility"] == "private"
-
-
-async def test_patch_note_not_found(client) -> None:
-    resp = await client.patch(
-        f"/v1/wcs/notes/{uuid.uuid4()}",
-        json={"visibility": "public"},
-    )
-    assert resp.status_code == 404
-    assert resp.json()["error"]["code"] == "note_not_found"
-
-
-async def test_patch_note_invalid_visibility(client) -> None:
-    transcript = await _create_transcript(client)
-    note = await _create_note(client, transcript["id"])
-
-    resp = await client.patch(
-        f"/v1/wcs/notes/{note['id']}",
-        json={"visibility": "friends_only"},
-    )
-    assert resp.status_code == 422
+    # The GET on the same path stays, and the note is unchanged.
+    got = await client.get(f"/v1/wcs/notes/{note['id']}")
+    assert got.status_code == 200
+    assert got.json()["data"]["visibility"] == "private"

@@ -105,6 +105,8 @@ from pydantic import (
     model_validator,
 )
 
+from .version import package_version
+
 T = TypeVar("T")
 
 
@@ -498,9 +500,14 @@ def api_error(
     return HTTPException(status_code=status_code, detail=d)
 
 
-def success_envelope(data: T, *, count: int, total: int, version: str) -> Envelope[T]:
-    """Build a standard success envelope with metadata."""
-    return Envelope(data=data, meta=Meta(count=count, total=total, version=version))
+def success_envelope(data: T, *, count: int, total: int) -> Envelope[T]:
+    """Build a standard success envelope with metadata.
+
+    ``meta.version`` is the package version, the same value /version reports.
+    """
+    return Envelope(
+        data=data, meta=Meta(count=count, total=total, version=package_version())
+    )
 
 
 # ── WCS Notes schemas ─────────────────────────────────────────────────────────
@@ -678,16 +685,6 @@ class WcsNoteAdminPatch(BaseModel):
     is_default_visible: bool | None = Field(
         default=None,
         description="Whether this note is visible to all signed-in users by default.",
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class WcsNotePatch(BaseModel):
-    """PATCH /v1/wcs/notes/{id} — user-facing visibility toggle."""
-
-    visibility: WcsVisibility = Field(
-        ..., description="Visibility setting for this record."
     )
 
     model_config = ConfigDict(extra="forbid")

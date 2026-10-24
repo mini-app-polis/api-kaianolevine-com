@@ -140,6 +140,7 @@ export default defineRailway((ctx) => {
       NOTIFY_MACHINE_CLIENT_ERRORS: preserve(),
       NOTIFY_SUPPRESSED_TABLES: preserve(),
       NOTIFY_EXCLUDED_PATHS: preserve(),
+      DISCORD_NOTIFY_EVENTS: preserve(),
     },
   });
 

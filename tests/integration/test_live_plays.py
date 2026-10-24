@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from kaianolevine_api.models import FeatureFlag as DbFeatureFlag
@@ -80,13 +80,10 @@ async def test_live_plays_recent_limit_param_caps_page_size(client) -> None:
 async def _disable_live_plays(async_engine) -> None:
     maker = async_sessionmaker(async_engine, expire_on_commit=False, autoflush=False)
     async with maker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.live_plays_enabled",
-                enabled=False,
-                description="Disable live plays",
-            )
+        await session.execute(
+            update(DbFeatureFlag)
+            .where(DbFeatureFlag.name == "flags.deejay_api.live_plays_enabled")
+            .values(enabled=False)
         )
         await session.commit()
 

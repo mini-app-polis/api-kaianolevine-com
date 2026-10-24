@@ -33,7 +33,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import StandardsCatalog as DbCatalog
 from ..schemas import (
@@ -94,7 +93,6 @@ async def publish_catalog(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[StandardsCatalogItem]:
     """Publish a catalog version, or confirm the one already stored."""
-    settings = get_settings()
     document = payload.model_dump(mode="json")
 
     existing = await session.get(DbCatalog, payload.version)
@@ -118,7 +116,6 @@ async def publish_catalog(
             ),
             count=1,
             total=1,
-            version=settings.API_VERSION,
         )
 
     row = DbCatalog(
@@ -145,7 +142,6 @@ async def publish_catalog(
         ),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )
 
 
@@ -166,7 +162,6 @@ async def get_catalog(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[dict]:
     """Return one catalog document."""
-    settings = get_settings()
 
     if version:
         row = await session.get(DbCatalog, version)
@@ -190,7 +185,7 @@ async def get_catalog(
                 "No standards catalog has been published yet.",
             )
 
-    return success_envelope(row.payload, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(row.payload, count=1, total=1)
 
 
 @router.get(
@@ -207,7 +202,6 @@ async def list_versions(
     The catalogs are hundreds of kilobytes each; answering "which versions
     exist" should not require transferring any of them.
     """
-    settings = get_settings()
     stmt = select(DbCatalog).order_by(DbCatalog.version_sort.desc())
     rows = (await session.execute(stmt)).scalars().all()
     data = [
@@ -221,6 +215,4 @@ async def list_versions(
         )
         for row in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))

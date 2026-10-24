@@ -328,7 +328,6 @@ async def test_the_body_is_what_the_route_returned_before_the_cache(
     """Same envelope, same field names: the cog's contract is unchanged."""
     from fastapi.encoders import jsonable_encoder
 
-    from kaianolevine_api.config import get_settings
     from kaianolevine_api.schemas import success_envelope
 
     transcript_id = await _create_transcript(client)
@@ -340,7 +339,6 @@ async def test_the_body_is_what_the_route_returned_before_the_cache(
             await wiki_svc.export_wiki_corpus(db_session),
             count=1,
             total=1,
-            version=get_settings().API_VERSION,
         )
     )
 

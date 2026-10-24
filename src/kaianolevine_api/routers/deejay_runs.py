@@ -108,9 +108,7 @@ async def create_deejay_run(
             data = DeejayRunAccepted(
                 message_id=earlier, mode=payload.mode, deduplicated=True
             )
-            return success_envelope(
-                data, count=1, total=1, version=settings.API_VERSION
-            )
+            return success_envelope(data, count=1, total=1)
 
     try:
         accepted = await deejay_dispatch.dispatch_deejay(job, settings=settings)
@@ -129,4 +127,4 @@ async def create_deejay_run(
         await dispatch_claims.record(session, acquired, message_id)
 
     data = DeejayRunAccepted(message_id=message_id, mode=payload.mode)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

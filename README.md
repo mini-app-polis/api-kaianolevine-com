@@ -335,6 +335,25 @@ has a policy for at all — and defaults to the five in the table.
 `check_run`, `check_suite` and `status` are absent on purpose: they
 duplicate `workflow_run`, and Discord renders none of the three.
 
+`DISCORD_NOTIFY_EVENTS` decides which of the running list's messages each
+environment posts. It maps an environment name (`ENVIRONMENT`) to the
+events that environment sends, as JSON in a variable:
+
+| Event | Message |
+|---|---|
+| `data_changed` | the summary of what a request committed, to `activity` |
+| `fault` | this service's own 5xx and machine-facing 4xx, to `errors` |
+
+An event left out of an environment's list is not sent, and an environment
+with no entry sends every event. The defaults (in `config.py`) send both
+in production and only `fault` in development, where the writes are
+contract-suite runs and test cleanup. The `NOTIFY_DATA_CHANGES`,
+`NOTIFY_FAULTS` and `NOTIFY_MACHINE_CLIENT_ERRORS` switches still apply on
+top. It decides what reaches Discord only: run reports in `runs` and
+`errors`, and the signals detectors, are not affected. Unsetting a
+channel's webhook is not a way to silence it — the channel falls back to
+`DISCORD_WEBHOOK_URL`.
+
 ### Signals: detected problems that may become tasks
 
 The GitHub webhook, `POST /v1/notify` and this service's own 5xx answers

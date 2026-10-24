@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
@@ -36,7 +35,6 @@ async def list_tracks(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[TrackListItem]]:
     """TODO: describe this function."""
-    settings = get_settings()
 
     stmt = select(DbTrack, DbSet).join(DbSet, DbTrack.set_id == DbSet.id)
 
@@ -119,9 +117,7 @@ async def list_tracks(
         for track, set_row in rows
     ]
 
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.get(
@@ -135,7 +131,6 @@ async def get_track(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[TrackDetail]:
     """Return one track by id for the authenticated owner."""
-    settings = get_settings()
 
     stmt = (
         select(DbTrack, DbSet)
@@ -168,4 +163,4 @@ async def get_track(
         data_quality=track.data_quality,
         catalog_id=track.catalog_id,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

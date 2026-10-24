@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
@@ -39,7 +38,6 @@ async def list_sets(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SetListItem]]:
     """List sets owned by the authenticated owner with pagination."""
-    settings = get_settings()
 
     if year is not None:
         date_from = dt.date(year, 1, 1)
@@ -91,9 +89,7 @@ async def list_sets(
         for set_id, set_date, set_venue, source_file, track_count in rows
     ]
 
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 def _track_to_item(
@@ -131,7 +127,6 @@ async def get_set(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[SetDetail]:
     """Return one set by id for the authenticated owner."""
-    settings = get_settings()
 
     set_row = await session.get(DbSet, id)
     if set_row is None:
@@ -160,7 +155,7 @@ async def get_set(
             for t in tracks
         ],
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -174,7 +169,6 @@ async def get_set_tracks(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SetTrackListItem]]:
     """Return tracks for one set ordered by play sequence."""
-    settings = get_settings()
     set_row = await session.get(DbSet, id)
     if set_row is None:
         from ..schemas import api_error
@@ -194,6 +188,4 @@ async def get_set_tracks(
         _track_to_item(t, set_venue=set_row.venue, set_date=set_row.set_date)
         for t in tracks
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
