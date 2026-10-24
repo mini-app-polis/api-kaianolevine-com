@@ -73,5 +73,4 @@ async def github_status(
         payload,
         count=len(payload.repositories),
         total=payload.totals.repositories,
-        version=settings.API_VERSION,
     )

@@ -203,7 +203,7 @@ async def refresh_wcs_embeddings(
         summary.pages_total,
         summary.duration_ms,
     )
-    return success_envelope(summary, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(summary, count=1, total=1)
 
 
 @router.post(
@@ -288,5 +288,4 @@ async def ask(
         ),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )

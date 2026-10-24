@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import FeatureFlag as DbFeatureFlag
 from ..schemas import (
@@ -32,7 +31,6 @@ async def list_flags(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[FeatureFlagItem]]:
     """Return all feature flags in a paginated envelope."""
-    settings = get_settings()
     total = (
         await session.execute(select(func.count()).select_from(DbFeatureFlag))
     ).scalar_one()
@@ -58,9 +56,7 @@ async def list_flags(
         )
         for row in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.patch(
@@ -77,7 +73,6 @@ async def patch_flag(
 ) -> Envelope[FeatureFlagItem]:
     """Update a feature flag enabled state by name."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
 
     row = (
         await session.execute(select(DbFeatureFlag).where(DbFeatureFlag.name == name))
@@ -100,4 +95,4 @@ async def patch_flag(
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

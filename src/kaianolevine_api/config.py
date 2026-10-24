@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     # Railway still picks up RAILWAY_ENVIRONMENT_NAME rather than the old
     # literal "development" that mistagged every production Sentry event.
     ENVIRONMENT: str = Field(default_factory=lambda: current_environment().value)
-    API_VERSION: str = "1.0"
-    STANDARDS_VERSION: str = "3.4.2"
     SENTRY_DSN_APIS: str | None = None
     # Fails closed: no origin is allowed until one is configured. A wildcard
     # default, with credentials allowed, would also have let the contact form
@@ -143,6 +141,17 @@ class Settings(BaseSettings):
     # about the contract between them, not a guard doing its job. A 4xx to a
     # human is the guard doing its job and is never reported.
     NOTIFY_MACHINE_CLIENT_ERRORS: bool = True
+    # Which running-list messages each environment posts, keyed by
+    # ENVIRONMENT. The event names are services.activity.NOTIFY_EVENTS. An
+    # environment with no entry posts every event; an event left out of its
+    # environment's list is not posted. Both gates apply: an event needs its
+    # NOTIFY_* switch on as well. Development leaves data changes out — its
+    # writes are contract-suite runs and test cleanup, not news. This only
+    # decides what reaches Discord; the signals detectors are unaffected.
+    DISCORD_NOTIFY_EVENTS: dict[str, list[str]] = {
+        "production": ["data_changed", "fault"],
+        "development": ["fault"],
+    }
     # Tables whose writes are not news. identity_audit_events is written on
     # every authorized request, reads included, so leaving it in would make
     # the feed a copy of the access log.

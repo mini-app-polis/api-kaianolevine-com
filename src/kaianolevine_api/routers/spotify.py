@@ -10,7 +10,6 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import SpotifyPlaylist as DbSpotifyPlaylist
 from ..schemas import (
@@ -34,7 +33,6 @@ async def list_spotify_playlists(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[SpotifyPlaylistItem]]:
     """Return the latest ingested Spotify playlist snapshots."""
-    settings = get_settings()
     total = (
         await session.execute(select(func.count()).select_from(DbSpotifyPlaylist))
     ).scalar_one()
@@ -58,9 +56,7 @@ async def list_spotify_playlists(
         )
         for row in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.post(
@@ -76,7 +72,6 @@ async def ingest_spotify_playlists(
 ) -> Envelope[SpotifyPlaylistsIngestResponse]:
     """Upsert Spotify playlist snapshots from ingest payloads."""
     _ = owner_id_principal.subject
-    settings = get_settings()
     tbl = DbSpotifyPlaylist.__table__
 
     upserted = 0
@@ -124,4 +119,4 @@ async def ingest_spotify_playlists(
 
     await session.commit()
     data = SpotifyPlaylistsIngestResponse(upserted=upserted, unchanged=unchanged)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

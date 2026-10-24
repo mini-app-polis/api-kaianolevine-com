@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 import asyncpg
 import httpx
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,6 +132,14 @@ async def create_tables(async_engine) -> AsyncIterator[None]:
         await conn.close()
     runner = _load_migration_runner()
     assert await runner._run(TEST_DATABASE_URL, False, set()) == 0
+    conn = await asyncpg.connect(TEST_DATABASE_URL)
+    try:
+        rows = await conn.fetch(
+            "SELECT owner_id, name, enabled, description FROM feature_flags"
+        )
+    finally:
+        await conn.close()
+    _SEEDED_FLAGS[:] = [dict(r) for r in rows]
     yield
 
 
@@ -150,13 +159,19 @@ def clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
 
 
+#: The feature flags as the migrations seed them, read once the schema is built.
+_SEEDED_FLAGS: list[dict[str, Any]] = []
+
+
 @pytest.fixture(autouse=True)
 async def reset_db(async_engine) -> AsyncIterator[None]:
     """Every test starts with empty tables, the migration ledger aside.
 
-    Including the rows the migrations seed (feature flags, the identity
-    role vocabulary): tests seed what they need through seed_identity,
-    exactly as they did when the schema came from the models.
+    Including the rows the migrations seed for the identity role
+    vocabulary: tests seed what they need through seed_identity. The
+    feature flags are the exception. A missing flag reads as off, so each
+    test starts with the flags exactly as the migrations seed them, as a
+    deployed database has them; a test that needs one changed updates it.
     """
     async with async_engine.begin() as conn:
         tables = (
@@ -174,6 +189,15 @@ async def reset_db(async_engine) -> AsyncIterator[None]:
                 "TRUNCATE "
                 + ", ".join(f'"{t}"' for t in tables)
                 + " RESTART IDENTITY CASCADE"
+            )
+        if _SEEDED_FLAGS:
+            await conn.execute(
+                text(
+                    "INSERT INTO feature_flags (id, owner_id, name, enabled, "
+                    "description) VALUES (gen_random_uuid(), :owner_id, :name, "
+                    ":enabled, :description)"
+                ),
+                _SEEDED_FLAGS,
             )
     yield
 

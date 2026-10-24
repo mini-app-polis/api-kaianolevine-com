@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import os
 from contextlib import asynccontextmanager
-from importlib.metadata import version as pkg_version
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -57,6 +56,7 @@ from .schemas import ErrorDetail, ErrorEnvelope
 # importing it is what registers the SQLAlchemy listeners that tally
 # data changes.
 from .services import activity, cloudwatch, discord, github_dashboard
+from .version import package_version
 
 logger = get_logger()
 
@@ -197,12 +197,9 @@ async def _reconcile_identity_registry() -> None:
 def _build_app() -> FastAPI:
     settings = get_settings()
 
-    try:
-        api_version = pkg_version("kaianolevine-api")
-    except Exception:
-        api_version = settings.API_VERSION
-
-    app = FastAPI(title="kaianolevine-api", version=api_version, lifespan=lifespan)
+    app = FastAPI(
+        title="kaianolevine-api", version=package_version(), lifespan=lifespan
+    )
 
     app.add_middleware(
         CORSMiddleware,

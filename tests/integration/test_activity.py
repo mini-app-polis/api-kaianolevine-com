@@ -13,10 +13,8 @@ import asyncio
 import pytest
 import respx
 from httpx import ASGITransport, AsyncClient, Response
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from kaianolevine_api.config import get_settings
-from kaianolevine_api.models import FeatureFlag as DbFeatureFlag
 from kaianolevine_api.services import activity
 
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
@@ -125,25 +123,12 @@ def test_excluded_paths_cover_children():
 
 
 @respx.mock
-async def test_committed_change_reaches_discord(client, async_engine):
+async def test_committed_change_reaches_discord(client):
     """A real route, a real commit, one message — and the audit row silent."""
     route = respx.post(DISCORD_URL).mock(return_value=Response(204))
 
-    # Seeded outside the request, so this write is not part of the tally.
-    sessionmaker = async_sessionmaker(
-        async_engine, expire_on_commit=False, autoflush=False
-    )
-    async with sessionmaker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.ingest_enabled",
-                enabled=True,
-                description="Enable ingest endpoint",
-            )
-        )
-        await session.commit()
-
+    # The flag is seeded by the migrations, outside the request, so it is
+    # not part of the tally.
     resp = await client.patch(
         "/v1/flags/flags.deejay_api.ingest_enabled", json={"enabled": False}
     )
@@ -330,3 +315,59 @@ async def test_unhandled_exception_is_reported_and_re_raised():
     body = route.calls[0].request.content.decode()
     assert "RuntimeError" in body
     assert "the thing broke" not in body
+
+
+async def _seed_grant(client, async_engine) -> str:
+    """A note grant to delete, created before the request under test."""
+    from sqlalchemy import text
+
+    from tests.integration.test_wcs_notes import _create_note, _create_transcript
+
+    async with async_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO wcs_user_profiles (user_id, email, display_name, "
+                "is_admin) VALUES ('grantee', 'g@example.com', 'Grantee', false)"
+            )
+        )
+    transcript = await _create_transcript(client)
+    note = await _create_note(client, transcript["id"])
+    resp = await client.post(
+        "/v1/wcs/admin/grants", json={"user_id": "grantee", "note_id": note["id"]}
+    )
+    assert resp.status_code == 201
+    return resp.json()["data"]["id"]
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("environment", "posts"), [("development", 0), ("production", 1)]
+)
+@pytest.mark.parametrize("change", ["update", "delete"])
+async def test_data_changes_post_by_environment(
+    client, async_engine, monkeypatch, environment, posts, change
+):
+    """Development's writes stay out of the channel; production's are posted."""
+    route = respx.post(DISCORD_URL).mock(return_value=Response(204))
+    grant_id = await _seed_grant(client, async_engine) if change == "delete" else None
+    await _drain()
+
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    get_settings.cache_clear()
+    before = route.call_count
+
+    if change == "delete":
+        resp = await client.delete(f"/v1/wcs/admin/grants/{grant_id}")
+        assert resp.status_code == 204
+        table = "wcs_note_grants"
+    else:
+        resp = await client.patch(
+            "/v1/flags/flags.deejay_api.ingest_enabled", json={"enabled": False}
+        )
+        assert resp.status_code == 200
+        table = "feature_flags"
+    await _drain()
+
+    bodies = [call.request.content.decode() for call in route.calls[before:]]
+    assert len(bodies) == posts
+    assert all(table in body for body in bodies)

@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
@@ -47,7 +46,6 @@ async def stats_overview(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[StatsOverview]:
     """Return high-level listening statistics for the authenticated owner."""
-    settings = get_settings()
 
     total_sets = (
         await session.execute(select(func.count()).select_from(DbSet))
@@ -91,7 +89,7 @@ async def stats_overview(
         years_active=years_active,
         most_played_artist=most_played_artist,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -104,7 +102,6 @@ async def stats_by_year(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsByYearItem]]:
     """Return yearly set and track counts for the authenticated owner."""
-    settings = get_settings()
 
     year_expr = func.extract("year", DbSet.set_date).cast(Integer).label("year")
     rows = (
@@ -130,9 +127,7 @@ async def stats_by_year(
         for row in rows
     ]
 
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -145,7 +140,6 @@ async def stats_top_artists(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsTopArtistItem]]:
     """Return most-played artists for the authenticated owner."""
-    settings = get_settings()
 
     rows = (
         await session.execute(
@@ -165,9 +159,7 @@ async def stats_top_artists(
             select(func.count(func.distinct(DbTrack.artist))).where(counted)
         )
     ).scalar_one()
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.get(
@@ -181,7 +173,6 @@ async def stats_top_tracks(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[StatsTopTrackItem]]:
     """Return most-played tracks for the authenticated owner."""
-    settings = get_settings()
 
     songs = song_ids()
     per_song = (
@@ -216,9 +207,7 @@ async def stats_top_tracks(
             select(func.count(func.distinct(songs.c.song_id))).select_from(songs)
         )
     ).scalar_one()
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.get(
@@ -232,11 +221,8 @@ async def stats_year_summaries(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[YearSummaryListItem]]:
     """Return one headline row per year."""
-    settings = get_settings()
     data = await list_year_summaries(session)
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -250,11 +236,10 @@ async def stats_year_summary(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[YearSummary]:
     """Return the full summary for one year."""
-    settings = get_settings()
     data = await get_year_summary(session, year)
     if data is None:
         raise api_error(404, "not_found", f"No sets in {year}")
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -269,13 +254,10 @@ async def stats_year_songs(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[YearSummarySong]]:
     """Return the full song list for one year."""
-    settings = get_settings()
     data = await list_year_songs(session, year)
     if data is None:
         raise api_error(404, "not_found", f"No sets in {year}")
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(
@@ -290,8 +272,5 @@ async def stats_collection(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[CollectionSong]]:
     """Return the complete collection."""
-    settings = get_settings()
     data = await list_collection(session)
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))

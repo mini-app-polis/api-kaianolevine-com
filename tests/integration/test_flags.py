@@ -12,25 +12,6 @@ async def test_flags_get_list_meta_total_matches_db_count(client, async_engine) 
         async_engine, expire_on_commit=False, autoflush=False
     )
     async with sessionmaker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.ingest_enabled",
-                enabled=True,
-                description="Enable ingest endpoint",
-            )
-        )
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.public_catalog_enabled",
-                enabled=True,
-                description="Enable public catalog endpoints",
-            )
-        )
-        await session.commit()
-
-    async with sessionmaker() as session:
         db_total = (
             await session.execute(select(func.count()).select_from(DbFeatureFlag))
         ).scalar_one()
@@ -50,15 +31,7 @@ async def test_flags_patch_known_flag_and_service_contract(
         async_engine, expire_on_commit=False, autoflush=False
     )
     async with sessionmaker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.ingest_enabled",
-                enabled=True,
-                description="Enable ingest endpoint",
-            )
-        )
-        await session.commit()
+        assert await is_enabled("flags.deejay_api.ingest_enabled", session) is True
 
     patch_resp = await client.patch(
         "/v1/flags/flags.deejay_api.ingest_enabled",
@@ -70,25 +43,11 @@ async def test_flags_patch_known_flag_and_service_contract(
     assert patched["enabled"] is False
 
     async with sessionmaker() as session:
-        assert await is_enabled("flags.deejay_api.unknown_flag", session) is True
+        assert await is_enabled("flags.deejay_api.unknown_flag", session) is False
         assert await is_enabled("flags.deejay_api.ingest_enabled", session) is False
 
 
-async def test_flags_patch_unknown_name_returns_404(client, async_engine) -> None:
-    sessionmaker = async_sessionmaker(
-        async_engine, expire_on_commit=False, autoflush=False
-    )
-    async with sessionmaker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.ingest_enabled",
-                enabled=True,
-                description="x",
-            )
-        )
-        await session.commit()
-
+async def test_flags_patch_unknown_name_returns_404(client) -> None:
     resp = await client.patch(
         "/v1/flags/does-not-exist-flag-name",
         json={"enabled": True},

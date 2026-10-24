@@ -10,7 +10,6 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
 from ..database import get_db_session
 from ..models import LivePlay as DbLivePlay
 from ..schemas import (
@@ -38,7 +37,6 @@ async def ingest_live_plays(
 ) -> Envelope[LivePlaysResponseData]:
     """Ingest live-play history rows with idempotent conflict handling."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     if not await is_enabled("flags.deejay_api.live_plays_enabled", session):
         raise HTTPException(
             status_code=503,
@@ -74,7 +72,7 @@ async def ingest_live_plays(
 
     await session.commit()
     data = LivePlaysResponseData(inserted=inserted, skipped=skipped)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -88,7 +86,6 @@ async def list_recent_live_plays(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[LivePlayRecord]]:
     """Return recent live-play rows ordered by played_at descending."""
-    settings = get_settings()
     if not await is_enabled("flags.deejay_api.live_plays_enabled", session):
         raise HTTPException(
             status_code=503,
@@ -114,6 +111,4 @@ async def list_recent_live_plays(
         )
         for row in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)

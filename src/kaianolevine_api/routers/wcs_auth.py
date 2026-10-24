@@ -125,7 +125,7 @@ async def upsert_wcs_me(
 
     settings = get_settings()
     data = WcsUserProfileOut.model_validate(profile)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(
@@ -146,12 +146,10 @@ async def get_wcs_me(
     if profile is None:
         raise api_error(404, "profile_not_found", "Profile not found")
 
-    settings = get_settings()
     return success_envelope(
         WcsUserProfileOut.model_validate(profile),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )
 
 
@@ -170,15 +168,12 @@ async def list_wcs_users(
 ) -> Envelope[list[WcsUserProfileOut]]:
     """List all WCS user profiles for admin review."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     result = await session.execute(
         select(WcsUserProfile).order_by(WcsUserProfile.last_seen_at.desc())
     )
     rows = result.scalars().all()
     data = [WcsUserProfileOut.model_validate(p) for p in rows]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.patch(
@@ -200,7 +195,6 @@ async def patch_wcs_user(
 ) -> Envelope[WcsUserProfileOut]:
     """Patch editable WCS user profile fields as an admin."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     result = await session.execute(
         select(WcsUserProfile).where(WcsUserProfile.user_id == user_id)
     )
@@ -218,7 +212,6 @@ async def patch_wcs_user(
         WcsUserProfileOut.model_validate(profile),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )
 
 
@@ -302,7 +295,6 @@ async def list_wcs_grants(
 ) -> Envelope[list[WcsNoteGrantOut]]:
     """TODO: describe this function."""
     _ = admin_id_principal.subject
-    settings = get_settings()
     stmt = select(WcsNoteGrant).order_by(WcsNoteGrant.granted_at.desc())
     if user_id:
         stmt = stmt.where(WcsNoteGrant.user_id == user_id)
@@ -312,9 +304,7 @@ async def list_wcs_grants(
     result = await session.execute(stmt)
     rows = result.scalars().all()
     data = [WcsNoteGrantOut.model_validate(g) for g in rows]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.post(
@@ -331,7 +321,6 @@ async def create_wcs_grant(
 ) -> Envelope[WcsNoteGrantOut]:
     """Create a note grant linking a user to a WCS note."""
     admin_id = admin_id_principal.subject
-    settings = get_settings()
     grant = WcsNoteGrant(
         user_id=body.user_id,
         note_id=body.note_id,
@@ -349,7 +338,6 @@ async def create_wcs_grant(
         WcsNoteGrantOut.model_validate(grant),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )
 
 
@@ -403,7 +391,6 @@ async def patch_wcs_note_default_visibility(
     Reads _legacy_wcs_notes; superseded by PATCH /v1/wcs/admin/sources/{id}/visibility.
     """
     _ = admin_id_principal.subject
-    settings = get_settings()
     result = await session.execute(select(DbNote).where(DbNote.id == note_id))
     note = result.scalars().first()
     if note is None:
@@ -417,7 +404,6 @@ async def patch_wcs_note_default_visibility(
         _to_item(note),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )
 
 
@@ -467,5 +453,4 @@ async def patch_wcs_note_admin(
         _to_item(note),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )

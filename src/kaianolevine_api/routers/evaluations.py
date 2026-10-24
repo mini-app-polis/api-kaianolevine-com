@@ -165,7 +165,6 @@ async def list_evaluations(
     the whole comma-string as a single literal ``source`` value and
     return zero rows, silently breaking the check.
     """
-    settings = get_settings()
 
     repo_filter = _csv_filter(repo)
     dimension_filter = _csv_filter(dimension)
@@ -229,9 +228,7 @@ async def list_evaluations(
         for row in rows
     ]
 
-    return success_envelope(
-        data, count=len(data), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total)
 
 
 @router.get(
@@ -245,7 +242,6 @@ async def evaluations_summary(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[EvaluationSummaryItem]]:
     """Return aggregate evaluation counts grouped by dimension."""
-    settings = get_settings()
 
     eligible = _eligible_latest_evaluation_ids_subquery()
     stmt = (
@@ -276,13 +272,11 @@ async def evaluations_summary(
         )
         for d, error_count, warn_count, info_count, most_recent in rows
     ]
-    return success_envelope(
-        data, count=len(data), total=len(data), version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 def _write_result(
-    row: DbEval, *, deduplicated: bool, version: str
+    row: DbEval, *, deduplicated: bool
 ) -> Envelope[PipelineEvaluationWriteResult]:
     """One stored finding, and whether this request is what stored it."""
     return success_envelope(
@@ -304,7 +298,6 @@ def _write_result(
         ),
         count=1,
         total=1,
-        version=version,
     )
 
 
@@ -341,7 +334,6 @@ async def create_evaluation(
     with respect to.
     """
     owner_id = owner_id_principal.subject
-    settings = get_settings()
 
     fingerprint = evaluation_fingerprint(
         violation_id=payload.violation_id,
@@ -365,7 +357,7 @@ async def create_evaluation(
 
     existing = await already_stored()
     if existing is not None:
-        return _write_result(existing, deduplicated=True, version=settings.API_VERSION)
+        return _write_result(existing, deduplicated=True)
 
     # Legacy catch-all field intentionally left empty.
     details = None
@@ -401,10 +393,10 @@ async def create_evaluation(
         existing = await already_stored()
         if existing is None:
             raise
-        return _write_result(existing, deduplicated=True, version=settings.API_VERSION)
+        return _write_result(existing, deduplicated=True)
 
     await session.refresh(row)
-    return _write_result(row, deduplicated=False, version=settings.API_VERSION)
+    return _write_result(row, deduplicated=False)
 
 
 @router.post(
@@ -469,7 +461,7 @@ async def create_evaluation_run(
         ref=payload.ref,
         mode=payload.mode,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 def _mint_introspection_run_id(standards_version: str) -> str:
@@ -616,7 +608,7 @@ async def create_evaluation_introspection(
         message_id=str(accepted.get("message_id") or ""),
         standards_version=standards_version,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 @router.post(
@@ -715,4 +707,4 @@ async def create_evaluation_fleet(
         ],
         failed=list(accepted.get("failed", [])),
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

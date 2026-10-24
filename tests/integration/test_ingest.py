@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kaianolevine_api.database import get_db_session
 from kaianolevine_api.main import app
 from kaianolevine_api.models import FeatureFlag as DbFeatureFlag
 from kaianolevine_api.models import Set as DbSet
+from kaianolevine_api.version import package_version
 
 
 def _payload(set_date: str, venue: str, source_file: str, tracks: list[dict]) -> dict:
@@ -45,7 +46,7 @@ async def test_ingest_reconciliation_confidence_escalation(client) -> None:
     assert set(j1.keys()) == {"data", "meta"}
     assert j1["meta"]["count"] == 1
     assert j1["meta"]["total"] == 1
-    assert j1["meta"]["version"] == "1.0"
+    assert j1["meta"]["version"] == package_version()
     assert j1["data"]["tracks_created"] == 1
     assert j1["data"]["catalog_new"] == 1
     assert j1["data"]["catalog_updated"] == 0
@@ -135,13 +136,10 @@ async def test_ingest_respects_feature_flag_disable(client, async_engine) -> Non
         async_engine, expire_on_commit=False, autoflush=False
     )
     async with sessionmaker() as session:
-        session.add(
-            DbFeatureFlag(
-                owner_id="dev-owner",
-                name="flags.deejay_api.ingest_enabled",
-                enabled=False,
-                description="Disable ingest endpoint",
-            )
+        await session.execute(
+            update(DbFeatureFlag)
+            .where(DbFeatureFlag.name == "flags.deejay_api.ingest_enabled")
+            .values(enabled=False)
         )
         await session.commit()
 

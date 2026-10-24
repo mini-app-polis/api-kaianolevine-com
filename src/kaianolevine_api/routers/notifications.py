@@ -649,5 +649,4 @@ def _result(
         ),
         count=1,
         total=1,
-        version=settings.API_VERSION,
     )

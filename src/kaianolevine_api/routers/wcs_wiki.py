@@ -92,11 +92,10 @@ def _entity_get(kind: str, path: str):
         four WCS wiki entity kinds (concept, technique, pattern, drill).
         """
         owner_id = owner_id_principal.subject
-        settings = get_settings()
         view = await wiki_svc.get_entity_view(session, owner_id, slug=slug, kind=kind)
         if view is None:
             raise api_error(404, "entity_not_found", f"{kind.title()} not found")
-        return success_envelope(view, count=1, total=1, version=settings.API_VERSION)
+        return success_envelope(view, count=1, total=1)
 
     return handler
 
@@ -128,13 +127,10 @@ def _entity_list(kind: str, path: str):
         four WCS wiki entity kinds (concept, technique, pattern, drill).
         """
         _ = owner_id_principal.subject
-        settings = get_settings()
         items, total = await wiki_svc.list_entities(
             session, kind=kind, status=status, limit=limit, offset=offset
         )
-        return success_envelope(
-            items, count=len(items), total=total, version=settings.API_VERSION
-        )
+        return success_envelope(items, count=len(items), total=total)
 
     return handler
 
@@ -163,11 +159,10 @@ async def get_instructor(
 ) -> Envelope[WcsInstructorViewItem]:
     """Return the full wiki view for one instructor; 404 if the slug is unknown."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     view = await wiki_svc.get_instructor_view(session, owner_id, slug=slug)
     if view is None:
         raise api_error(404, "instructor_not_found", "Instructor not found")
-    return success_envelope(view, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(view, count=1, total=1)
 
 
 @router.get(
@@ -184,11 +179,8 @@ async def list_instructors(
 ) -> Envelope[list[WcsInstructorItem]]:
     """Return a paginated list of instructors with the total instructor count."""
     _ = owner_id_principal.subject
-    settings = get_settings()
     items, total = await wiki_svc.list_instructors(session, limit=limit, offset=offset)
-    return success_envelope(
-        items, count=len(items), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(items, count=len(items), total=total)
 
 
 @router.get(
@@ -204,11 +196,10 @@ async def get_source(
 ) -> Envelope[WcsSourceViewItem]:
     """Return the full wiki view for one source; 404 if the source is not visible to the caller."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     view = await wiki_svc.get_source_view(session, owner_id, source_id=source_id)
     if view is None:
         raise api_error(404, "source_not_found", "Source not found")
-    return success_envelope(view, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(view, count=1, total=1)
 
 
 @router.get(
@@ -225,13 +216,10 @@ async def list_sources(
 ) -> Envelope[list[WcsSourceItem]]:
     """Return a paginated list of sources visible to the caller with the total source count."""
     owner_id = owner_id_principal.subject
-    settings = get_settings()
     items, total = await wiki_svc.list_sources(
         session, owner_id, limit=limit, offset=offset
     )
-    return success_envelope(
-        items, count=len(items), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(items, count=len(items), total=total)
 
 
 @router.get(
@@ -251,11 +239,8 @@ async def list_all_sources_admin(
 ) -> Envelope[list[WcsSourceItem]]:
     """Return every source regardless of visibility (admin catalog)."""
     _admin_id = admin_id_principal.subject
-    settings = get_settings()
     items, total = await wiki_svc.list_all_sources(session, limit=limit, offset=offset)
-    return success_envelope(
-        items, count=len(items), total=total, version=settings.API_VERSION
-    )
+    return success_envelope(items, count=len(items), total=total)
 
 
 @router.get(
@@ -274,7 +259,6 @@ async def get_source_admin(
 ) -> Envelope[WcsSourceViewItem]:
     """Return the full wiki view for one source, bypassing visibility checks."""
     _admin_id = admin_id_principal.subject
-    settings = get_settings()
     view = await wiki_svc.get_source_view(
         session,
         _admin_id,
@@ -283,7 +267,7 @@ async def get_source_admin(
     )
     if view is None:
         raise api_error(404, "source_not_found", "Source not found")
-    return success_envelope(view, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(view, count=1, total=1)
 
 
 @router.get(
@@ -319,7 +303,6 @@ async def export_wiki(
 ) -> Response:
     """Return the full WCS corpus (cog-only, not visibility-filtered)."""
     caller_id = caller_id_principal.subject
-    settings = get_settings()
     etag = await export_svc.corpus_etag(session)
     if export_svc.etag_matches(request.headers.get("if-none-match"), etag):
         log.info(
@@ -334,9 +317,7 @@ async def export_wiki(
         started = time.monotonic()
         data = await wiki_svc.export_wiki_corpus(session)
         read_s = time.monotonic() - started
-        envelope = success_envelope(
-            data, count=1, total=1, version=settings.API_VERSION
-        )
+        envelope = success_envelope(data, count=1, total=1)
         body = envelope.model_dump_json(by_alias=True).encode()
         log.info(
             "wiki export entities=%d sources=%d instructors=%d "
@@ -397,7 +378,7 @@ async def get_wiki_links(
     """Return the whole links document."""
     doc = await state_svc.get_links(session)
     n = len(doc.statements)
-    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(doc, count=n, total=n)
 
 
 @router.post(
@@ -420,9 +401,7 @@ async def put_wiki_links(
         result.total,
         caller.subject,
     )
-    return success_envelope(
-        result, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(result, count=1, total=1)
 
 
 @router.get(
@@ -438,7 +417,7 @@ async def get_wiki_facets(
     """Return the whole facets document."""
     doc = await state_svc.get_facets(session)
     n = len(doc.entities)
-    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(doc, count=n, total=n)
 
 
 @router.post(
@@ -461,9 +440,7 @@ async def put_wiki_facets(
         result.total,
         caller.subject,
     )
-    return success_envelope(
-        result, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(result, count=1, total=1)
 
 
 @router.get(
@@ -479,7 +456,7 @@ async def get_wiki_prose(
     """Return the whole prose document."""
     doc = await state_svc.get_prose(session)
     n = len(doc.entities)
-    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(doc, count=n, total=n)
 
 
 @router.post(
@@ -502,9 +479,7 @@ async def put_wiki_prose(
         result.total,
         caller.subject,
     )
-    return success_envelope(
-        result, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(result, count=1, total=1)
 
 
 @router.get(
@@ -520,7 +495,7 @@ async def get_wiki_thin(
     """Return the whole thin-entity list."""
     doc = await state_svc.get_thin(session)
     n = len(doc.entities)
-    return success_envelope(doc, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(doc, count=n, total=n)
 
 
 @router.post(
@@ -547,9 +522,7 @@ async def put_wiki_thin(
         result.total,
         caller.subject,
     )
-    return success_envelope(
-        result, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(result, count=1, total=1)
 
 
 # ---------------------------------------------------------------------------
@@ -594,9 +567,7 @@ async def put_wiki_pages(
         result.total,
         caller.subject,
     )
-    return success_envelope(
-        result, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(result, count=1, total=1)
 
 
 @router.get(
@@ -613,7 +584,7 @@ async def list_wiki_pages(
     visible = await pages_svc.visible_for_user(session, principal.subject)
     items = await pages_svc.list_pages(session, visible)
     n = len(items)
-    return success_envelope(items, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(items, count=n, total=n)
 
 
 @router.get(
@@ -635,7 +606,7 @@ async def get_wiki_page(
     page = await pages_svc.get_page(session, slug, visible)
     if page is None:
         raise api_error(404, "page_not_found", "Wiki page not found")
-    return success_envelope(page, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(page, count=1, total=1)
 
 
 @router.get(
@@ -653,7 +624,7 @@ async def list_wiki_pages_admin(
     visible = await pages_svc.public_sources(session) if as_ == "public" else None
     items = await pages_svc.list_pages(session, visible)
     n = len(items)
-    return success_envelope(items, count=n, total=n, version=get_settings().API_VERSION)
+    return success_envelope(items, count=n, total=n)
 
 
 @router.get(
@@ -677,7 +648,7 @@ async def get_wiki_page_admin(
     page = await pages_svc.get_page(session, slug, visible)
     if page is None:
         raise api_error(404, "page_not_found", "Wiki page not found")
-    return success_envelope(page, count=1, total=1, version=get_settings().API_VERSION)
+    return success_envelope(page, count=1, total=1)
 
 
 # ---------------------------------------------------------------------------
@@ -705,9 +676,7 @@ async def list_wiki_revision_sources(
 ) -> Envelope[list[WcsWikiRevisionSource]]:
     """One row per origin source, with its revision counts."""
     items, total = await revisions_svc.list_sources(session, limit=limit, offset=offset)
-    return success_envelope(
-        items, count=len(items), total=total, version=get_settings().API_VERSION
-    )
+    return success_envelope(items, count=len(items), total=total)
 
 
 @router.get(
@@ -748,9 +717,7 @@ async def list_wiki_revisions(
         limit=limit,
         offset=offset,
     )
-    return success_envelope(
-        items, count=len(items), total=total, version=get_settings().API_VERSION
-    )
+    return success_envelope(items, count=len(items), total=total)
 
 
 @router.get(
@@ -768,9 +735,7 @@ async def get_wiki_revision(
     revision = await revisions_svc.get_revision(session, revision_id)
     if revision is None:
         raise api_error(404, "revision_not_found", "Wiki page revision not found")
-    return success_envelope(
-        revision, count=1, total=1, version=get_settings().API_VERSION
-    )
+    return success_envelope(revision, count=1, total=1)
 
 
 # ---------------------------------------------------------------------------
@@ -820,7 +785,7 @@ async def enqueue_wiki_jobs(
         caller.subject,
     )
     data = WcsWikiJobsAccepted(message_ids=message_ids)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 # ---------------------------------------------------------------------------
@@ -889,7 +854,7 @@ async def start_wiki_operation(
         deduplicated=earlier is not None,
         queued_at=earlier or now,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 # ── A note written on the site ──
@@ -986,4 +951,4 @@ async def send_wiki_note(
         deduplicated=earlier is not None,
         queued_at=earlier or now,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)

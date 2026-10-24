@@ -46,13 +46,12 @@ import zlib
 from typing import Any
 
 from mini_app_polis.api.contract import WikiJobMessage
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from ..models import FeatureFlag
 from ..schemas import WcsWikiJob
 from . import job_queue
+from .flags import is_enabled
 from .job_queue import DispatchError
 
 __all__ = [
@@ -80,18 +79,12 @@ _LABEL = "wiki dispatch"
 
 
 async def jobs_enabled(session: AsyncSession) -> bool:
-    """Whether the flag is on. Off unless its row exists and says so.
+    """Whether the flag is on, by :func:`.flags.is_enabled`.
 
-    Stricter than :func:`.flags.is_enabled`, which reads a missing flag as
-    on: a missing row here — a fresh database, a test — must not start
-    spending model calls.
+    Off unless its row exists and says so: a missing row — a fresh
+    database, a test — must not start spending model calls.
     """
-    row = (
-        await session.execute(
-            select(FeatureFlag.enabled).where(FeatureFlag.name == FLAG)
-        )
-    ).scalar_one_or_none()
-    return bool(row)
+    return await is_enabled(FLAG, session)
 
 
 def as_message(job: WcsWikiJob) -> dict[str, Any]:

@@ -3,8 +3,8 @@
 Write endpoints (POST) are called by transcription-cog, which authenticates
 with its own named machine key and holds the wcs-writer role; each route
 names the scope it requires. Read endpoints (GET) are called by
-wcs.kaianolevine.com on a Clerk session. PATCH is for user-facing
-visibility toggling.
+wcs.kaianolevine.com on a Clerk session. Visibility is set through the
+wiki/admin endpoints, not here.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from ..schemas import (
     Envelope,
     WcsNoteCreate,
     WcsNoteItem,
-    WcsNotePatch,
     WcsTranscriptCreate,
     WcsTranscriptItem,
     api_error,
@@ -132,7 +131,7 @@ async def create_transcript(
         drive_file_id=row.drive_file_id,
         created_at=row.created_at,
     )
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 # ── Notes — write ─────────────────────────────────────────────────────────────
@@ -219,7 +218,7 @@ async def create_note(
     settings = get_settings()
     auto_refresh.request_refresh(settings)
     data = _to_item(row)
-    return success_envelope(data, count=1, total=1, version=settings.API_VERSION)
+    return success_envelope(data, count=1, total=1)
 
 
 # ── Notes — read ──────────────────────────────────────────────────────────────
@@ -248,7 +247,6 @@ async def list_notes(
     Reads _legacy_wcs_notes; superseded by GET /v1/wcs/wiki/sources.
     """
     owner_id = owner_id_principal.subject
-    settings = get_settings()
 
     # Standard user filtering — no admin bypass.
     # Admins wanting all notes should use GET /v1/wcs/notes/all.
@@ -283,9 +281,7 @@ async def list_notes(
 
     rows = (await session.execute(stmt)).scalars().all()
     data = [_to_item(r) for r in rows]
-    return success_envelope(
-        data, count=len(data), total=total or 0, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total or 0)
 
 
 @router.get(
@@ -324,7 +320,6 @@ async def list_all_notes(
     Reads _legacy_wcs_notes; superseded by GET /v1/wcs/wiki/admin/sources.
     """
     _ = owner_id_principal.subject
-    settings = get_settings()
 
     stmt = (
         select(DbNote)
@@ -347,9 +342,7 @@ async def list_all_notes(
 
     rows = (await session.execute(stmt)).scalars().all()
     data = [_to_item(r) for r in rows]
-    return success_envelope(
-        data, count=len(data), total=total or 0, version=settings.API_VERSION
-    )
+    return success_envelope(data, count=len(data), total=total or 0)
 
 
 @router.get(
@@ -368,7 +361,6 @@ async def get_note(
     Reads _legacy_wcs_notes; superseded by GET /v1/wcs/wiki/sources/{id}.
     """
     owner_id = owner_id_principal.subject
-    settings = get_settings()
 
     result = await session.execute(select(DbNote).where(DbNote.id == note_id))
     row = result.scalars().first()
@@ -379,48 +371,7 @@ async def get_note(
     if not await user_can_see_note(session, owner_id, row):
         raise api_error(403, "forbidden", "Note not visible for this user")
 
-    return success_envelope(
-        _to_item(row), count=1, total=1, version=settings.API_VERSION
-    )
-
-
-# ── Notes — patch ─────────────────────────────────────────────────────────────
-
-
-@router.patch(
-    "/wcs/notes/{note_id}",
-    response_model=Envelope[WcsNoteItem],
-    summary="Update note visibility",
-    description="Toggle a note between private and public. Owner only.",
-)
-async def patch_note(
-    note_id: uuid.UUID,
-    payload: WcsNotePatch,
-    owner_id_principal: Principal = Depends(require_scope("wcs.notes.read")),
-    session: AsyncSession = Depends(get_db_session),
-) -> Envelope[WcsNoteItem]:
-    """Update user-facing visibility for one owned note.
-
-    Reads _legacy_wcs_notes; superseded by substrate wiki/admin endpoints.
-    """
-    owner_id = owner_id_principal.subject
-    settings = get_settings()
-
-    result = await session.execute(
-        select(DbNote).where(DbNote.id == note_id, DbNote.owner_id == owner_id)
-    )
-    row = result.scalars().first()
-
-    if row is None:
-        raise api_error(404, "note_not_found", "Note not found")
-
-    row.visibility = payload.visibility
-    await session.commit()
-    await session.refresh(row)
-
-    return success_envelope(
-        _to_item(row), count=1, total=1, version=settings.API_VERSION
-    )
+    return success_envelope(_to_item(row), count=1, total=1)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
