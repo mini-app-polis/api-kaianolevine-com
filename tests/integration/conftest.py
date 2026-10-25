@@ -271,6 +271,8 @@ _DEV_ROLES = {
         "wcs.wiki.operate",
         "wcs.notes.author",
         "tasks.sweeps.create",
+        "secrets.rotation-events.read",
+        "secrets.rotation-events.write",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
@@ -297,6 +299,10 @@ _DEV_ROLES = {
     "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
     "agent-dispatcher": ["tasks.agent-runs.read", "tasks.agent-runs.write"],
     "agent-reporter": ["tasks.agent-runs.report"],
+    "secrets-rotator": [
+        "secrets.rotation-events.read",
+        "secrets.rotation-events.write",
+    ],
 }
 
 
