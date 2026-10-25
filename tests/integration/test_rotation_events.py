@@ -235,7 +235,7 @@ async def test_the_migration_grants_the_rotator_and_the_admin(
                 await conn.execute(
                     text(
                         "SELECT role_name, scope FROM identity_role_scopes "
-                        "WHERE scope LIKE 'secrets.%'"
+                        "WHERE scope LIKE 'secrets.rotation-events.%'"
                     )
                 )
             ).all()

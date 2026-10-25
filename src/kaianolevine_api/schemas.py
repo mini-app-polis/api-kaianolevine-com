@@ -49,6 +49,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     RotationConfig,
     RotationEvent,
     RotationEventCreate,
+    RotationRequest,
+    RotationRequestAccepted,
     SpotifyPlaylistIngest,
     SpotifyPlaylistsIngest,
     SpotifyPlaylistsIngestResponse,

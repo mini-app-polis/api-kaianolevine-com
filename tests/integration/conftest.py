@@ -273,6 +273,7 @@ _DEV_ROLES = {
         "tasks.sweeps.create",
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
+        "secrets.rotations.create",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
