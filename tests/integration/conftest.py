@@ -274,6 +274,7 @@ _DEV_ROLES = {
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
         "secrets.rotations.create",
+        "secrets.key-use.read",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
@@ -303,6 +304,7 @@ _DEV_ROLES = {
     "secrets-rotator": [
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
+        "secrets.key-use.read",
     ],
 }
 

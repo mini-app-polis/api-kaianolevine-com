@@ -118,6 +118,15 @@ from .version import package_version
 T = TypeVar("T")
 
 
+class KeyUse(BaseModel):
+    """When a machine last proved itself with its previous key, here."""
+
+    machine: str
+    slot: Literal["previous"] = "previous"
+    #: None when no request in this API's audit trail used it.
+    last_used: dt.datetime | None
+
+
 class TaskSweepAccepted(BaseModel):
     """The sweep is on the task manager's queue. Nothing has run yet."""
 
