@@ -234,7 +234,7 @@ MACHINES: tuple[Machine, ...] = (
         roles=("notifier",),
         notes="POST /v1/notify. Run reports from db-backup, db-poller and db-drill.",
     ),
-    # The contract suite in common-python-utils (ADR-012, TEST-016) calls the
+    # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
     # API. Its key is set in development configuration only (CD-033), so in
     # production this machine is declared and cannot authenticate. That is

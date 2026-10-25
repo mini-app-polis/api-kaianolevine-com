@@ -1,4 +1,4 @@
-"""Wiki jobs: the API sends work to wiki-curator-cog (ADR-006).
+"""Wiki jobs: the API sends work to wiki-curator-cog (wiki-curator-cog ADR-0006).
 
 Two ways in — a composed source, behind a flag seeded off, and the curator's
 own follow-on jobs — and one FIFO queue out.

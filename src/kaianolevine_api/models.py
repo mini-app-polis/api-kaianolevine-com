@@ -1582,7 +1582,7 @@ class StandardsCatalog(Base):
 
 
 # ---------------------------------------------------------------------------
-# The wiki curator's state (migration 054, wiki-curator-cog ADR-006)
+# The wiki curator's state (migration 054, wiki-curator-cog ADR-0006)
 # ---------------------------------------------------------------------------
 # Keyed as the curator keys it — statement keys and entity slugs — with no
 # foreign keys into the substrate: proposed concepts have no entity row, and

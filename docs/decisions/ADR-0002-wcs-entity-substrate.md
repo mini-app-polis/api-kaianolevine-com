@@ -204,7 +204,7 @@ The input layer (corrections, additions) is detailed in ADR-0003.
 ### What gets simpler
 
 - `wiki-curator-cog` becomes ~500 lines instead of ~3,000. It's a renderer that reads canonical data and writes markdown. Filter logic moves upstream (validation at extraction time). Synthesis logic disappears (joins replace it). Alias-map mutation disappears (corrections are an API call).
-- The Layer 1 / Layer 2 coordination problem (deferred in `wiki-curator-cog`'s ADR-001) dissolves. There is no mechanical L1 pass to coordinate with; polish prose lives on canonical rows and survives every re-derivation.
+- The Layer 1 / Layer 2 coordination problem (deferred in `wiki-curator-cog`'s ADR-0001) dissolves. There is no mechanical L1 pass to coordinate with; polish prose lives on canonical rows and survives every re-derivation.
 - Cross-cutting queries become SQL joins. "Every concept Kate has taught": `source_attributions JOIN sources WHERE instructor_id = kate`. Today: scan every note, parse every `notes_json`, reconstruct.
 - The Q&A agent retrieves at entity grain. New retrieval tools (`search_concepts`, `search_techniques`, `search_drills`) operate over Layer 2 directly. The "third corpus to bolt on" problem dissolves; the wiki *is* the entity layer.
 - Schema evolution doesn't require re-extraction. Adding a new field to `entities` or a new attribution kind is a migration, not an LLM run.

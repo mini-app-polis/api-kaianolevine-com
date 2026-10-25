@@ -1,7 +1,7 @@
 """The wiki's page documents: store them, filter them per reader, serve them.
 
 wiki-curator-cog's materialise step builds one document per entity page and
-posts it here (ADR-006). The page logic — folds, the reference
+posts it here (wiki-curator-cog ADR-0006). The page logic — folds, the reference
 overlay, By teacher — is the curator's; this module never recomputes a page.
 It does three things:
 
