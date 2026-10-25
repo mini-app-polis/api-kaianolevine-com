@@ -13,6 +13,13 @@ A request repeated by its source is not deduplicated here. It needs no
 claim: the cog looks the source's ``external_id`` up on the board before it
 creates anything, so a second job finds the first one's task and stops.
 
+A change to a task already on the board is a ``task.update`` message,
+naming the task by the ``external_id`` it was created under, with a comment
+and, optionally, a column to move it to. It is sent on the same queue and in
+the same group, so it never overtakes the ``task.create`` that made the task.
+The FIFO queue deduplicates it on its body, and the cog skips a comment the
+task already has, so a repeated update changes nothing.
+
 A sweep of the board asked for on demand is the same ``task.sweep`` message
 the cog's hourly schedule enqueues, on the same queue and in the same group,
 so it never runs beside a job creating a task. Its body never changes, so
@@ -33,6 +40,8 @@ from mini_app_polis.api.contract import (
     TaskCreateMessage,
     TaskCreateRequest,
     TaskSweepMessage,
+    TaskUpdateMessage,
+    TaskUpdateRequest,
 )
 
 from ..config import Settings
@@ -44,7 +53,9 @@ __all__ = [
     "as_message",
     "dispatch_sweep",
     "dispatch_task",
+    "dispatch_task_update",
     "sweep_message",
+    "update_message",
 ]
 
 
@@ -63,6 +74,25 @@ async def dispatch_task(request: TaskCreateRequest, *, settings: Settings) -> di
         # A dropped request is work that never reaches the board while its
         # source believes it was asked for.
         heading="Task not dispatched",
+        settings=settings,
+    )
+
+
+def update_message(request: TaskUpdateRequest) -> dict[str, Any]:
+    """Render one update as a ``task.update`` queue message."""
+    return TaskUpdateMessage(payload=request).model_dump(mode="json", exclude_none=True)
+
+
+async def dispatch_task_update(
+    request: TaskUpdateRequest, *, settings: Settings
+) -> dict:
+    """Enqueue one task update. Raises DispatchError when it did not land."""
+    return await job_queue.enqueue(
+        update_message(request),
+        f"an update to task {request.external_id}",
+        cog="task-manager",
+        label="task dispatch",
+        heading="Task update not dispatched",
         settings=settings,
     )
 

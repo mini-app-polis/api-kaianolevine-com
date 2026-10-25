@@ -79,8 +79,15 @@ def signal_from_workflow_run(
     conclusion = str(run.get("conclusion") or "")
     workflow = workflow_name(str(run.get("name") or "workflow"))
     key = f"{full_name}/{workflow}@{branch}"
+    link = str(run.get("html_url") or "") or None
     if conclusion == "success":
-        return Signal(kind=KIND, key=key, state="recovered", title=key)
+        return Signal(
+            kind=KIND,
+            key=key,
+            state="recovered",
+            title=f"{repo}: {workflow} passing on {branch}",
+            link=link,
+        )
     if conclusion not in _FAILING:
         return None
 
@@ -93,7 +100,7 @@ def signal_from_workflow_run(
         state="failing",
         title=f"{repo}: {workflow} failing on {branch}",
         where=repo,
-        link=str(run.get("html_url") or "") or None,
+        link=link,
         details=f"{conclusion} on {sha}: {subject}".strip(),
         done_when=f"The {workflow} workflow passes on {branch} again.",
         constraints=(

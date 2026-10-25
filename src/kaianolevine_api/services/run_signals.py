@@ -61,10 +61,17 @@ def signal_from_report(embeds: list[dict[str, Any]] | None) -> Signal | None:
             continue
 
         key = f"{repo}/{flow}"
-        if severity in _RECOVERED:
-            return Signal(kind=KIND, key=key, state="recovered", title=key)
-
         run_id = fields[-1].removeprefix("run").strip() if len(fields) > 3 else ""
+        if severity in _RECOVERED:
+            # A run report carries no link, so the run is named instead.
+            return Signal(
+                kind=KIND,
+                key=key,
+                state="recovered",
+                title=f"{repo}: {flow} ran without an error",
+                details=f"Run {run_id} reported {severity}." if run_id else None,
+            )
+
         description = embed.get("description")
         details = description.strip() if isinstance(description, str) else ""
         return Signal(

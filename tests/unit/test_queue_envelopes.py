@@ -19,6 +19,8 @@ from mini_app_polis.api.contract import (
     EvaluationIntrospectionMessage,
     EvaluationRepositoryMessage,
     QueueMessage,
+    TaskUpdateMessage,
+    TaskUpdateRequest,
     TranscriptionRunMessage,
     WikiJobMessage,
 )
@@ -29,6 +31,7 @@ from kaianolevine_api.services import (
     deejay_dispatch,
     evaluation_dispatch,
     fleet_registry,
+    task_dispatch,
     transcription_dispatch,
     wiki_dispatch,
 )
@@ -142,3 +145,20 @@ def test_an_introspection_run() -> None:
     )
     read = _read(message, EvaluationIntrospectionMessage)
     assert read.payload.run_id == "introspection-7.0.0-abc"
+
+
+def test_a_task_update() -> None:
+    request = TaskUpdateRequest(external_id="ci.x#1", comment="ok", section="Review")
+    message = task_dispatch.update_message(request)
+    assert _body(message) == (
+        '{"type": "task.update", "version": 1, "payload": '
+        '{"external_id": "ci.x#1", "comment": "ok", "section": "Review"}}'
+    )
+    assert _read(message, TaskUpdateMessage).payload == request
+
+
+def test_a_task_update_that_moves_nothing_leaves_the_section_out() -> None:
+    message = task_dispatch.update_message(
+        TaskUpdateRequest(external_id="ci.x#1", comment="ok")
+    )
+    assert "section" not in message["payload"]

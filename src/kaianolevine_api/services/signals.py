@@ -30,6 +30,16 @@ the external id is ``<kind>.<key>#<streak id>``, and the claim on the streak
 is atomic, so a delivery seen twice cannot ask twice. A request that does not
 land is reported, and the claim released for the next failure to retry.
 
+**Recovering** an escalated streak asks task-manager-cog, through the same
+queue, to comment on the streak's task and move it to Review: the problem is
+gone, and a person confirms that and closes the task. A streak that closes by
+its kind's recovery event names that event and links it; one that closes by
+its quiet window says the window passed without a failure. The comment is
+built only from the streak and the event that closed it, so a redelivered copy
+is the same text and the task manager can skip it. A streak that never
+escalated has no task, and sends nothing. A request that does not land is
+reported, and the recovery stands: the task stays where it is for a person.
+
 **The task arrives ready.** A detector knows what the board's template asks
 for: where the problem is, the outcome that ends it (the check passing
 again), and what a fix must not do (silence it). So it says so, and the
@@ -51,6 +61,7 @@ from mini_app_polis.api.contract import (
     TaskEffort,
     TaskLink,
     TaskSection,
+    TaskUpdateRequest,
 )
 from mini_app_polis.logger import get_logger
 from sqlalchemy import text
@@ -84,6 +95,9 @@ _FIELD_MAX = 1000
 
 #: Every escalated task's size: one thing that worked has stopped working.
 EFFORT: TaskEffort = "S"
+
+#: The column a recovered streak's task moves to, for a person to confirm.
+REVIEW_SECTION = "Review"
 
 
 @dataclass(frozen=True)
@@ -181,14 +195,63 @@ def request_for(
     )
 
 
-async def _recover(session: AsyncSession, signal: Signal) -> Outcome:
+def recovery_comment(signal: Signal) -> str:
+    """The comment for a task whose streak the event ``signal`` closed."""
+    lines = [f"Recovered: {signal.title}."]
+    if signal.details:
+        lines.append(signal.details)
+    if signal.link and signal.link.startswith("https://"):
+        lines.append(signal.link)
+    lines.append("Moved to Review for a person to confirm the fix and close the task.")
+    return _cut("\n".join(lines), _TEXT_MAX)
+
+
+def quiet_comment(signal: Signal, window: dt.timedelta) -> str:
+    """The comment for a task whose streak closed by its quiet window."""
+    minutes = int(window.total_seconds() // 60)
+    return _cut(
+        f"Recovered: {minutes} minutes passed without another {signal.key}.\n"
+        "Moved to Review for a person to confirm the fix and close the task.",
+        _TEXT_MAX,
+    )
+
+
+async def _request_review(
+    signal: Signal, *, external_id: str, comment: str, settings: Settings
+) -> bool:
+    """Ask for the task to be commented on and moved to Review. Never raises.
+
+    Returns whether the request landed; one that did not is reported.
+    """
+    request = TaskUpdateRequest(
+        external_id=external_id, comment=comment, section=REVIEW_SECTION
+    )
+    try:
+        await task_dispatch.dispatch_task_update(request, settings=settings)
+    except task_dispatch.DispatchError as exc:
+        await job_queue.report_dropped(
+            exc.detail or f"could not enqueue the update for {external_id}",
+            label="signals",
+            heading="Recovery not sent",
+            settings=settings,
+        )
+        return False
+    logger.info(
+        "signals: %s %s sent %s to Review", signal.kind, signal.key, external_id
+    )
+    return True
+
+
+async def _recover(
+    session: AsyncSession, signal: Signal, *, settings: Settings
+) -> Outcome:
     row = (
         await session.execute(
             text(
                 """
                 UPDATE signal_streaks SET closed_at = now()
                 WHERE kind = :kind AND key = :key AND closed_at IS NULL
-                RETURNING escalated_at, failures
+                RETURNING escalated_at, failures, task_external_id
                 """
             ),
             {"kind": signal.kind, "key": signal.key},
@@ -197,7 +260,7 @@ async def _recover(session: AsyncSession, signal: Signal) -> Outcome:
     await session.commit()
     if row is None:
         return "quiet"
-    escalated_at, failures = row
+    escalated_at, failures, task_external_id = row
     if escalated_at is None:
         logger.info(
             "signals: %s %s healed after %d failure(s); nothing reached the board",
@@ -207,11 +270,22 @@ async def _recover(session: AsyncSession, signal: Signal) -> Outcome:
         )
         return "healed"
     logger.info("signals: %s %s recovered", signal.kind, signal.key)
+    if task_external_id:
+        await _request_review(
+            signal,
+            external_id=task_external_id,
+            comment=recovery_comment(signal),
+            settings=settings,
+        )
     return "recovered"
 
 
 async def _close_if_quiet(
-    session: AsyncSession, signal: Signal, window: dt.timedelta
+    session: AsyncSession,
+    signal: Signal,
+    window: dt.timedelta,
+    *,
+    settings: Settings,
 ) -> None:
     """Close the open streak if it has gone ``window`` without a failure.
 
@@ -225,7 +299,7 @@ async def _close_if_quiet(
                 SET closed_at = last_seen_at + make_interval(secs => :secs)
                 WHERE kind = :kind AND key = :key AND closed_at IS NULL
                   AND last_seen_at < now() - make_interval(secs => :secs)
-                RETURNING escalated_at, failures
+                RETURNING escalated_at, failures, task_external_id
                 """
             ),
             {
@@ -236,14 +310,22 @@ async def _close_if_quiet(
         )
     ).first()
     await session.commit()
-    if row is not None:
-        escalated_at, failures = row
-        logger.info(
-            "signals: %s %s went quiet after %d failure(s)%s",
-            signal.kind,
-            signal.key,
-            failures,
-            "" if escalated_at is not None else "; nothing reached the board",
+    if row is None:
+        return
+    escalated_at, failures, task_external_id = row
+    logger.info(
+        "signals: %s %s went quiet after %d failure(s)%s",
+        signal.kind,
+        signal.key,
+        failures,
+        "" if escalated_at is not None else "; nothing reached the board",
+    )
+    if escalated_at is not None and task_external_id:
+        await _request_review(
+            signal,
+            external_id=task_external_id,
+            comment=quiet_comment(signal, window),
+            settings=settings,
         )
 
 
@@ -309,10 +391,10 @@ async def observe(
 ) -> Outcome:
     """Record one signal under its kind's rule, and act on it."""
     if signal.state == "recovered":
-        return await _recover(session, signal)
+        return await _recover(session, signal, settings=settings)
 
     if rule.quiet_window is not None:
-        await _close_if_quiet(session, signal, rule.quiet_window)
+        await _close_if_quiet(session, signal, rule.quiet_window, settings=settings)
 
     row = (
         await session.execute(

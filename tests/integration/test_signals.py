@@ -102,10 +102,25 @@ async def _streaks(session: AsyncSession) -> list[tuple]:
 
 @pytest.fixture
 def dispatch():
-    with patch.object(
-        task_dispatch, "dispatch_task", AsyncMock(return_value={"message_id": "m-1"})
-    ) as dispatched:
+    with (
+        patch.object(
+            task_dispatch,
+            "dispatch_task",
+            AsyncMock(return_value={"message_id": "m-1"}),
+        ) as dispatched,
+        patch.object(
+            task_dispatch,
+            "dispatch_task_update",
+            AsyncMock(return_value={"message_id": "u-1"}),
+        ),
+    ):
         yield dispatched
+
+
+@pytest.fixture
+def updates(dispatch):
+    """The task updates sent while ``dispatch`` is stubbed."""
+    return task_dispatch.dispatch_task_update
 
 
 # ── the detector ──────────────────────────────────────────────────────────
@@ -280,6 +295,93 @@ async def test_a_recovery_with_no_streak_is_quiet(db_session: AsyncSession) -> N
     )
     assert outcome == "quiet"
     assert await _streaks(db_session) == []
+
+
+# ── recovery ──────────────────────────────────────────────────────────────
+
+RECOVERY_LINK = "https://github.com/mini-app-polis/infra/actions/runs/2"
+
+
+@pytest.mark.asyncio
+async def test_an_escalated_streaks_recovery_moves_its_task_to_review(
+    db_session: AsyncSession, dispatch, updates
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    outcome = await signals.observe(
+        db_session,
+        _signal("recovered", title="infra: CI passing on dev", link=RECOVERY_LINK),
+        rule=rule,
+        settings=settings,
+    )
+
+    assert outcome == "recovered"
+    updates.assert_awaited_once()
+    (update,) = updates.await_args.args
+    assert update.external_id == dispatch.await_args.args[0].external_id
+    assert update.section == "Review"
+    assert "infra: CI passing on dev" in update.comment
+    assert RECOVERY_LINK in update.comment
+
+
+@pytest.mark.asyncio
+async def test_a_streak_that_heals_before_escalating_sends_no_update(
+    db_session: AsyncSession, dispatch, updates
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=2)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    outcome = await signals.observe(
+        db_session, _signal("recovered"), rule=rule, settings=settings
+    )
+
+    assert outcome == "healed"
+    updates.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_recovery_sends_one_update(
+    db_session: AsyncSession, dispatch, updates
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    outcomes = [
+        await signals.observe(
+            db_session, _signal("recovered"), rule=rule, settings=settings
+        )
+        for _ in range(2)
+    ]
+
+    assert outcomes == ["recovered", "quiet"]
+    updates.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_an_update_that_does_not_land_is_reported_and_the_recovery_stands(
+    db_session: AsyncSession, dispatch
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    with (
+        patch.object(
+            task_dispatch,
+            "dispatch_task_update",
+            AsyncMock(
+                side_effect=task_dispatch.DispatchError("down", detail="queue down")
+            ),
+        ),
+        patch.object(job_queue, "report_dropped", AsyncMock()) as reported,
+    ):
+        outcome = await signals.observe(
+            db_session, _signal("recovered"), rule=rule, settings=settings
+        )
+
+    assert outcome == "recovered"
+    reported.assert_awaited_once()
+    assert await _streaks(db_session) == [(1, 0, True, True)]
 
 
 # ── through the webhook ───────────────────────────────────────────────────
@@ -620,6 +722,38 @@ async def test_a_failure_after_a_quiet_window_starts_a_new_streak(
         )
     )
     assert closed.scalar_one() == dt.timedelta(minutes=30)
+
+
+@pytest.mark.asyncio
+async def test_an_escalated_streak_closed_by_its_quiet_window_moves_to_review(
+    db_session: AsyncSession, dispatch, updates
+) -> None:
+    signal = _signal(kind="api-fault", key="GET /v1/x 500")
+    for _ in range(3):
+        await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
+    await _age_streaks(db_session, 45)
+    outcome = await signals.observe(
+        db_session, signal, rule=QUIET, settings=get_settings()
+    )
+
+    assert outcome == "opened"
+    updates.assert_awaited_once()
+    (update,) = updates.await_args.args
+    assert update.external_id == dispatch.await_args.args[0].external_id
+    assert update.section == "Review"
+    assert "30 minutes passed without another GET /v1/x 500" in update.comment
+
+
+@pytest.mark.asyncio
+async def test_a_quiet_window_closing_an_unescalated_streak_sends_no_update(
+    db_session: AsyncSession, dispatch, updates
+) -> None:
+    signal = _signal(kind="api-fault", key="GET /v1/x 500")
+    await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
+    await _age_streaks(db_session, 45)
+    await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
+
+    updates.assert_not_awaited()
 
 
 # ── api faults ────────────────────────────────────────────────────────────
