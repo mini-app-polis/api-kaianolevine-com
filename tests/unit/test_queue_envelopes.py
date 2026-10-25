@@ -19,6 +19,8 @@ from mini_app_polis.api.contract import (
     EvaluationIntrospectionMessage,
     EvaluationRepositoryMessage,
     QueueMessage,
+    RotationJobMessage,
+    RotationRequest,
     TaskUpdateMessage,
     TaskUpdateRequest,
     TranscriptionRunMessage,
@@ -31,6 +33,7 @@ from kaianolevine_api.services import (
     deejay_dispatch,
     evaluation_dispatch,
     fleet_registry,
+    rotation_dispatch,
     task_dispatch,
     transcription_dispatch,
     wiki_dispatch,
@@ -162,3 +165,13 @@ def test_a_task_update_that_moves_nothing_leaves_the_section_out() -> None:
         TaskUpdateRequest(external_id="ci.x#1", comment="ok")
     )
     assert "section" not in message["payload"]
+
+
+def test_a_rotation_job() -> None:
+    request = RotationRequest(name="DEEJAY_COG_API_KEY", config="dev", mode="routine")
+    message = rotation_dispatch.rotation_message(request)
+    assert _body(message) == (
+        '{"type": "rotation.job", "version": 1, "payload": '
+        '{"name": "DEEJAY_COG_API_KEY", "config": "dev", "mode": "routine"}}'
+    )
+    assert _read(message, RotationJobMessage).payload == request

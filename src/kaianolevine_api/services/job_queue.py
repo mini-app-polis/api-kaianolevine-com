@@ -59,7 +59,7 @@ AWS_ACCOUNT_ID = "400200465748"
 #: instead, so waiting costs nothing. Must match infra; a mismatch sends to a
 #: queue that does not exist, which fails as a drop and releases the claim.
 FIFO_COGS: frozenset[str] = frozenset(
-    {"deejay", "task-manager", "transcription", "wiki-curator"}
+    {"deejay", "rotator", "task-manager", "transcription", "wiki-curator"}
 )
 
 
