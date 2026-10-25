@@ -22,6 +22,7 @@ from ..config import get_settings
 from ..database import get_db_session
 from ..schemas import (
     Envelope,
+    KeyUse,
     RotationConfig,
     RotationEvent,
     RotationEventCreate,
@@ -30,7 +31,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import job_queue, rotation_dispatch, rotation_events
+from ..services import job_queue, key_use, rotation_dispatch, rotation_events
 
 router = APIRouter()
 
@@ -127,3 +128,25 @@ async def request_rotation(
         config=payload.config,
     )
     return success_envelope(data, count=1, total=1)
+
+
+@router.get(
+    "/secrets/key-use",
+    response_model=Envelope[KeyUse],
+    summary="When a machine last used its previous key",
+    description=(
+        "From this API's audit trail: the newest request the machine proved "
+        "with its previous key, or null. The rotator retires a previous key "
+        "once this is a day old. Machine names only; no key is read."
+    ),
+)
+async def read_key_use(
+    machine: Annotated[
+        str, Query(min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9-]*$")
+    ],
+    principal: Principal = Depends(require_scope("secrets.key-use.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[KeyUse]:
+    """The machine's last use of its previous key."""
+    last = await key_use.last_previous_use(session, machine)
+    return success_envelope(KeyUse(machine=machine, last_used=last), count=1, total=1)

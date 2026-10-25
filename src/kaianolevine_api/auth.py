@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from collections.abc import Mapping
 from functools import lru_cache
 
@@ -64,14 +63,14 @@ from identity.store import (
     new_audit_event,
 )
 from identity.store import Principal as PrincipalRow
-from identity.types import KeySlot, Principal, VerifiedSubject
+from identity.types import Principal, VerifiedSubject
 from mini_app_polis.logger import (
     LOG_START,
     LOG_WARNING,
     get_logger,
     with_log_prefix,
 )
-from sqlalchemy import column, select, table, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import identity_registry as registry
@@ -370,39 +369,6 @@ async def provision_human(
     return await resolve_principal(subject, session)
 
 
-#: identity_audit_events' key_slot column (migration 073). The identity
-#: store's row model does not carry it, so it is written here by name, onto
-#: the row the sink has just written.
-_AUDIT_KEY_SLOT = table("identity_audit_events", column("event_id"), column("key_slot"))
-
-
-async def _record_key_slot(
-    session: AsyncSession, event_id: uuid.UUID, slot: KeySlot
-) -> None:
-    """Record which of a machine's keys proved it, on its audit row.
-
-    Retiring a rotated-out key waits until nothing presents it, and these
-    rows are how that is known: per machine (``subject``), with the time
-    (``occurred_at``). Never raises, for the reason the sink never raises —
-    a request must not fail because its audit trail could not be written.
-    """
-    try:
-        await session.execute(
-            update(_AUDIT_KEY_SLOT)
-            .where(_AUDIT_KEY_SLOT.c.event_id == event_id)
-            .values(key_slot=slot)
-        )
-        await session.commit()
-    except Exception as exc:  # noqa: BLE001 - see docstring
-        logger.warning(
-            with_log_prefix(LOG_WARNING, f"[identity] key slot not recorded: {exc!r}")
-        )
-        try:
-            await session.rollback()
-        except Exception:  # noqa: BLE001 - nothing left to do with it
-            pass
-
-
 def require_scope(scope: str, *, resource_param: str | None = None):
     """Build a FastAPI dependency enforcing one scope.
 
@@ -462,8 +428,6 @@ def require_scope(scope: str, *, resource_param: str | None = None):
             request_id=request.headers.get("X-Request-Id"),
         )
         await sink.emit_audit(event)
-        if subject.key_slot is not None:
-            await _record_key_slot(session, event.event_id, subject.key_slot)
 
         if not decision.allowed:
             # An unknown-but-validly-authenticated caller is a 403, not a 401:
