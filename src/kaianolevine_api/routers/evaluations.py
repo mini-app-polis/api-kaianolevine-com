@@ -479,9 +479,12 @@ def _mint_fleet_run_id(mode: str, standards_version: str) -> str:
 
     Deliberately identical to ``_build_deterministic_run_id`` and
     ``_build_conformance_run_id`` in evaluator-cog: ``<prefix>-<catalog
-    version>-<12 hex>``. The website filters findings by run, so a fleet
-    pass whose repositories carried different ids would show as a dozen
-    unrelated runs rather than one pass.
+    version>-<12 hex>``. evaluator-cog owns this format; this re-derives
+    it. Both sides pin the same literal examples in a unit test, so a
+    change to the format on one side only fails that side's test — a
+    change has to land in both. The website filters findings by run, so a
+    fleet pass whose repositories carried different ids would show as a
+    dozen unrelated runs rather than one pass.
 
     The suffix is random rather than a timestamp, and that is not a
     stylistic choice — a timestamp resolved to the second is not unique
