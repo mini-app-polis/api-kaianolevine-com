@@ -1,3 +1,10 @@
+# [2.33.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.32.0...v2.33.0) (2026-10-25)
+
+
+### Features
+
+* **tasks:** POST /v1/tasks/sweeps enqueues an on-demand board sweep ([79190a7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/79190a793b591887d66daf9828bd8447142d2ce8))
+
 # [2.32.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.31.2...v2.32.0) (2026-10-25)
 
 
