@@ -103,6 +103,11 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kaianolevine_tes
 
 # With coverage detail
 uv run pytest --cov=src --cov-report=term-missing
+
+# In parallel, as CI runs it: each pytest-xdist worker builds its own
+# database beside TEST_DATABASE_URL's (kaianolevine_gw0_test, ...), so the
+# role needs CREATEDB
+uv run pytest -n auto
 ```
 
 ### Lint, format, type check
