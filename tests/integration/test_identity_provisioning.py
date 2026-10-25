@@ -12,12 +12,12 @@ import uuid
 from unittest.mock import AsyncMock
 
 import pytest
-from identity.apikey import API_KEY_ISSUER
+from identity.apikey import API_KEY_ISSUER, MachineKey
 from identity.errors import CredentialInvalid
 from identity.store import Principal, PrincipalRole
 from identity.store.models import AuditEventRow
 from identity.types import VerifiedSubject
-from sqlalchemy import select
+from sqlalchemy import select, text
 from starlette.datastructures import State
 
 from kaianolevine_api import auth as auth_mod
@@ -91,6 +91,39 @@ def test_machine_without_a_key_is_dropped(monkeypatch: pytest.MonkeyPatch) -> No
     assert reg.machine_keys({"DEEJAY_COG_API_KEY": "   "}) == []
 
 
+def test_previous_key_env_var_is_derived_from_the_name() -> None:
+    machine = reg.Machine(name="deejay-cog", roles=())
+    assert machine.previous_key_env_var == "DEEJAY_COG_API_KEY_PREVIOUS"
+
+
+def test_previous_key_is_read_beside_the_current(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    assert reg.machine_keys(
+        {"DEEJAY_COG_API_KEY": "k_new", "DEEJAY_COG_API_KEY_PREVIOUS": " k_old "}
+    ) == [MachineKey(name="deejay-cog", key="k_new", previous="k_old")]
+
+
+@pytest.mark.parametrize("env", [{}, {"DEEJAY_COG_API_KEY_PREVIOUS": "   "}])
+def test_unset_or_blank_previous_key_means_none(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str]
+) -> None:
+    """No previous key is today's behaviour: the current key alone proves it."""
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    keys = reg.machine_keys({"DEEJAY_COG_API_KEY": "k_new", **env})
+    assert keys == [MachineKey(name="deejay-cog", key="k_new")]
+    assert keys[0].previous is None
+
+
+def test_previous_key_alone_does_not_authenticate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing current key is a missing secret, not a rotation."""
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    assert reg.machine_keys({"DEEJAY_COG_API_KEY_PREVIOUS": "k_old"}) == []
+
+
 class _Warnings:
     def __init__(self) -> None:
         self.messages: list[str] = []
@@ -138,6 +171,30 @@ async def test_key_identifies_the_machine(monkeypatch: pytest.MonkeyPatch) -> No
     assert subject.subject == "deejay-cog"
     assert subject.kind == "machine"
     assert subject.issuer == API_KEY_ISSUER
+
+
+async def test_either_key_identifies_the_machine_and_says_which(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    verifier = build_verifier(
+        _Settings(),
+        {"DEEJAY_COG_API_KEY": "k_new", "DEEJAY_COG_API_KEY_PREVIOUS": "k_old"},
+    )
+    current = await verifier.verify("k_new")
+    previous = await verifier.verify("k_old")
+    assert (current.subject, current.key_slot) == ("deejay-cog", "current")
+    assert (previous.subject, previous.key_slot) == ("deejay-cog", "previous")
+
+
+async def test_without_a_previous_key_the_old_one_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=()),))
+    verifier = build_verifier(_Settings(), {"DEEJAY_COG_API_KEY": "k_new"})
+    assert (await verifier.verify("k_new")).key_slot == "current"
+    with pytest.raises(CredentialInvalid):
+        await verifier.verify("k_old")
 
 
 async def test_unknown_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -294,6 +351,87 @@ async def test_key_authenticated_machine_is_authorized_and_audited(
     assert rows[-1].allowed is True
     assert rows[-1].reason == "granted_by_role"
     assert rows[-1].subject == "deejay-cog"
+
+
+async def _audited_key_slots(session) -> list[tuple[str | None, str | None]]:
+    rows = await session.execute(
+        text("SELECT subject, key_slot FROM identity_audit_events ORDER BY occurred_at")
+    )
+    return [(subject, slot) for subject, slot in rows.all()]
+
+
+@pytest.mark.parametrize("slot", ["current", "previous"])
+@pytest.mark.asyncio
+async def test_audit_event_records_which_key_matched(
+    client, db_session, monkeypatch: pytest.MonkeyPatch, slot: str
+) -> None:
+    """Retiring a previous key reads this: per machine, with the time."""
+    monkeypatch.setattr(
+        reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=("catalog-ingest",)),)
+    )
+    await reg.reconcile(db_session)
+    monkeypatch.setattr(
+        auth_mod,
+        "verify_bearer",
+        AsyncMock(
+            return_value=VerifiedSubject(
+                issuer=API_KEY_ISSUER,
+                subject="deejay-cog",
+                kind="machine",
+                key_slot=slot,  # type: ignore[arg-type]
+            )
+        ),
+    )
+    from kaianolevine_api.config import get_settings
+
+    await require_scope("catalog.sets.write")(
+        _Req(),  # type: ignore[arg-type]
+        authorization="Bearer k_secret",
+        settings=get_settings(),
+        session=db_session,
+    )
+    # A denial is recorded with its slot too: a key that is still presented
+    # is still in use, whatever it was refused.
+    with pytest.raises(Exception):
+        await require_scope("wcs.notes.write")(
+            _Req(),  # type: ignore[arg-type]
+            authorization="Bearer k_secret",
+            settings=get_settings(),
+            session=db_session,
+        )
+    assert await _audited_key_slots(db_session) == [
+        ("deejay-cog", slot),
+        ("deejay-cog", slot),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_audit_event_without_a_key_slot_records_none(
+    client, db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only named-key verification reports a slot; nothing is invented."""
+    monkeypatch.setattr(
+        reg, "MACHINES", (reg.Machine(name="deejay-cog", roles=("catalog-ingest",)),)
+    )
+    await reg.reconcile(db_session)
+    monkeypatch.setattr(
+        auth_mod,
+        "verify_bearer",
+        AsyncMock(
+            return_value=VerifiedSubject(
+                issuer=API_KEY_ISSUER, subject="deejay-cog", kind="machine"
+            )
+        ),
+    )
+    from kaianolevine_api.config import get_settings
+
+    await require_scope("catalog.sets.write")(
+        _Req(),  # type: ignore[arg-type]
+        authorization="Bearer k_secret",
+        settings=get_settings(),
+        session=db_session,
+    )
+    assert await _audited_key_slots(db_session) == [("deejay-cog", None)]
 
 
 @pytest.mark.asyncio

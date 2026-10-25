@@ -81,6 +81,17 @@ class Machine:
         """
         return f"{self.name.upper().replace('-', '_')}_API_KEY"
 
+    @property
+    def previous_key_env_var(self) -> str:
+        """Environment variable holding the key being rotated out, if any.
+
+        Set only while a rotation overlaps: the new key goes in
+        ``key_env_var``, the old one here, and either proves the machine
+        until the old one is retired. ``deejay-cog`` ->
+        ``DEEJAY_COG_API_KEY_PREVIOUS``.
+        """
+        return f"{self.key_env_var}_PREVIOUS"
+
 
 # ---------------------------------------------------------------------------
 # The fleet. Add a machine by adding an entry.
@@ -299,13 +310,22 @@ def machine_keys(env: Mapping[str, str]) -> list[MachineKey]:
     A missing key is logged as a warning, except a development-only machine's
     in production: there it is the guard working, and warning on every boot
     would teach the reader to skip the line a real missing secret shows up on.
+
+    The previous key, read from ``previous_key_env_var``, is accepted beside
+    the current one while a rotation overlaps. Absent or blank means there is
+    none, and the machine is proven by its current key alone. A previous key
+    without a current one proves nothing: the current key is added before the
+    old one is retired, so its absence is a missing secret, not a rotation.
     """
     keys: list[MachineKey] = []
     production = is_production()
     for machine in MACHINES:
         value = (env.get(machine.key_env_var) or "").strip()
+        previous = (env.get(machine.previous_key_env_var) or "").strip()
         if value:
-            keys.append(MachineKey(name=machine.name, key=value))
+            keys.append(
+                MachineKey(name=machine.name, key=value, previous=previous or None)
+            )
         elif machine.development_only and production:
             continue
         else:

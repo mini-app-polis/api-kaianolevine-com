@@ -26,8 +26,8 @@
 // Doppler keeps current (`ctx.shared.NAME` is `${{shared.NAME}}`); no value
 // lives in this file. Only the names the service reads are declared: the
 // Settings fields in src/kaianolevine_api/config.py, each declared
-// machine's <NAME>_API_KEY (identity_registry.py), and what mini_app_polis
-// reads on its behalf. DATABASE_URL is not shared — it references the
+// machine's <NAME>_API_KEY and <NAME>_API_KEY_PREVIOUS (identity_registry.py),
+// and what mini_app_polis reads on its behalf. DATABASE_URL is not shared — it references the
 // Postgres service — and is kept as Railway has it.
 //
 // The rest of the Settings fields the service reads in production are not
@@ -64,6 +64,7 @@ const SHARED = [
   "GITHUB_DASHBOARD_TOKEN",
   "GITHUB_TOKEN",
   "GITHUB_WEBHOOK_SECRET",
+  "GITHUB_WEBHOOK_SECRET_PREVIOUS",
   "GOOGLE_CREDENTIALS_JSON",
   "LOGGING_LEVEL",
   "OPENAI_API_KEY",
@@ -87,6 +88,24 @@ const SHARED = [
   "WATCHER_COG_API_KEY",
   "WIKI_CURATOR_COG_API_KEY",
   "WIKI_CURATOR_DEPLOY_API_KEY",
+  // The key each is rotating out, empty except while a rotation overlaps.
+  // Declared even when empty: the next apply removes an undeclared variable,
+  // so a rotation that set one would lose it, and every caller still on the
+  // old key would answer 401.
+  "CI_VALIDATOR_API_KEY_PREVIOUS",
+  "DB_OPS_API_KEY_PREVIOUS",
+  "DEEJAY_COG_API_KEY_PREVIOUS",
+  "ECOSYSTEM_STANDARDS_API_KEY_PREVIOUS",
+  "EVALUATOR_COG_API_KEY_PREVIOUS",
+  "OPS_NOTIFIER_API_KEY_PREVIOUS",
+  "ROTATOR_COG_API_KEY_PREVIOUS",
+  "TASK_AGENT_API_KEY_PREVIOUS",
+  "TASK_GROOMER_COG_API_KEY_PREVIOUS",
+  "TASK_MANAGER_COG_API_KEY_PREVIOUS",
+  "TRANSCRIPTION_COG_API_KEY_PREVIOUS",
+  "WATCHER_COG_API_KEY_PREVIOUS",
+  "WIKI_CURATOR_COG_API_KEY_PREVIOUS",
+  "WIKI_CURATOR_DEPLOY_API_KEY_PREVIOUS",
   // Production's names: the API base URL is suffixed _DEV outside production
   // (mini_app_polis.environment.env_var), and the Spotify re-auth runs
   // against prd only.

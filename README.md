@@ -195,6 +195,10 @@ Required environment variables:
   `identity_registry.MACHINES` (`deejay-cog` → `DEEJAY_COG_API_KEY`).
   Doppler-managed. Key material is never stored in the database, hashed
   or otherwise; the principal store holds names and grants only.
+  `<MACHINE_NAME>_API_KEY_PREVIOUS`, optional, is the key being rotated
+  out: either key proves the machine while a rotation overlaps, and each
+  audit event records which one matched (`key_slot`), so the old key is
+  retired once nothing presents it.
 
 Every variable the service reads, auth's included, is listed with whether it
 is required in [`.env.example`](.env.example); defaults are in
@@ -235,7 +239,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/github/status` | Public repo status board; same response for every caller, only what the committed config permits. |
 | `GET /v1/standards/catalog`, `/v1/standards/versions` | Standards rule text, already public; reads stay off the credential path every evaluation depends on. |
 | `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
-| `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. |
+| `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. Signed with `GITHUB_WEBHOOK_SECRET`, or `GITHUB_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,

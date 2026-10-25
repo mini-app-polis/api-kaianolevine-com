@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # Shared secret configured on the GitHub org webhook. Unset means the
     # route rejects every delivery rather than accepting unsigned ones.
     GITHUB_WEBHOOK_SECRET: str | None = None
+    # The secret being rotated out, accepted beside the current one while a
+    # rotation overlaps. Unset or blank means there is none. It never stands
+    # in for a missing current secret.
+    GITHUB_WEBHOOK_SECRET_PREVIOUS: str | None = None
     # Which GitHub events this service has a policy for. The outer gate only:
     # what each event actually forwards is decided per-event in
     # routers.notifications, since GitHub's webhooks filter by event type and

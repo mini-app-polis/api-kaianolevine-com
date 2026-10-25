@@ -39,6 +39,7 @@ import hashlib
 import hmac
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -142,22 +143,31 @@ class Decision:
 
 
 def verify_github_signature(
-    *, secret: str, raw_body: bytes, signature: str | None
+    *, secrets: Sequence[str], raw_body: bytes, signature: str | None
 ) -> bool:
     """Whether ``signature`` is GitHub's HMAC-SHA256 over exactly these bytes.
 
-    The comparison is constant-time, and the digest is taken over the raw body
-    rather than a re-serialization of it: JSON round-tripping changes
+    ``secrets`` is every secret currently accepted: the current one, and the
+    previous one while a rotation overlaps. Each is compared, in constant
+    time, and none short-circuits, so response time does not say which one
+    matched or whether a rotation is in progress. The digest is taken over the
+    raw body rather than a re-serialization of it: JSON round-tripping changes
     whitespace and key order, and either one turns a valid signature into an
     invalid one.
     """
     if not signature:
         return False
-    expected = (
-        "sha256="
-        + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    )
-    return hmac.compare_digest(expected, signature)
+    # Bytes, not str: compare_digest raises TypeError on a str containing
+    # non-ASCII, and the header is whatever the caller sent.
+    presented = signature.encode("utf-8", "surrogatepass")
+    matched = False
+    for secret in secrets:
+        expected = (
+            "sha256="
+            + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        ).encode("ascii")
+        matched = hmac.compare_digest(expected, presented) or matched
+    return matched
 
 
 def _subject(commit: dict[str, Any] | None) -> str:
@@ -406,8 +416,11 @@ async def github_webhook(
         )
         raise api_error(500, "config_error", "GitHub webhook secret is not configured")
 
+    # The previous secret is accepted only beside a current one: on its own
+    # it is a missing secret, not a rotation.
+    previous = (settings.GITHUB_WEBHOOK_SECRET_PREVIOUS or "").strip()
     if not verify_github_signature(
-        secret=secret,
+        secrets=[secret, previous] if previous else [secret],
         raw_body=raw_body,
         signature=request.headers.get("X-Hub-Signature-256"),
     ):
