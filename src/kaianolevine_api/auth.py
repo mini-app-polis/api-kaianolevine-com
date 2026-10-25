@@ -417,17 +417,18 @@ def require_scope(scope: str, *, resource_param: str | None = None):
             principal, scope, roles, resource=resource, explicit_grants=grants or None
         )
 
-        event = new_audit_event(
-            enforcement_point=ENFORCEMENT_POINT,
-            scope=scope,
-            allowed=decision.allowed,
-            reason=decision.reason,
-            principal=principal,
-            subject=subject,
-            resource=resource,
-            request_id=request.headers.get("X-Request-Id"),
+        await sink.emit_audit(
+            new_audit_event(
+                enforcement_point=ENFORCEMENT_POINT,
+                scope=scope,
+                allowed=decision.allowed,
+                reason=decision.reason,
+                principal=principal,
+                subject=subject,
+                resource=resource,
+                request_id=request.headers.get("X-Request-Id"),
+            )
         )
-        await sink.emit_audit(event)
 
         if not decision.allowed:
             # An unknown-but-validly-authenticated caller is a 403, not a 401:
