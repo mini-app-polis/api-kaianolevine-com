@@ -1,3 +1,10 @@
+# [2.38.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.37.0...v2.38.0) (2026-10-25)
+
+
+### Features
+
+* **secrets:** GET /v1/secrets/key-use reports when a machine last used its previous key ([497cb59](https://github.com/mini-app-polis/api-kaianolevine-com/commit/497cb59209656281ce75f4021e3e1f6a474ece8a))
+
 # [2.37.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.36.0...v2.37.0) (2026-10-25)
 
 
