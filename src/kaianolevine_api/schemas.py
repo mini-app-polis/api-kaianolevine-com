@@ -121,17 +121,28 @@ T = TypeVar("T")
 class KeyUse(BaseModel):
     """When a machine last proved itself with its previous key, here."""
 
-    machine: str
-    slot: Literal["previous"] = "previous"
-    #: None when no request in this API's audit trail used it.
-    last_used: dt.datetime | None
+    machine: str = Field(
+        ..., description="Machine name whose previous key is asked about."
+    )
+    slot: Literal["previous"] = Field(
+        default="previous", description="Which of the machine's keys: always previous."
+    )
+    last_used: dt.datetime | None = Field(
+        ...,
+        description=(
+            "When a request in this API's audit trail last proved the machine "
+            "with its previous key; null when none did."
+        ),
+    )
 
 
 class TaskSweepAccepted(BaseModel):
     """The sweep is on the task manager's queue. Nothing has run yet."""
 
-    accepted: bool = True
-    message_id: str
+    accepted: bool = Field(
+        default=True, description="Always true: the sweep was enqueued."
+    )
+    message_id: str = Field(..., description="Queue message id of the enqueued sweep.")
 
 
 class SetListItem(BaseModel):
