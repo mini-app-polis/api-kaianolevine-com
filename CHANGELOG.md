@@ -1,3 +1,10 @@
+# [2.36.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.35.0...v2.36.0) (2026-10-25)
+
+
+### Features
+
+* **identity:** accept a previous key per machine, record the matched slot, and dual-accept the GitHub webhook secret ([20489c5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/20489c5c8f9356a5dafc488eb91e5615a8997618))
+
 # [2.35.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.34.0...v2.35.0) (2026-10-25)
 
 
