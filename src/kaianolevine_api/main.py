@@ -35,6 +35,7 @@ from .routers import (
     live_plays,
     notifications,
     resume,
+    secrets,
     sets,
     spotify,
     spotify_reauth,
@@ -323,6 +324,7 @@ def _build_app() -> FastAPI:
     app.include_router(deejay_runs.router, prefix="/v1", tags=["deejay"])
     app.include_router(transcription_runs.router, prefix="/v1", tags=["transcription"])
     app.include_router(tasks.router, prefix="/v1", tags=["tasks"])
+    app.include_router(secrets.router, prefix="/v1", tags=["secrets"])
     app.include_router(flags.router, prefix="/v1", tags=["flags"])
     app.include_router(github_status.router, prefix="/v1", tags=["github"])
     app.include_router(identity_debug.router, prefix="/v1", tags=["identity"])

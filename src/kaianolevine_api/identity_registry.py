@@ -235,6 +235,21 @@ MACHINES: tuple[Machine, ...] = (
         roles=("notifier",),
         notes="POST /v1/notify. Run reports from db-backup, db-poller and db-drill.",
     ),
+    # rotator-cog rotates the fleet's secrets in Doppler, on a schedule and
+    # on demand, and records each rotation here: the events are the only
+    # record, and its daily sweep reads the latest per secret and config to
+    # decide what is due. A secret it cannot rotate itself becomes one task
+    # on the board, asked for through /v1/tasks. It writes the record of a
+    # rotation, never a secret value, and cannot start a rotation through
+    # this API.
+    Machine(
+        name="rotator-cog",
+        roles=("secrets-rotator", "task-requester", "notifier"),
+        notes=(
+            "GET and POST /v1/secrets/rotation-events (the rotation record); "
+            "POST /v1/tasks (a manual secret that is due); POST /v1/notify."
+        ),
+    ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
     # API. Its key is set in development configuration only (CD-033), so in
