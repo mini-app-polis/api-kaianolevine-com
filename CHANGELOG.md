@@ -1,3 +1,10 @@
+## [2.38.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.38.0...v2.38.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **api:** describe key-use and task-sweep fields in OpenAPI; build the audit record inside emit_audit ([216f3ec](https://github.com/mini-app-polis/api-kaianolevine-com/commit/216f3ec87dba419cc332cee9edeadb0a7e7b68ce))
+
 # [2.38.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.37.0...v2.38.0) (2026-10-25)
 
 
