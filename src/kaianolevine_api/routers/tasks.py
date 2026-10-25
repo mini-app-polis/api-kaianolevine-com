@@ -6,8 +6,9 @@ the id, tags and column, and creates the task. See
 ``mini_app_polis.api.contract.tasks``.
 
 The ``/v1/tasks/groomings`` routes are task-manager-cog's memory between
-sweeps of the board, the month's paid grooming, and the hand-offs between
-task-manager-cog and task-groomer-cog (services/grooming_dispatch.py). See
+sweeps of the board, the month's paid grooming, the hand-offs between
+task-manager-cog and task-groomer-cog (services/grooming_dispatch.py), and
+the claims task-groomer-cog takes on a job before grooming it. See
 ``mini_app_polis.api.contract.groomings``.
 
 The ``/v1/tasks/agent-runs`` routes record the agent runs task-manager-cog
@@ -35,6 +36,9 @@ from ..schemas import (
     AgentRunResult,
     AgentSpend,
     Envelope,
+    GroomingClaimReleased,
+    GroomingClaimRequest,
+    GroomingClaimResult,
     GroomingJobAccepted,
     GroomingJobRequest,
     GroomingProposal,
@@ -206,6 +210,46 @@ async def request_grooming(
         task_gid=payload.task.task_gid,
     )
     return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/tasks/groomings/claims",
+    response_model=Envelope[GroomingClaimResult],
+    summary="Claim one grooming job before grooming it",
+    description=(
+        "Keyed on the task and the fingerprint of the content the job was sent "
+        "for. claimed is true for the first caller and false while the claim "
+        "is held, so a job delivered twice is groomed once. A claim given back "
+        "through POST /v1/tasks/groomings/claims/release can be taken again."
+    ),
+)
+async def claim_grooming(
+    payload: GroomingClaimRequest,
+    principal: Principal = Depends(require_scope("tasks.groomings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[GroomingClaimResult]:
+    """Claim the job; a claim already held is an answer, not an error."""
+    result = await groomings.claim(session, payload)
+    return success_envelope(result, count=1, total=1)
+
+
+@router.post(
+    "/tasks/groomings/claims/release",
+    response_model=Envelope[GroomingClaimReleased],
+    summary="Give a grooming claim back after a failed run",
+    description=(
+        "Marks a held claim released, so the next send of the same content can "
+        "claim it. released is false when no claim was held."
+    ),
+)
+async def release_grooming_claim(
+    payload: GroomingClaimRequest,
+    principal: Principal = Depends(require_scope("tasks.groomings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[GroomingClaimReleased]:
+    """Release the claim, if one is held."""
+    result = await groomings.release_claim(session, payload)
+    return success_envelope(result, count=1, total=1)
 
 
 @router.post(

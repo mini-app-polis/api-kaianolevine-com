@@ -1,7 +1,8 @@
 """The task board's grooming records, and the month's paid grooming.
 
 task-manager-cog is the only writer of records: it decides what a sweep
-made of each task, and this stores it. See
+made of each task, and this stores it. task-groomer-cog claims each job
+before its model call, so a job delivered twice is groomed once. See
 ``mini_app_polis.api.contract.groomings`` for what each field means.
 """
 
@@ -14,6 +15,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas import (
+    GroomingClaimReleased,
+    GroomingClaimRequest,
+    GroomingClaimResult,
     GroomingRecord,
     GroomingRecordWrite,
     GroomingRunCreate,
@@ -122,3 +126,56 @@ async def month_spend(session: AsyncSession) -> GroomingSpend:
         )
     ).one()
     return GroomingSpend(month=row.month, runs=row.runs, cost_usd=float(row.cost_usd))
+
+
+async def claim(
+    session: AsyncSession, key: GroomingClaimRequest
+) -> GroomingClaimResult:
+    """Claim one job for its task and content; won only if nobody holds it.
+
+    One statement, so the primary key decides between two callers claiming
+    at once: the first insert wins and the other conflicts. A conflict on a
+    released claim takes it again; one on a held claim changes nothing.
+    """
+    row = (
+        await session.execute(
+            text(
+                """
+                INSERT INTO task_grooming_claims (task_gid, fingerprint)
+                VALUES (:task_gid, :fingerprint)
+                ON CONFLICT (task_gid, fingerprint) DO UPDATE SET
+                  state = 'claimed',
+                  claimed_at = now(),
+                  released_at = NULL
+                WHERE task_grooming_claims.state = 'released'
+                RETURNING task_gid
+                """
+            ),
+            key.model_dump(),
+        )
+    ).first()
+    await session.commit()
+    return GroomingClaimResult(**key.model_dump(), claimed=row is not None)
+
+
+async def release_claim(
+    session: AsyncSession, key: GroomingClaimRequest
+) -> GroomingClaimReleased:
+    """Give a held claim back, so the same content can be claimed again."""
+    row = (
+        await session.execute(
+            text(
+                """
+                UPDATE task_grooming_claims
+                SET state = 'released', released_at = now()
+                WHERE task_gid = :task_gid
+                  AND fingerprint = :fingerprint
+                  AND state = 'claimed'
+                RETURNING task_gid
+                """
+            ),
+            key.model_dump(),
+        )
+    ).first()
+    await session.commit()
+    return GroomingClaimReleased(**key.model_dump(), released=row is not None)

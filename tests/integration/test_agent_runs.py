@@ -3,22 +3,15 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
-from identity.store.models import Principal, PrincipalRole
-from identity.types import VerifiedSubject
 from mini_app_polis.api.contract import TaskAgentResultMessage
 from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kaianolevine_api import auth as auth_mod
 from kaianolevine_api import identity_registry
-from kaianolevine_api.main import app
 from kaianolevine_api.schemas import AgentRun
 from kaianolevine_api.services import agent_dispatch, job_queue
 
@@ -57,42 +50,6 @@ def _queued(message_id: str = "m-1"):
         "dispatch_result",
         AsyncMock(return_value={"message_id": message_id}),
     )
-
-
-@pytest.fixture
-def role_client(
-    client, db_session: AsyncSession
-) -> Callable[[str], AsyncIterator[httpx.AsyncClient]]:
-    """A caller holding only the one role it is given."""
-
-    @asynccontextmanager
-    async def make(role: str) -> AsyncIterator[httpx.AsyncClient]:
-        subject = f"only-{role}"
-        principal = Principal(
-            kind="human", issuer=ISSUER, subject=subject, display_name=subject
-        )
-        db_session.add(principal)
-        await db_session.flush()
-        db_session.add(
-            PrincipalRole(principal_id=principal.id, role_name=role, granted_by="test")
-        )
-        await db_session.commit()
-        original = auth_mod.verify_bearer
-        auth_mod.verify_bearer = AsyncMock(
-            return_value=VerifiedSubject(issuer=ISSUER, subject=subject, kind="human")
-        )
-        try:
-            async with httpx.ASGITransport(app=app) as transport:
-                async with httpx.AsyncClient(
-                    transport=transport,
-                    base_url="http://testserver",
-                    headers={"Authorization": f"Bearer {subject}"},
-                ) as c:
-                    yield c
-        finally:
-            auth_mod.verify_bearer = original
-
-    return make
 
 
 # ── recording runs, and the lock ──────────────────────────────────────────

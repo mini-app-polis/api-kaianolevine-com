@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -260,3 +261,93 @@ async def test_the_groomer_proposes_and_never_asks_for_tasks() -> None:
     assert cog is not None
     assert "task-groomer" in cog.roles
     assert "task-requester" not in cog.roles
+
+
+# ── claims on grooming jobs ───────────────────────────────────────────────
+
+CLAIM = {"task_gid": "1219848148842653", "fingerprint": "c" * 64}
+
+
+async def test_the_first_claim_wins_and_a_repeat_does_not(client) -> None:
+    first = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    assert first.status_code == 200, first.text
+    assert first.json()["data"] == {**CLAIM, "claimed": True}
+
+    again = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    assert again.status_code == 200
+    assert again.json()["data"]["claimed"] is False
+
+
+async def test_two_concurrent_claims_have_one_winner(client) -> None:
+    results = await asyncio.gather(
+        *(client.post("/v1/tasks/groomings/claims", json=CLAIM) for _ in range(5))
+    )
+    assert all(r.status_code == 200 for r in results)
+    assert sorted(r.json()["data"]["claimed"] for r in results) == [
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+
+
+async def test_a_released_claim_can_be_claimed_again(client) -> None:
+    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+
+    released = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    assert released.status_code == 200, released.text
+    assert released.json()["data"] == {**CLAIM, "released": True}
+
+    again = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    assert again.json()["data"]["claimed"] is True
+    held = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    assert held.json()["data"]["claimed"] is False
+
+
+async def test_releasing_what_is_not_held_releases_nothing(client) -> None:
+    never = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    assert never.status_code == 200
+    assert never.json()["data"]["released"] is False
+
+    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    twice = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    assert twice.json()["data"]["released"] is False
+
+
+async def test_new_content_for_the_same_task_is_a_new_claim(client) -> None:
+    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    changed = {**CLAIM, "fingerprint": "d" * 64}
+    response = await client.post("/v1/tasks/groomings/claims", json=changed)
+    assert response.json()["data"]["claimed"] is True
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"fingerprint": "not-a-sha"}, {"task_gid": "MINI-292"}, {"extra": True}],
+)
+async def test_a_malformed_claim_is_rejected(client, change) -> None:
+    for path in ("/v1/tasks/groomings/claims", "/v1/tasks/groomings/claims/release"):
+        response = await client.post(path, json={**CLAIM, **change})
+        assert response.status_code == 422
+
+
+async def test_a_caller_without_the_scope_may_not_claim_or_release(
+    client, role_client
+) -> None:
+    async with role_client("agent-reporter") as reporter:
+        for path in (
+            "/v1/tasks/groomings/claims",
+            "/v1/tasks/groomings/claims/release",
+        ):
+            assert (await reporter.post(path, json=CLAIM)).status_code == 403
+    async with role_client("task-groomer") as groomer:
+        response = await groomer.post("/v1/tasks/groomings/claims", json=CLAIM)
+        assert response.json()["data"]["claimed"] is True
+
+
+async def test_the_groomer_holds_the_claim_scope() -> None:
+    cog = identity_registry.declared("task-groomer-cog")
+    assert cog is not None
+    assert "task-groomer" in cog.roles
