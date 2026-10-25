@@ -1,3 +1,10 @@
+# [2.37.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.36.0...v2.37.0) (2026-10-25)
+
+
+### Features
+
+* **secrets:** POST /v1/secrets/rotations asks rotator-cog to rotate one secret, admin only ([06cc5ed](https://github.com/mini-app-polis/api-kaianolevine-com/commit/06cc5edfd5cca1ec9f698167fdb40564f5a30da4))
+
 # [2.36.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.35.0...v2.36.0) (2026-10-25)
 
 
