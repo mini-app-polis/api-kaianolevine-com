@@ -357,7 +357,7 @@ async def export_wiki(
 
 
 # ---------------------------------------------------------------------------
-# The curator's state (wiki-curator-cog ADR-006)
+# The curator's state (wiki-curator-cog ADR-0006)
 # ---------------------------------------------------------------------------
 # One document per pass, shaped as the file it replaces. Read with the corpus
 # scope — statements quote private sources — and written with wcs.wiki.write,
@@ -526,7 +526,7 @@ async def put_wiki_thin(
 
 
 # ---------------------------------------------------------------------------
-# Page documents (wiki-curator-cog ADR-006)
+# Page documents (wiki-curator-cog ADR-0006)
 # ---------------------------------------------------------------------------
 # The curator posts one document per entity page; readers get it filtered to
 # the sources they can see. Same split as sources: the plain routes filter
@@ -739,7 +739,7 @@ async def get_wiki_revision(
 
 
 # ---------------------------------------------------------------------------
-# Wiki jobs (wiki-curator-cog ADR-006)
+# Wiki jobs (wiki-curator-cog ADR-0006)
 # ---------------------------------------------------------------------------
 
 

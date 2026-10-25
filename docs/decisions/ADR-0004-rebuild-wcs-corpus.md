@@ -61,7 +61,7 @@ Iteration is cheap here — single transcripts, single LLM calls, no schema comm
 - A one-off backfill script iterates every transcript file in `NOTES_PROCESSED_FOLDER_ID`, runs each through the new pipeline (read → parse filename → call LLM → POST to new endpoint).
 - Backfill validates as it goes (each extraction validated against new schema; failures logged for review).
 - The wiki-curator renders fresh markdown from the populated entity store.
-- Notes UI is updated to read from new substrate (via a compatibility endpoint that reconstructs `notes_json`-shaped JSON from entity rows, or a refactored direct-from-entities read path — see `wiki-curator-cog` ADR-002 for the renderer; the notes UI's data path is decided separately).
+- Notes UI is updated to read from new substrate (via a compatibility endpoint that reconstructs `notes_json`-shaped JSON from entity rows, or a refactored direct-from-entities read path — see `wiki-curator-cog` ADR-0002 for the renderer; the notes UI's data path is decided separately).
 - Notes UI comes back online.
 - After ~4 weeks of stability, reevaluate whether to drop `_legacy_*` tables. Default at reevaluation is to drop them; specific reasons to defer (active investigations, pending corrections against legacy data, identified migrations issues still being addressed) push the reevaluation forward by another 4 weeks. The decision is explicit each time, not automatic.
 

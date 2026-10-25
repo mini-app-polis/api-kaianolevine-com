@@ -183,7 +183,7 @@ credential types, routed structurally by dot count:
 There is no fallback between the two paths. A credential that fails the
 path it routed to is rejected, not retried against the other. Clerk M2M
 opaque tokens and `CLERK_SECRET_KEY` were removed outright — see
-ecosystem-standards ADR-008 and CD-019.
+ecosystem-standards ADR-0008 and CD-019.
 
 Required environment variables:
 

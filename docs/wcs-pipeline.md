@@ -17,8 +17,8 @@ The ADRs that ground this pipeline:
 - **`api-kaianolevine-com` ADR-0003** — versioned extractions and corrections.
 - **`api-kaianolevine-com` ADR-0004** — rebuild from scratch (the migration that produced the current substrate).
 - **`api-kaianolevine-com` ADR-0006** — operator direct edits on canonical state.
-- **`wiki-curator-cog` ADR-002** — repurpose curator as a renderer over canonical entities.
-- **`wiki-curator-cog` ADR-005 / ADR-006** — the self-generating wiki, and its state, jobs and worker in this pipeline.
+- **`wiki-curator-cog` ADR-0002** — repurpose curator as a renderer over canonical entities.
+- **`wiki-curator-cog` ADR-0005 / ADR-0006** — the self-generating wiki, and its state, jobs and worker in this pipeline.
 - **`wcs-wiki/CLAUDE.md`** — the render spec (v1.0).
 
 ---
@@ -289,7 +289,7 @@ Used by the website's `/notes/*` pages.
 - `GET /v1/wcs/wiki/sources/{id}` — one source view (visibility-checked).
 - `GET /v1/wcs/wiki/{concepts|techniques|patterns|drills}/{slug}`, `/instructors/{slug}` (and their unslugged list forms) — entity and instructor read views.
 
-- `GET /v1/wcs/wiki/pages` and `/v1/wcs/wiki/pages/{slug}` — the wiki's page documents (wiki-curator-cog ADR-006), filtered to the evidence the caller can see. Statements, mistakes, skills and relations from a hidden source are dropped and a link to one keeps only its label; a page built only from hidden sources is a 404.
+- `GET /v1/wcs/wiki/pages` and `/v1/wcs/wiki/pages/{slug}` — the wiki's page documents (wiki-curator-cog ADR-0006), filtered to the evidence the caller can see. Statements, mistakes, skills and relations from a hidden source are dropped and a link to one keeps only its label; a page built only from hidden sources is a 404.
 
 Visibility is computed by `visible_source_ids_for_user`: a source is visible to the caller iff it is `is_default_visible=true` or the caller has an explicit grant on it via `wcs_source_grants`. For the wiki pages it is read on every request, never from the stored document, so a source made private disappears from its pages at once.
 
@@ -343,13 +343,13 @@ SSR Astro site at `wcs.kaianolevine.com`. Reads the caller-scoped endpoints. Pag
 
 Authenticated via Clerk session JWT.
 
-### Wiki worker (`wiki-curator-cog`, ADR-006)
+### Wiki worker (`wiki-curator-cog` ADR-0006)
 
 A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched, and after each `generate` a `materialise` that stores the changed pages' documents — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer that cloned, rendered and pushed the markdown wiki is retired; the `wcs-wiki` repo is a local export of the same page documents, written by the curator's `render` command.
 
 ### Wiki repo (`wcs-wiki`)
 
-A local markdown export of the page documents, written by `python -m wiki_curator_cog.main render` and committed by hand if at all; browsable in Obsidian or on GitHub. Not an edit surface: a render overwrites derived pages. Corrections go in as notes, through the same ingestion as lessons (wiki-curator-cog ADR-005).
+A local markdown export of the page documents, written by `python -m wiki_curator_cog.main render` and committed by hand if at all; browsable in Obsidian or on GitHub. Not an edit surface: a render overwrites derived pages. Corrections go in as notes, through the same ingestion as lessons (wiki-curator-cog ADR-0005).
 
 ### Q&A agent
 

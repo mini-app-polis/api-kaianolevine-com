@@ -1,4 +1,4 @@
-"""Filtering a page document for one reader (wiki-curator-cog ADR-006).
+"""Filtering a page document for one reader (wiki-curator-cog ADR-0006).
 
 One document is stored per page. These pin what a reader who cannot see a
 source is given: none of its evidence, none of its links, and no page at all

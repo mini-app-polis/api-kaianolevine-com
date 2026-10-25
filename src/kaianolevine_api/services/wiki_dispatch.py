@@ -1,4 +1,4 @@
-"""Handing wiki work to wiki-curator-cog (wiki-curator-cog ADR-006).
+"""Handing wiki work to wiki-curator-cog (wiki-curator-cog ADR-0006).
 
 Two producers' worth of requests, one queue, the API sending for both:
 

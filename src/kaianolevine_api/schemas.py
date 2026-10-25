@@ -1613,7 +1613,7 @@ class WcsWikiPageSummary(BaseModel):
     """One wiki page in the index: enough to search, list and sort by change.
 
     The page documents themselves are the fleet contract's ``WcsWikiPage``;
-    this summary is web-facing only (wiki-curator-cog ADR-006).
+    this summary is web-facing only (wiki-curator-cog ADR-0006).
     """
 
     slug: str = Field(..., description="The page's slug.")

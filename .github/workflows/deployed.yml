@@ -16,7 +16,7 @@ name: deployed
 # short.
 #
 # After a dev deploy it also asks every consumer that keeps a live contract
-# suite to run it against the new API (TEST-016, ADR-012):
+# suite to run it against the new API (TEST-016, ecosystem-standards ADR-0012):
 #   common-python-utils — the cogs call this API through that library's
 #     client, so their suite lives there, next to the catalog it checks;
 #   website-astro-wcs, website-astro-software, website-astro-wcsmn — the
