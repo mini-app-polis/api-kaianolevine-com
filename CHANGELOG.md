@@ -1,3 +1,15 @@
+# [2.32.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.31.2...v2.32.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.23.0 ([1b56ee5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1b56ee542516c23d0186c8d14899277c9ceae1a9))
+
+
+### Features
+
+* **tasks:** grooming claims, so a job delivered twice is groomed once ([6d2bf31](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6d2bf3131da712a7e39c5b38feba769c35a7c728))
+
 ## [2.31.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.31.1...v2.31.2) (2026-10-25)
 
 
