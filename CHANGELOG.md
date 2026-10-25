@@ -1,3 +1,10 @@
+# [2.34.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.33.0...v2.34.0) (2026-10-25)
+
+
+### Features
+
+* **signals:** ask task-manager-cog to comment on a recovered streak's task and move it to Review ([3fa5b7a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3fa5b7a1a72b82d04f6bec8c373210f1761e18a9))
+
 # [2.33.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.32.0...v2.33.0) (2026-10-25)
 
 
