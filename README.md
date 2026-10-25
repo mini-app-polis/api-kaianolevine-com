@@ -22,6 +22,7 @@ Route groups:
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
+- `/v1/tasks`, `/v1/tasks/sweeps` — enqueue a task request / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records
 - `/v1/standards/catalog`, `/v1/standards/versions` — published standards catalog
 - `/v1/github/status` — public repository status board
 - `/v1/identity/whoami` — what verify and resolve saw for the caller

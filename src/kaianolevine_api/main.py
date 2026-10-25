@@ -60,6 +60,18 @@ from .version import package_version
 
 logger = get_logger()
 
+METRICS_ROUTES = (
+    "/v1/standards/catalog",
+    "/v1/evaluations",
+)
+"""Route templates that get their own Latency series in CloudWatch.
+
+Each is a billed metric. The evaluator's two calls, to find which one its run
+time is going to: the catalog it fetches at the start of every run, and the
+finding write. Must match ``dashboard_api_routes`` in mini-app-polis/infra
+``observability.tf``.
+"""
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -223,10 +235,7 @@ def _build_app() -> FastAPI:
         service="api-kaianolevine-com",
         client_factory=lambda: cloudwatch.client_factory(settings),
         exclude_paths=["/health", "/version"],
-        # Each is a billed series. The evaluator's two calls, to find which
-        # one its run time is going to: the catalog it fetches at the start
-        # of every run, and the finding write.
-        routes=["/v1/standards/catalog", "/v1/evaluations"],
+        routes=METRICS_ROUTES,
     )
 
     @app.exception_handler(RequestValidationError)

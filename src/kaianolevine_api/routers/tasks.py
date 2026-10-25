@@ -15,6 +15,9 @@ The ``/v1/tasks/agent-runs`` routes record the agent runs task-manager-cog
 dispatches for Ready tasks, their month's spend, and each run's result,
 which the run's workflow posts and this API hands to task-manager-cog
 (services/agent_dispatch.py). See ``mini_app_polis.api.contract.agent_runs``.
+
+``POST /v1/tasks/sweeps`` is the admin's: it puts a sweep of the board on
+task-manager-cog's queue now, rather than waiting for the hourly schedule.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from ..schemas import (
     GroomingSpend,
     TaskCreateAccepted,
     TaskCreateRequest,
+    TaskSweepAccepted,
     api_error,
     success_envelope,
 )
@@ -101,6 +105,35 @@ async def create_task_request(
         source=payload.source,
         external_id=payload.external_id,
     )
+    return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/tasks/sweeps",
+    response_model=Envelope[TaskSweepAccepted],
+    status_code=202,
+    summary="Ask task-manager-cog for a sweep of the board now",
+    description=(
+        "Enqueues one sweep on task-manager-cog's queue, the message its "
+        "hourly schedule sends, and acknowledges. The sweep runs afterwards, "
+        "in line with the queue's other jobs. Each request is its own sweep: "
+        "asking twice runs two, one after the other."
+    ),
+)
+async def request_sweep(
+    request: Request,
+    principal: Principal = Depends(require_scope("tasks.sweeps.create")),
+) -> Envelope[TaskSweepAccepted]:
+    """Put one sweep on the task manager's queue; a dropped one is a 502."""
+    settings = get_settings()
+    try:
+        accepted = await task_dispatch.dispatch_sweep(settings=settings)
+    except task_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502, "dispatch_failed", f"The sweep was not enqueued: {exc}"
+        ) from exc
+    data = TaskSweepAccepted(message_id=str(accepted.get("message_id") or ""))
     return success_envelope(data, count=1, total=1)
 
 

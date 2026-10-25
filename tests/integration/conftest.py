@@ -270,6 +270,7 @@ _DEV_ROLES = {
         "wcs.corpus.read",
         "wcs.wiki.operate",
         "wcs.notes.author",
+        "tasks.sweeps.create",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
