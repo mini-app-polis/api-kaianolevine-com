@@ -13,15 +13,27 @@ A request repeated by its source is not deduplicated here. It needs no
 claim: the cog looks the source's ``external_id`` up on the board before it
 creates anything, so a second job finds the first one's task and stops.
 
+A sweep of the board asked for on demand is the same ``task.sweep`` message
+the cog's hourly schedule enqueues, on the same queue and in the same group,
+so it never runs beside a job creating a task. Its body never changes, so
+each request carries a deduplication id of its own: asking twice within the
+queue's five-minute window runs two sweeps, one after the other, rather than
+one.
+
 The mechanics of sending, and of insisting that a send landed, are shared
 with every dispatcher; see :mod:`.job_queue`.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from mini_app_polis.api.contract import TaskCreateMessage, TaskCreateRequest
+from mini_app_polis.api.contract import (
+    TaskCreateMessage,
+    TaskCreateRequest,
+    TaskSweepMessage,
+)
 
 from ..config import Settings
 from . import job_queue
@@ -30,7 +42,9 @@ from .job_queue import DispatchError
 __all__ = [
     "DispatchError",
     "as_message",
+    "dispatch_sweep",
     "dispatch_task",
+    "sweep_message",
 ]
 
 
@@ -50,4 +64,26 @@ async def dispatch_task(request: TaskCreateRequest, *, settings: Settings) -> di
         # source believes it was asked for.
         heading="Task not dispatched",
         settings=settings,
+    )
+
+
+def sweep_message() -> dict[str, Any]:
+    """A ``task.sweep`` message, exactly as the cog's schedule sends it.
+
+    The schedule's body has no payload, which the contract allows for a kind
+    with nothing to carry, so the payload is left out here as well.
+    """
+    return TaskSweepMessage().model_dump(mode="json", exclude={"payload"})
+
+
+async def dispatch_sweep(*, settings: Settings) -> dict:
+    """Enqueue one sweep of the board. Raises DispatchError when it did not land."""
+    return await job_queue.enqueue(
+        sweep_message(),
+        "a board sweep",
+        cog="task-manager",
+        label="task dispatch",
+        heading="Sweep not dispatched",
+        settings=settings,
+        deduplication_id=uuid.uuid4().hex,
     )

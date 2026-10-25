@@ -1,4 +1,4 @@
-"""Tests for POST /v1/tasks and the task-manager enqueue seam.
+"""Tests for POST /v1/tasks, POST /v1/tasks/sweeps and the task-manager enqueue seam.
 
 The send mechanics live in services.job_queue and are covered through the
 evaluator's tests. These pin what is the task path's own: the route, the
@@ -15,7 +15,7 @@ import httpx
 import pytest
 from identity.store.models import Principal, PrincipalRole
 from identity.types import VerifiedSubject
-from mini_app_polis.api.contract import TaskCreateMessage
+from mini_app_polis.api.contract import TaskCreateMessage, TaskSweepMessage
 from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -155,6 +155,39 @@ async def test_a_caller_without_the_scope_is_refused(notifier_client) -> None:
     dispatched.assert_not_awaited()
 
 
+async def test_a_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    with patch.object(
+        dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-7"})
+    ) as dispatched:
+        response = await client.post("/v1/tasks/sweeps")
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"] == {"accepted": True, "message_id": "m-7"}
+    dispatched.assert_awaited_once()
+
+
+async def test_a_dropped_sweep_is_a_502_not_a_202(client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    with patch.object(
+        dispatch,
+        "dispatch_sweep",
+        AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
+    ):
+        response = await client.post("/v1/tasks/sweeps")
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dispatch_failed"
+
+
+async def test_a_caller_without_the_sweep_scope_is_refused(notifier_client) -> None:
+    with patch.object(dispatch, "dispatch_sweep", AsyncMock()) as dispatched:
+        response = await notifier_client.post("/v1/tasks/sweeps")
+
+    assert response.status_code == 403
+    dispatched.assert_not_awaited()
+
+
 async def test_voice_notes_ask_for_their_tasks() -> None:
     """transcription-cog is a source of tasks: each voice note becomes one."""
     cog = identity_registry.declared("transcription-cog")
@@ -201,3 +234,57 @@ async def test_a_request_goes_to_the_task_managers_queue(monkeypatch) -> None:
     )
     # Unset optional fields are left out rather than sent as null.
     assert "id" not in body["payload"]
+
+
+async def test_a_sweep_goes_to_the_task_managers_queue(monkeypatch) -> None:
+    """The schedule's own message, in the queue's one group."""
+    settings = _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        result = await dispatch.dispatch_sweep(settings=settings)
+
+    assert result == {"message_id": "m-1"}
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["QueueUrl"] == QUEUE
+    # In line with every job that writes the board, so never beside one.
+    assert sent["MessageGroupId"] == "task-manager"
+    # Byte for byte what infra's schedule sends.
+    assert sent["MessageBody"] == '{"type": "task.sweep", "version": 1}'
+    assert json.loads(sent["MessageBody"]) == {"type": "task.sweep", "version": 1}
+    # What task-manager-cog's worker reads it as.
+    assert isinstance(
+        parse_message(sent["MessageBody"], TaskSweepMessage), TaskSweepMessage
+    )
+
+
+async def test_each_sweep_asked_for_is_its_own_job(monkeypatch) -> None:
+    """The body never changes, so the queue would merge two within five
+    minutes; a deduplication id per request keeps them two sweeps."""
+    settings = _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_sweep(settings=settings)
+        await dispatch.dispatch_sweep(settings=settings)
+
+    first, second = (c.kwargs for c in sqs.send_message.call_args_list)
+    assert first["MessageBody"] == second["MessageBody"]
+    assert first["MessageDeduplicationId"]
+    assert first["MessageDeduplicationId"] != second["MessageDeduplicationId"]
+
+
+async def test_a_task_request_leaves_deduplication_to_the_queue(monkeypatch) -> None:
+    """Only the sweep brings its own id; other jobs dedupe on the body."""
+    settings = _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_task(
+            TaskCreateRequest.model_validate(VOICENOTE), settings=settings
+        )
+
+    assert "MessageDeduplicationId" not in sqs.send_message.call_args.kwargs

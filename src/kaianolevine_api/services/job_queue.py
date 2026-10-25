@@ -151,6 +151,7 @@ def send(
     queue_url: str,
     settings: Settings,
     message_group: str | None = None,
+    deduplication_id: str | None = None,
 ) -> dict:
     """The blocking SQS call, kept in one place so the caller can offload it.
 
@@ -160,12 +161,16 @@ def send(
     ``message_group`` is required for a FIFO queue and refused by a standard
     one. Deduplication is the queue's content-based setting: an identical
     body within five minutes is one job, which the dispatch claims already
-    make true, so no deduplication id is sent.
+    make true, so by default no deduplication id is sent. A job whose body
+    is the same every time but which is meant to run each time it is asked
+    for passes its own ``deduplication_id``.
     """
     client = boto3.client(
         "sqs", region_name=settings.AWS_REGION, **producer_credentials(settings)
     )
     fifo = {} if message_group is None else {"MessageGroupId": message_group}
+    if deduplication_id is not None:
+        fifo["MessageDeduplicationId"] = deduplication_id
     return client.send_message(
         QueueUrl=queue_url,
         MessageBody=json.dumps(message),
@@ -188,6 +193,7 @@ async def enqueue(
     heading: str,
     settings: Settings,
     group: str | None = None,
+    deduplication_id: str | None = None,
 ) -> dict:
     """Put one job on ``cog``'s queue and insist that it landed.
 
@@ -196,9 +202,13 @@ async def enqueue(
     not dispatched"), which the route's 502 fault report carries. ``group``
     is this job's FIFO message group, for a FIFO cog whose jobs are not all
     serial; by default every job of the cog shares one (:func:`message_group`).
+    ``deduplication_id`` replaces the FIFO queue's deduplication on the body
+    (:func:`send`), for a job that must not be merged with an identical one.
     """
     if group is not None and cog not in FIFO_COGS:
         raise ValueError(f"{cog} has a standard queue; it takes no message group")
+    if deduplication_id is not None and cog not in FIFO_COGS:
+        raise ValueError(f"{cog} has a standard queue; it takes no deduplication id")
     url = queue_url(cog, settings=settings)
     name = queue_name(cog)
 
@@ -209,6 +219,7 @@ async def enqueue(
             queue_url=url,
             settings=settings,
             message_group=group or message_group(cog),
+            deduplication_id=deduplication_id,
         )
     except (ClientError, BotoCoreError) as exc:
         # BotoCoreError covers the credential cases too — the producer's

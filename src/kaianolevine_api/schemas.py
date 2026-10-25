@@ -113,6 +113,13 @@ from .version import package_version
 T = TypeVar("T")
 
 
+class TaskSweepAccepted(BaseModel):
+    """The sweep is on the task manager's queue. Nothing has run yet."""
+
+    accepted: bool = True
+    message_id: str
+
+
 class SetListItem(BaseModel):
     """Summary view of one set returned by list endpoints."""
 
