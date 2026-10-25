@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -417,3 +418,42 @@ def _production_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("HEALTHCHECKS_ENABLED", raising=False)
+
+
+# A caller holding only one role: for tests of who may call what.
+@pytest.fixture
+def role_client(
+    client, db_session: AsyncSession
+) -> Callable[[str], AsyncIterator[httpx.AsyncClient]]:
+    """A caller holding only the one role it is given."""
+
+    @asynccontextmanager
+    async def make(role: str) -> AsyncIterator[httpx.AsyncClient]:
+        subject = f"only-{role}"
+        principal = Principal(
+            kind="human", issuer=DEV_ISSUER, subject=subject, display_name=subject
+        )
+        db_session.add(principal)
+        await db_session.flush()
+        db_session.add(
+            PrincipalRole(principal_id=principal.id, role_name=role, granted_by="test")
+        )
+        await db_session.commit()
+        original = auth_mod.verify_bearer
+        auth_mod.verify_bearer = AsyncMock(
+            return_value=VerifiedSubject(
+                issuer=DEV_ISSUER, subject=subject, kind="human"
+            )
+        )
+        try:
+            async with httpx.ASGITransport(app=app) as transport:
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                    headers={"Authorization": f"Bearer {subject}"},
+                ) as c:
+                    yield c
+        finally:
+            auth_mod.verify_bearer = original
+
+    return make

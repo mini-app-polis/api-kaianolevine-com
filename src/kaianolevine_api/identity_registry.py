@@ -210,7 +210,8 @@ MACHINES: tuple[Machine, ...] = (
         name="task-groomer-cog",
         roles=("task-groomer", "pipeline-writer", "notifier"),
         notes=(
-            "POST /v1/tasks/groomings/proposals, /v1/tasks/groomings/runs; "
+            "POST /v1/tasks/groomings/proposals, /v1/tasks/groomings/runs, "
+            "/v1/tasks/groomings/claims and /v1/tasks/groomings/claims/release; "
             "GET /v1/tasks/groomings/spend; POST /v1/evaluations, /v1/notify "
             "(run reports)."
         ),
