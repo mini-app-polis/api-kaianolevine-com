@@ -1,3 +1,10 @@
+# [2.35.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.34.0...v2.35.0) (2026-10-25)
+
+
+### Features
+
+* **secrets:** record secret rotation events and declare the rotator-cog machine ([af324b4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/af324b4ee1695ac9ec95620859915962fce66f50))
+
 # [2.34.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.33.0...v2.34.0) (2026-10-25)
 
 
