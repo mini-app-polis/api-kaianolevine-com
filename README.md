@@ -375,6 +375,16 @@ A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
 escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a
 streak makes one task however many failures it sees.
 
+A recovered streak's task is commented and moved to Review: when an escalated
+streak closes, the API sends task-manager-cog a `task.update` for its task. A
+streak closed by its recovery event names that event and links it where the
+event has a link (a green run's page; a run report has none, so the run is
+named); one closed by its quiet window says the window passed without another
+fault. Nothing marks the task complete; a person confirms the fix and closes
+it. A streak that healed before escalating has no task and sends nothing. An
+update that does not land is reported, like an escalation, and the recovery
+stands.
+
 The task arrives ready. Each detector fills the template's `Done when` (the
 check passing again, the flow finishing without an error, the route no longer
 answering the status) and `Constraints` (fix the cause; do not silence the
