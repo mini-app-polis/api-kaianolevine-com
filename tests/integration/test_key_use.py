@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import pytest
@@ -10,30 +11,38 @@ from sqlalchemy import text
 pytestmark = pytest.mark.asyncio
 
 ROUTE = "/v1/secrets/key-use"
+
+
+def _at(day: str) -> dt.datetime:
+    return dt.datetime.fromisoformat(f"{day}T10:00:00+00:00")
+
+
 MIGRATION = (
     Path(__file__).resolve().parents[2] / "migrations" / "075_secret_key_use_scope.sql"
 )
 
 
-async def _audit(async_engine, subject: str, slot: str | None, when: str) -> None:
+async def _audit(
+    async_engine, subject: str, slot: str | None, when: dt.datetime
+) -> None:
     async with async_engine.begin() as conn:
         await conn.execute(
             text(
                 "INSERT INTO identity_audit_events "
                 "(enforcement_point, subject, scope, allowed, reason, key_slot, "
                 "occurred_at) VALUES ('api-test', :subject, 'notify.messages.send', "
-                "true, 'granted_by_role', :slot, CAST(:when AS timestamptz))"
+                "true, 'granted_by_role', :slot, :when)"
             ),
             {"subject": subject, "slot": slot, "when": when},
         )
 
 
 async def test_the_newest_previous_key_use_is_reported(client, async_engine) -> None:
-    await _audit(async_engine, "deejay-cog", "previous", "2026-10-20T10:00:00Z")
-    await _audit(async_engine, "deejay-cog", "previous", "2026-10-21T10:00:00Z")
+    await _audit(async_engine, "deejay-cog", "previous", _at("2026-10-20"))
+    await _audit(async_engine, "deejay-cog", "previous", _at("2026-10-21"))
     # Neither a current-key request nor another machine's counts.
-    await _audit(async_engine, "deejay-cog", "current", "2026-10-22T10:00:00Z")
-    await _audit(async_engine, "watcher-cog", "previous", "2026-10-23T10:00:00Z")
+    await _audit(async_engine, "deejay-cog", "current", _at("2026-10-22"))
+    await _audit(async_engine, "watcher-cog", "previous", _at("2026-10-23"))
 
     response = await client.get(ROUTE, params={"machine": "deejay-cog"})
 
