@@ -19,10 +19,12 @@ REPO = {
 }
 
 
-def _signed(payload: dict, event: str) -> tuple[bytes, dict[str, str]]:
+def _signed(
+    payload: dict, event: str, secret: str = SECRET
+) -> tuple[bytes, dict[str, str]]:
     """Serialize once and sign exactly those bytes, as GitHub does."""
     body = json.dumps(payload).encode("utf-8")
-    digest = hmac.new(SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     return body, {
         "Content-Type": "application/json",
         "X-GitHub-Event": event,
@@ -111,6 +113,80 @@ async def test_rejects_tampered_body(client: AsyncClient) -> None:
         headers=headers,
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_accepts_the_previous_secret_during_a_rotation(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Either secret is accepted while the rotation overlaps."""
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "test-github-secret-new")
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET_PREVIOUS", SECRET)
+    for secret in ("test-github-secret-new", SECRET):
+        body, headers = _signed({"zen": "Keep it logically awesome."}, "ping", secret)
+        resp = await client.post("/v1/webhooks/github", content=body, headers=headers)
+        assert resp.status_code == 200, secret
+
+
+def test_every_secret_is_compared_even_after_a_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No short-circuit: timing must not say which secret matched."""
+    from kaianolevine_api.routers import notifications
+
+    calls: list[bytes] = []
+    real = hmac.compare_digest
+
+    def counting(a, b):  # type: ignore[no-untyped-def]
+        calls.append(a)
+        return real(a, b)
+
+    monkeypatch.setattr(notifications.hmac, "compare_digest", counting)
+    body, headers = _signed(_push(), "push")
+    assert notifications.verify_github_signature(
+        secrets=[SECRET, "test-github-secret-old"],
+        raw_body=body,
+        signature=headers["X-Hub-Signature-256"],
+    )
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_secret_that_is_neither_is_still_rejected(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET_PREVIOUS", "test-github-secret-old")
+    body, headers = _signed(_push(), "push", "test-github-secret-other")
+    resp = await client.post("/v1/webhooks/github", content=body, headers=headers)
+    assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("previous", ["", "   "])
+@pytest.mark.asyncio
+async def test_a_blank_previous_secret_is_none(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, previous: str
+) -> None:
+    """Blank means no previous secret, not one that an empty key signs with."""
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET_PREVIOUS", previous)
+    body, headers = _signed(_push(), "push", "")
+    resp = await client.post("/v1/webhooks/github", content=body, headers=headers)
+    assert resp.status_code == 401
+    body, headers = _signed({"zen": "Half measures are as bad as nothing."}, "ping")
+    resp = await client.post("/v1/webhooks/github", content=body, headers=headers)
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_previous_secret_alone_is_not_configured(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without a current secret the route fails closed, as it did before."""
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "")
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET_PREVIOUS", SECRET)
+    body, headers = _signed({"zen": "Approachable is better than simple."}, "ping")
+    resp = await client.post("/v1/webhooks/github", content=body, headers=headers)
+    assert resp.status_code == 500
+    assert resp.json()["error"]["code"] == "config_error"
 
 
 @respx.mock

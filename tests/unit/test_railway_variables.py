@@ -77,12 +77,29 @@ def test_every_production_machine_key_is_referenced_by_the_service() -> None:
     assert missing == []
 
 
+def test_every_production_machine_previous_key_is_referenced_too() -> None:
+    """Optional, and declared anyway: an undeclared one is removed on apply.
+
+    The previous key is set only while a rotation overlaps. If the service
+    could not see it, the rotation would cut over instead, and every caller
+    still holding the old key would answer 401 until it was redeployed.
+    """
+    shared = _shared_names()
+    missing = sorted(
+        m.previous_key_env_var
+        for m in identity_registry.MACHINES
+        if m.name not in DEVELOPMENT_ONLY and m.previous_key_env_var not in shared
+    )
+    assert missing == []
+
+
 def test_a_development_only_machine_is_not_keyed_in_production() -> None:
     shared = _shared_names()
     for name in DEVELOPMENT_ONLY:
         machine = identity_registry.declared(name)
         assert machine is not None
         assert machine.key_env_var not in shared
+        assert machine.previous_key_env_var not in shared
 
 
 def test_the_parser_sees_both_kinds_of_declaration() -> None:
