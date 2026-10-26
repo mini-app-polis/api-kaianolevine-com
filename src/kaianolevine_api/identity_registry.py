@@ -71,6 +71,10 @@ class Machine:
     #: Keyed in development configuration only. In production its missing key
     #: is the intended state, so it is not reported as a missing secret.
     development_only: bool = False
+    #: The task sources this machine owns on the board. It may ask for tasks
+    #: only under these sources (POST /v1/tasks), and update only tasks whose
+    #: external_id starts with one of them and a dot (POST /v1/tasks/updates).
+    task_sources: tuple[str, ...] = ()
 
     @property
     def key_env_var(self) -> str:
@@ -118,6 +122,7 @@ MACHINES: tuple[Machine, ...] = (
             "POST /v1/wcs/sources, /v1/wcs/transcripts, /v1/evaluations, "
             "/v1/tasks (a voice note's task)."
         ),
+        task_sources=("voicenote",),
     ),
     Machine(
         name="evaluator-cog",
@@ -258,8 +263,10 @@ MACHINES: tuple[Machine, ...] = (
         roles=("secrets-rotator", "task-requester", "notifier"),
         notes=(
             "GET and POST /v1/secrets/rotation-events (the rotation record); "
-            "POST /v1/tasks (a manual secret that is due); POST /v1/notify."
+            "POST /v1/tasks (a manual secret that is due) and /v1/tasks/updates "
+            "(that task, once the secret is rotated); POST /v1/notify."
         ),
+        task_sources=("secret-rotation",),
     ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
@@ -293,6 +300,14 @@ MACHINES: tuple[Machine, ...] = (
         development_only=True,
     ),
 )
+
+
+def task_sources_for(name: str) -> frozenset[str]:
+    """The task sources the machine named ``name`` owns; empty if none or unknown."""
+    for machine in MACHINES:
+        if machine.name == name:
+            return frozenset(machine.task_sources)
+    return frozenset()
 
 
 def machine_keys(env: Mapping[str, str]) -> list[MachineKey]:

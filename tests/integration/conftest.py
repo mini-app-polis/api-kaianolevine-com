@@ -373,7 +373,7 @@ _DEV_ROLES = {
     "wiki-operator": ["wcs.wiki.operate"],
     "deejay-trigger": ["deejay.runs.create"],
     "transcription-trigger": ["transcription.runs.create"],
-    "task-requester": ["tasks.requests.create"],
+    "task-requester": ["tasks.requests.create", "tasks.requests.update"],
     "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
     "agent-dispatcher": ["tasks.agent-runs.read", "tasks.agent-runs.write"],
     "agent-reporter": ["tasks.agent-runs.report"],

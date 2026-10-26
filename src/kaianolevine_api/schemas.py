@@ -56,6 +56,7 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     SpotifyPlaylistsIngestResponse,
     TaskCreateAccepted,
     TaskCreateRequest,
+    TaskUpdateRequest,
     TranscriptionRunAccepted,
     TranscriptionRunRequest,
     WcsDrillPurposeItem,
@@ -517,6 +518,16 @@ class SpotifyPlaylistItem(BaseModel):
     )
     owner_name: str | None = Field(..., description="Semantic value for owner name.")
     captured_at: dt.datetime = Field(..., description="Semantic value for captured at.")
+
+
+class TaskUpdateAccepted(BaseModel):
+    """The acknowledgement of a task update. Not a result: the board is unchanged yet."""
+
+    accepted: bool = Field(default=True, description="The update is on the queue.")
+    message_id: str = Field(
+        default="", description="The queue message this request became, for tracing."
+    )
+    external_id: str = Field(..., description="The task the update names.")
 
 
 def api_error(
