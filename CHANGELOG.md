@@ -1,3 +1,15 @@
+# [2.39.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.38.2...v2.39.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.28.0 ([094196f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/094196fe50426a59e3c3161cbae583b5736d53d6))
+
+
+### Features
+
+* **secrets:** record rotations with no automatic check as verification unchecked ([0916f46](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0916f46384f3ef2c7426c4bb486118cb7999a6df))
+
 ## [2.38.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.38.1...v2.38.2) (2026-10-26)
 
 
