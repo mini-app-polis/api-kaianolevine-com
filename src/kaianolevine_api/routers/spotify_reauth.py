@@ -89,6 +89,7 @@ def _not_configured(settings: Settings) -> HTMLResponse | None:
     description=(
         "Public. Redirects to Spotify's approval page; the callback saves the "
         "new refresh token to Doppler if it belongs to the configured owner."
+        " Intentionally public: the browser re-authorisation flow, and the callback refuses any Spotify account but the owner's."
     ),
     response_class=RedirectResponse,
     # A redirect to Spotify (or a 503 page), never a JSON body.
@@ -122,7 +123,8 @@ async def spotify_authorize(settings: Settings = Depends(get_settings)) -> Respo
 @router.get(
     "/spotify/callback",
     summary="Finish renewing deejay-cog's Spotify token",
-    description="Spotify's redirect target. Answers with a page, never the token.",
+    description="Spotify's redirect target. Answers with a page, never the token."
+    " Intentionally public: the browser re-authorisation flow, and the callback refuses any Spotify account but the owner's.",
     response_class=HTMLResponse,
     # A page for a person, never a JSON body.
     response_model=None,

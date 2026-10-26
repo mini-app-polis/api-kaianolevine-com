@@ -40,6 +40,7 @@ STALE_MAX_AGE_SECS = 60
         "GitHub organizations. Public repositories are listed individually; "
         "private repositories are counted per organization and never named. "
         "Served from a cached snapshot — see `fetched_at` and `stale`."
+        " Intentionally public: the same repository status board for every caller."
     ),
 )
 async def github_status(

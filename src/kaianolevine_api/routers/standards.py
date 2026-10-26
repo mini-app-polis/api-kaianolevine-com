@@ -152,6 +152,7 @@ async def publish_catalog(
     description=(
         "Returns the compiled catalog for a version, or the highest version "
         "published when none is given. Public — the rule text is public."
+        " Intentionally public: standards rule text that is already public."
     ),
 )
 async def get_catalog(
@@ -192,7 +193,8 @@ async def get_catalog(
     "/standards/versions",
     response_model=Envelope[list[StandardsCatalogItem]],
     summary="List published catalog versions",
-    description="Every published version, newest first. Public.",
+    description="Every published version, newest first. Public."
+    " Intentionally public: standards rule text that is already public.",
 )
 async def list_versions(
     session: AsyncSession = Depends(get_db_session),

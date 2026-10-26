@@ -27,7 +27,8 @@ router = APIRouter()
     "/spotify/playlists",
     response_model=Envelope[list[SpotifyPlaylistItem]],
     summary="List Spotify playlists",
-    description="Public snapshot of playlists pushed by the cog, ordered by name.",
+    description="Public snapshot of playlists pushed by the cog, ordered by name."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def list_spotify_playlists(
     session: AsyncSession = Depends(get_db_session),

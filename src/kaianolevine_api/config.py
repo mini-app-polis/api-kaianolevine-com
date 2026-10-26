@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # HTTP client timeouts — override to 0 in tests for fast failure
     HTTP_CLIENT_TIMEOUT_SECS: float = 10.0
 
-    # Clerk JWT (Project Keystone) — required when flags.keystone.clerk_auth_enabled is TRUE
+    # Clerk session JWTs from one tenant: its issuer and JWKS URL.
     CLERK_JWKS_URL: str | None = None
     CLERK_ISSUER: str | None = None
 

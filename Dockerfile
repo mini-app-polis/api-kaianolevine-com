@@ -1,4 +1,4 @@
-# The API's image. Railway builds it from here (railway.json selects it), so
+# The API's image. Railway builds it from here (.railway/railway.ts selects it), so
 # the base image, interpreter patch and system packages are recorded in the
 # repo instead of inferred by the builder at build time (CD-021).
 #

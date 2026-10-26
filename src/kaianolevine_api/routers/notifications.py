@@ -384,6 +384,7 @@ def decide(event: str, payload: dict[str, Any], default_branch: str) -> Decision
         "Intentionally unauthenticated in the bearer-token sense: the "
         "shared-secret signature is the credential, because it is the only "
         "one GitHub can present."
+        " Intentionally public: GitHub's request signature gates it, not a bearer token."
     ),
     include_in_schema=False,
 )

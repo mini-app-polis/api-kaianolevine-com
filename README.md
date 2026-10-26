@@ -47,8 +47,14 @@ Route groups:
 - `/v1/wcs/wiki/concepts|techniques|patterns|drills`, `…/{slug}` — entity views
 - `/v1/wcs/wiki/instructors`, `/v1/wcs/wiki/instructors/{slug}` — instructor views
 - `/v1/wcs/wiki/sources`, `/v1/wcs/wiki/sources/{id}`, `/v1/wcs/wiki/admin/sources[/{id}]` — source views
+- `/v1/wcs/wiki/pages`, `/v1/wcs/wiki/pages/{slug}`, `/v1/wcs/wiki/admin/pages[/{slug}]` — the stored wiki pages wiki-curator-cog builds (it writes them; the site reads them)
+- `/v1/wcs/wiki/state/links|facets|prose|thin` — wiki-curator-cog's build state between passes (cog-only)
+- `/v1/wcs/wiki/jobs` — put wiki jobs on the curator's queue (cog-only); `/v1/wcs/wiki/admin/jobs` — start a free wiki operation (admin)
+- `/v1/wcs/wiki/admin/revisions`, `…/revisions/sources`, `…/revisions/{id}` — page revision history (admin)
+- `/v1/wcs/wiki/admin/notes` — send a note written on the site (admin)
 - `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog); built once per corpus revision, ETag/304, 503 + `Retry-After` when busy
-- `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
+- `/v1/wcs/me`, `/v1/wcs/admin/users[/{id}]`, `/v1/wcs/admin/grants[/{id}]`, `/v1/wcs/admin/notes/{id}`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control and note metadata
+- `/v1/wcs/admin/sources/{id}`, `/v1/wcs/admin/sources/{id}/visibility` — direct edits of a source's metadata and visibility
 - `/v1/wcs/admin/corrections/*`, `/v1/wcs/admin/additions/*` — input-layer overrides
 - `/v1/wcs/admin/recompose/{source_id}` — manual composition trigger
 - `/v1/wcs/admin/gaps/*` — curation gap-finding
@@ -219,15 +225,15 @@ row inserted by hand.
 
 Every route is in exactly one of three states:
 
-- **Scope-guarded** (58) — `Depends(require_scope("<domain>.<resource>.<action>"))`.
+- **Scope-guarded** — `Depends(require_scope("<domain>.<resource>.<action>"))`.
   Roles are named bundles of scopes; a suspended principal is denied
   before roles are consulted.
-- **Authenticated-only** (3) — a verified credential, no scope. This is
+- **Authenticated-only** — a verified credential, no scope. This is
   the whole list: `POST /v1/wcs/me` (where a person first becomes known,
   so it cannot require a principal in order to grant one), `GET /v1/wcs/me`
   (reads only the caller's own profile), and `GET /v1/identity/whoami`
   (reports what verify and resolve saw, and authorizes nothing).
-- **Public** (31) — see below.
+- **Public** — see below. Each one's OpenAPI description says why it is intentionally public (DOC-011).
 
 Every decision is audited, allow and deny alike, with the enforcement
 point, principal, scope, outcome and reason.

@@ -20,7 +20,8 @@ router = APIRouter()
     "/tracks",
     response_model=Envelope[list[TrackListItem]],
     summary="List tracks",
-    description="Query tracks by title/artist, genre, BPM range, year, and data quality.",
+    description="Query tracks by title/artist, genre, BPM range, year, and data quality."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def list_tracks(
     artist: Annotated[str | None, Query()] = None,
@@ -124,7 +125,8 @@ async def list_tracks(
     "/tracks/{id}",
     response_model=Envelope[TrackDetail],
     summary="Get track with set context",
-    description="Returns a single track play including its set context.",
+    description="Returns a single track play including its set context."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def get_track(
     id: uuid.UUID,

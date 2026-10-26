@@ -215,31 +215,33 @@ Additions are first-class, not corrections to absent content. They carry `origin
 
 ### Direct edits (canonical-layer, ADR-0006)
 
-Direct edits **modify canonical rows in place**. They are the right tool for fixing data that is already wrong in the canonical layer and that you don't want to fix indirectly through a correction record.
+Direct edits **modify canonical rows in place**. Two exist today:
 
-- **`PATCH /v1/wcs/admin/sources/{id}`** — direct edit of source metadata fields. (Already exists.)
-- **`PATCH /v1/wcs/admin/sources/{id}/visibility`** — direct edit of source visibility. (Already exists.)
-- **`PATCH /v1/wcs/admin/instructors/{id}`** — direct edit of canonical name, slug, prose columns. (Per ADR-0006.)
-- **`PATCH /v1/wcs/admin/entities/{id}`** — direct edit of canonical name, slug, kind, status, overview_md. (Per ADR-0006.)
-- **`POST /v1/wcs/admin/instructors/{id}/repoint`** and **`/entities/{id}/repoint`** — move FK references from this row to another, for de-duplicating before deletion. (Per ADR-0006.)
-- **`DELETE`** for both — hard delete when no live references remain. (Per ADR-0006.)
-- **Alias add/remove** for both alias tables. (Per ADR-0006.)
-- **Direct edits on per-source content rows** (attributions, definitions, relations, drill_purposes, technique_requirements, references) — also per ADR-0006. Re-extraction is rare-to-never, so the historical risk of "the edit gets overwritten" is not a practical concern.
+- **`PATCH /v1/wcs/admin/sources/{id}`** — direct edit of source metadata fields.
+- **`PATCH /v1/wcs/admin/sources/{id}/visibility`** — direct edit of source visibility.
 
-Direct edits write to `wcs_admin_audit_log` (new table) with `operator_id`, `table`, `row_id`, `field`, `before`, `after`, `timestamp`, and an optional `reason`.
+**Planned (ADR-0006 Pass 1), not built.** None of these routes exist; calling them is a 404:
+
+- `PATCH /v1/wcs/admin/instructors/{id}` and `PATCH /v1/wcs/admin/entities/{id}` — edit a canonical row's name, slug and prose.
+- `POST /v1/wcs/admin/instructors/{id}/repoint` and `/entities/{id}/repoint` — move references to another row before deleting.
+- `DELETE` on instructors and entities, and alias add/remove on both alias tables.
+- Direct edits on per-source content rows (attributions, definitions, relations, drill purposes, technique requirements, references).
+- A `wcs_admin_audit_log` table recording each direct edit.
+
+Until they exist, canonical rows are fixed through corrections and recompose, and duplicate entities are merged through notes (see "Operator workflows"). A canonical row left with no references has no route to delete it.
 
 ### Choosing between correction and direct edit
 
 | Situation | Tool |
 |---|---|
-| Fix one canonical row's current state. | Direct edit. |
+| Fix a wrong name on an instructor or entity. | `name_correction`, then recompose the affected sources. |
 | Make a resolution rule apply to all future ingests too. | `name_correction` (global). |
-| Both — fix the current row *and* prevent future duplicates from the same name variant. | Direct edit first, then `name_correction`. |
+| Fix a wrong filename-derived field on a source. | `source_metadata_correction` (it recomposes the source). |
+| Two entities are the same thing. | A note saying so: the extraction records `alias_of`, and the wiki merges them at render. |
 | Add a row that doesn't exist (an attribution that the LLM missed, a relation that should be recorded). | Addition. |
+| Edit a canonical row directly, or delete one. | Not available yet (planned direct edits, above). |
 | Edit a transcript. | Not supported. (See "Transcript immutability" below.) |
 | Re-run the LLM with an updated prompt. | Re-extraction. Rare-to-never (see "Re-extraction policy" below). |
-
----
 
 ## Transcript immutability
 
@@ -361,39 +363,33 @@ A retrieval-based agent behind `POST /v1/wcs/ask`, surfaced at `wcs.kaianolevine
 
 The common cleanup and curation workflows, mapped to which write surface they use.
 
-### Fix a typo on a single canonical row
+### Fix a typo in an instructor's name
 
-**Tool:** direct edit.
-**Calls:** one `PATCH` on the affected canonical row.
-**Example:** Rename instructor `Kristenwallace` → `Kristen Wallace`.
-
-```
-PATCH /v1/wcs/admin/instructors/{id}
-{ "canonical_name": "Kristen Wallace", "slug": "kristen-wallace" }
-```
-
-### Collapse a duplicate canonical row
-
-**Tool:** repoint + delete (direct edit primitives).
-**Calls:** `POST /repoint` to move attributions and definitions, then `DELETE` on the orphan row. Optionally add the merged-away name as an alias on the canonical row so future ingests of the variant resolve correctly.
-**Example:** Collapse `robertroyston` into `robert-royston`.
+**Tool:** name correction, then recompose.
+**Calls:** `POST /v1/wcs/admin/corrections/name`, then `POST /v1/wcs/admin/recompose/{source_id}` for each source the name appears in. A global correction defers the recompose, so run it yourself.
+**Example:** Sources resolve `Kristenwallace` instead of `Kristen Wallace`.
 
 ```
-POST /v1/wcs/admin/instructors/{robertroyston-id}/repoint
-{ "target_id": "{robert-royston-id}" }
+POST /v1/wcs/admin/corrections/name
+{ "raw_name": "Kristenwallace", "corrected_name": "Kristen Wallace", "scope": "global" }
 
-POST /v1/wcs/admin/instructors/{robert-royston-id}/aliases
-{ "alias": "Robertroyston" }
-
-DELETE /v1/wcs/admin/instructors/{robertroyston-id}
+POST /v1/wcs/admin/recompose/{source_id}
 ```
 
-For broader protection against future re-creation of the duplicate, also add a global name correction.
+### Collapse a duplicate
+
+**Instructors.** A name correction from the duplicate's spelling to the canonical name, then a recompose of each source that used it, moves those sources' attributions onto the canonical row and stops future ingests from creating the duplicate again.
 
 ```
 POST /v1/wcs/admin/corrections/name
 { "raw_name": "Robertroyston", "corrected_name": "Robert Royston", "scope": "global" }
+
+POST /v1/wcs/admin/recompose/{source_id}
 ```
+
+The duplicate row stays in the database with no references: deleting it needs the planned `DELETE` route.
+
+**Entities.** Write a note saying the two names are the same thing and which to use ("underarm turn is the same pattern as right side pass with underarm turn"). Its extraction records an `alias_of` relation, and the wiki merges the two at render: the preferred page absorbs the other's content and lists its name as an alias. Nothing changes in the database, so a later note saying they are distinct splits them again.
 
 ### Fix a wrong filename on a source
 
@@ -408,7 +404,7 @@ POST /v1/wcs/admin/corrections/metadata
 
 `field` is one of `title`, `organization`, `session_date`, `session_type`, `instructors`, `students`, `visibility`, `is_default_visible`. `corrected_value` is that field's plain value: a string (`session_type` one of `private_lesson`, `group_class`, `other`; `visibility` one of `private`, `public`), an ISO date string for `session_date`, a boolean for `is_default_visible`, a list of names for `instructors` and `students`. A value that does not fit its field is a 422 and nothing is written.
 
-After recompose, the synthetic `kaiano-amy` instructor row is orphan. `DELETE` it.
+After recompose, the synthetic `kaiano-amy` instructor row has no references. It stays in the database until the planned `DELETE` route exists.
 
 ### Add a relation between entities the LLM missed
 
