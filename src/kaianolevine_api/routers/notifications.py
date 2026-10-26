@@ -35,11 +35,8 @@ keeps receiving 5xx, so a Discord outage must not become one; see
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,6 +63,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services import ci_signals, discord, run_signals, signals
+from ..services.webhook_signature import verify_sha256_signature
 
 router = APIRouter()
 logger = get_logger()
@@ -142,32 +140,8 @@ class Decision:
     channel: str = discord.CHANNEL_DEFAULT
 
 
-def verify_github_signature(
-    *, secrets: Sequence[str], raw_body: bytes, signature: str | None
-) -> bool:
-    """Whether ``signature`` is GitHub's HMAC-SHA256 over exactly these bytes.
-
-    ``secrets`` is every secret currently accepted: the current one, and the
-    previous one while a rotation overlaps. Each is compared, in constant
-    time, and none short-circuits, so response time does not say which one
-    matched or whether a rotation is in progress. The digest is taken over the
-    raw body rather than a re-serialization of it: JSON round-tripping changes
-    whitespace and key order, and either one turns a valid signature into an
-    invalid one.
-    """
-    if not signature:
-        return False
-    # Bytes, not str: compare_digest raises TypeError on a str containing
-    # non-ASCII, and the header is whatever the caller sent.
-    presented = signature.encode("utf-8", "surrogatepass")
-    matched = False
-    for secret in secrets:
-        expected = (
-            "sha256="
-            + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-        ).encode("ascii")
-        matched = hmac.compare_digest(expected, presented) or matched
-    return matched
+#: GitHub's X-Hub-Signature-256 is the shared ``sha256=`` HMAC check.
+verify_github_signature = verify_sha256_signature
 
 
 def _subject(commit: dict[str, Any] | None) -> str:
@@ -384,6 +358,7 @@ def decide(event: str, payload: dict[str, Any], default_branch: str) -> Decision
         "Intentionally unauthenticated in the bearer-token sense: the "
         "shared-secret signature is the credential, because it is the only "
         "one GitHub can present."
+        " Intentionally public: GitHub's request signature gates it, not a bearer token."
     ),
     include_in_schema=False,
 )

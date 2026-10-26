@@ -40,7 +40,8 @@ counted = DbTrack.catalog_id.is_not(None)
     "/stats/overview",
     response_model=Envelope[StatsOverview],
     summary="Stats overview",
-    description="Return totals, unique tracks, years active, and most played artist.",
+    description="Return totals, unique tracks, years active, and most played artist."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_overview(
     session: AsyncSession = Depends(get_db_session),
@@ -96,7 +97,8 @@ async def stats_overview(
     "/stats/by-year",
     response_model=Envelope[list[StatsByYearItem]],
     summary="Stats by year",
-    description="Return set count and track count grouped by year.",
+    description="Return set count and track count grouped by year."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_by_year(
     session: AsyncSession = Depends(get_db_session),
@@ -134,7 +136,8 @@ async def stats_by_year(
     "/stats/top-artists",
     response_model=Envelope[list[StatsTopArtistItem]],
     summary="Top artists",
-    description="Most played artists ranked by play count.",
+    description="Most played artists ranked by play count."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_top_artists(
     session: AsyncSession = Depends(get_db_session),
@@ -167,7 +170,8 @@ async def stats_top_artists(
     response_model=Envelope[list[StatsTopTrackItem]],
     summary="Top tracks",
     description="Most played tracks ranked by catalog play count, summed "
-    "across every catalog entry of the same song.",
+    "across every catalog entry of the same song."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_top_tracks(
     session: AsyncSession = Depends(get_db_session),
@@ -215,7 +219,8 @@ async def stats_top_tracks(
     response_model=Envelope[list[YearSummaryListItem]],
     summary="Year summaries",
     description="Headline numbers for every year with sets, newest first. The "
-    "current year is in_progress and changes as sets are ingested.",
+    "current year is in_progress and changes as sets are ingested."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_year_summaries(
     session: AsyncSession = Depends(get_db_session),
@@ -229,7 +234,8 @@ async def stats_year_summaries(
     "/stats/summaries/{year}",
     response_model=Envelope[YearSummary],
     summary="Year summary",
-    description="One year's DJ summary, computed from its sets.",
+    description="One year's DJ summary, computed from its sets."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_year_summary(
     year: int,
@@ -247,7 +253,8 @@ async def stats_year_summary(
     response_model=Envelope[list[YearSummarySong]],
     summary="Year summary song list",
     description="Every song played in the year, one row per catalog entry with "
-    "its versions merged, most played first.",
+    "its versions merged, most played first."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_year_songs(
     year: int,
@@ -266,7 +273,8 @@ async def stats_year_songs(
     summary="Complete collection",
     description="Every song on record, one row per song with its "
     "versions merged, most played first, marked with the years it was played. "
-    "Grows as sets are ingested.",
+    "Grows as sets are ingested."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def stats_collection(
     session: AsyncSession = Depends(get_db_session),

@@ -16,7 +16,7 @@ API documentation is served automatically by FastAPI at `/docs` (Swagger UI) and
 `/redoc` (ReDoc). The root URL (`/`) redirects to `/docs`. The OpenAPI schema is
 available at `/openapi.json`. All three reflect the currently deployed package version.
 
-## Section 5: API Endpoints
+## API Endpoints
 
 All endpoints return the standard success envelope:
 

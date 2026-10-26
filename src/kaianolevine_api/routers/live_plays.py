@@ -79,7 +79,8 @@ async def ingest_live_plays(
     "/live-plays/recent",
     response_model=Envelope[list[LivePlayRecord]],
     summary="Recent live plays",
-    description="List recent plays from live history ordered by played_at descending.",
+    description="List recent plays from live history ordered by played_at descending."
+    " Intentionally public: aggregate reads backing the website.",
 )
 async def list_recent_live_plays(
     limit: int = Query(default=50, ge=1, le=200),

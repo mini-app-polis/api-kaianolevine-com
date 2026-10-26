@@ -26,7 +26,8 @@ router = APIRouter()
     "/sets",
     response_model=Envelope[list[SetListItem]],
     summary="List sets",
-    description="List sets. Query by year, venue (partial), and date ranges.",
+    description="List sets. Query by year, venue (partial), and date ranges."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def list_sets(
     year: Annotated[int | None, Query()] = None,
@@ -120,7 +121,8 @@ def _track_to_item(
     "/sets/{id}",
     response_model=Envelope[SetDetail],
     summary="Get set detail with tracks",
-    description="Returns a single set and its complete ordered track list.",
+    description="Returns a single set and its complete ordered track list."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def get_set(
     id: uuid.UUID,
@@ -162,7 +164,8 @@ async def get_set(
     "/sets/{id}/tracks",
     response_model=Envelope[list[SetTrackListItem]],
     summary="List set tracks",
-    description="Returns the ordered track list for a given set.",
+    description="Returns the ordered track list for a given set."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def get_set_tracks(
     id: uuid.UUID,

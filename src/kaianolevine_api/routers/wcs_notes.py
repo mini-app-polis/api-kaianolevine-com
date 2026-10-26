@@ -308,14 +308,8 @@ async def list_all_notes(
 ) -> Envelope[list[WcsNoteItem]]:
     """List all WCS notes for admin- and pipeline-driven workflows.
 
-    TODO(service-auth): currently requires only a valid authenticated
-    identity, not WCS admin. Before opening this API to less-trusted
-    callers, swap ``get_current_owner`` back to a stricter dependency
-    that recognizes admins AND a service-account allowlist. The
-    blocking issue is that pipeline cogs (wiki-curator-cog, etc.) use
-    Clerk M2M tokens and aren't naturally "admins" in the user-profile
-    sense; promoting machines to ``is_admin=true`` would also grant
-    them user-management permissions they shouldn't have.
+    Requires ``wcs.corpus.read``, which the human admin and the cogs that
+    read the whole corpus hold.
 
     Reads _legacy_wcs_notes; superseded by GET /v1/wcs/wiki/admin/sources.
     """

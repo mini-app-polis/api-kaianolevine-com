@@ -30,7 +30,8 @@ router = APIRouter()
     "/catalog",
     response_model=Envelope[list[CatalogListItem]],
     summary="List catalog entries",
-    description="List track_catalog entries with optional filters.",
+    description="List track_catalog entries with optional filters."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def list_catalog(
     artist: Annotated[str | None, Query()] = None,
@@ -100,7 +101,8 @@ async def list_catalog(
     "/catalog/{id}",
     response_model=Envelope[CatalogDetail],
     summary="Get catalog entry with play history",
-    description="Returns a catalog entry and its play history across sets.",
+    description="Returns a catalog entry and its play history across sets."
+    " Intentionally public: catalog reads backing the website.",
 )
 async def get_catalog(
     id: uuid.UUID,

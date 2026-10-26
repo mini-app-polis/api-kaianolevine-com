@@ -1,4 +1,4 @@
-"""Tests for POST /v1/tasks, POST /v1/tasks/sweeps and the task-manager enqueue seam.
+"""Tests for POST /v1/tasks, /v1/tasks/updates, /v1/tasks/sweeps and the task-manager enqueue seam.
 
 The send mechanics live in services.job_queue and are covered through the
 evaluator's tests. These pin what is the task path's own: the route, the
@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api import identity_registry
 from kaianolevine_api.main import app
-from kaianolevine_api.schemas import TaskCreateRequest
+from kaianolevine_api.schemas import TaskCreateRequest, TaskUpdateRequest
 from kaianolevine_api.services import job_queue
 from kaianolevine_api.services import task_dispatch as dispatch
 
@@ -82,6 +82,41 @@ async def notifier_client(
             headers={"Authorization": "Bearer notifier-token"},
         ) as c:
             yield c
+    auth_mod.verify_bearer = original
+
+
+@pytest.fixture
+async def machine_client(client, db_session: AsyncSession):
+    """Open a client that authenticates as the named machine, holding ``task-requester``."""
+    opened: list[httpx.AsyncClient] = []
+    original = auth_mod.verify_bearer
+
+    async def open_as(name: str) -> httpx.AsyncClient:
+        principal = Principal(
+            kind="machine", issuer=ISSUER, subject=name, display_name=name
+        )
+        db_session.add(principal)
+        await db_session.flush()
+        db_session.add(
+            PrincipalRole(
+                principal_id=principal.id, role_name="task-requester", granted_by="test"
+            )
+        )
+        await db_session.commit()
+        auth_mod.verify_bearer = AsyncMock(
+            return_value=VerifiedSubject(issuer=ISSUER, subject=name, kind="machine")
+        )
+        c = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+            headers={"Authorization": f"Bearer {name}-key"},
+        )
+        opened.append(c)
+        return c
+
+    yield open_as
+    for c in opened:
+        await c.aclose()
     auth_mod.verify_bearer = original
 
 
@@ -288,3 +323,127 @@ async def test_a_task_request_leaves_deduplication_to_the_queue(monkeypatch) -> 
         )
 
     assert "MessageDeduplicationId" not in sqs.send_message.call_args.kwargs
+
+
+# ── updates ──────────────────────────────────────────────────────────────
+
+ROTATION_UPDATE = {
+    "external_id": "secret-rotation.prd.OPENAI_API_KEY.2026-10",
+    "comment": "Rotated on 2026-10-26; check passed.",
+    "section": "Review",
+}
+
+
+async def test_a_machine_updates_its_own_task(machine_client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    rotator = await machine_client("rotator-cog")
+
+    with patch.object(
+        dispatch, "dispatch_task_update", AsyncMock(return_value={"message_id": "m-3"})
+    ) as dispatched:
+        response = await rotator.post("/v1/tasks/updates", json=ROTATION_UPDATE)
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"] == {
+        "accepted": True,
+        "message_id": "m-3",
+        "external_id": ROTATION_UPDATE["external_id"],
+    }
+    assert dispatched.await_args.args[0] == TaskUpdateRequest.model_validate(
+        ROTATION_UPDATE
+    )
+
+
+async def test_an_update_may_only_comment(machine_client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    rotator = await machine_client("rotator-cog")
+    body = {k: v for k, v in ROTATION_UPDATE.items() if k != "section"}
+
+    with patch.object(
+        dispatch, "dispatch_task_update", AsyncMock(return_value={"message_id": "m-4"})
+    ):
+        response = await rotator.post("/v1/tasks/updates", json=body)
+
+    assert response.status_code == 202, response.text
+
+
+@pytest.mark.parametrize(
+    ("machine", "external_id"),
+    [
+        # Another source's task.
+        ("rotator-cog", "voicenote.file-1"),
+        # A prefix that only starts like an owned source.
+        ("rotator-cog", "secret-rotationX.prd.A.1"),
+        # A machine that owns no task source.
+        ("deejay-cog", "secret-rotation.prd.A.1"),
+    ],
+)
+async def test_a_machine_may_not_update_another_sources_task(
+    machine_client, monkeypatch, machine, external_id
+) -> None:
+    _settings(monkeypatch)
+    caller = await machine_client(machine)
+
+    with patch.object(dispatch, "dispatch_task_update", AsyncMock()) as dispatched:
+        response = await caller.post(
+            "/v1/tasks/updates", json={**ROTATION_UPDATE, "external_id": external_id}
+        )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["code"] == "forbidden"
+    dispatched.assert_not_awaited()
+
+
+async def test_an_update_may_only_move_a_task_to_review(
+    machine_client, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    rotator = await machine_client("rotator-cog")
+
+    with patch.object(dispatch, "dispatch_task_update", AsyncMock()) as dispatched:
+        response = await rotator.post(
+            "/v1/tasks/updates", json={**ROTATION_UPDATE, "section": "Ready"}
+        )
+
+    assert response.status_code == 422, response.text
+    dispatched.assert_not_awaited()
+
+
+async def test_a_dropped_update_is_a_502_not_a_202(client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    with patch.object(
+        dispatch,
+        "dispatch_task_update",
+        AsyncMock(side_effect=dispatch.DispatchError("queue unreachable")),
+    ):
+        response = await client.post("/v1/tasks/updates", json=ROTATION_UPDATE)
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dispatch_failed"
+
+
+async def test_a_caller_without_the_update_scope_is_refused(notifier_client) -> None:
+    response = await notifier_client.post("/v1/tasks/updates", json=ROTATION_UPDATE)
+    assert response.status_code == 403
+
+
+async def test_a_machine_may_only_ask_for_tasks_under_its_own_source(
+    machine_client, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    rotator = await machine_client("rotator-cog")
+
+    with patch.object(dispatch, "dispatch_task", AsyncMock()) as dispatched:
+        response = await rotator.post("/v1/tasks", json=VOICENOTE)
+
+    assert response.status_code == 403, response.text
+    dispatched.assert_not_awaited()
+
+
+async def test_each_task_requester_owns_its_source() -> None:
+    """A machine that asks for tasks names the source it asks under."""
+    assert identity_registry.task_sources_for("transcription-cog") == {"voicenote"}
+    assert identity_registry.task_sources_for("rotator-cog") == {"secret-rotation"}
+    for machine in identity_registry.MACHINES:
+        if "task-requester" in machine.roles:
+            assert machine.task_sources, machine.name

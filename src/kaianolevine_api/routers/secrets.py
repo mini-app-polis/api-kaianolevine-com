@@ -7,10 +7,17 @@ under his own identity. The owner can also ask the rotator for a rotation
 now (services/rotation_dispatch.py), under a scope of its own: holding the
 record's scopes does not let a caller start one. No event or request carries
 a secret value. See ``mini_app_polis.api.contract.secret_rotations``.
+
+Doppler reports which secret names changed in a config through its
+``config.secrets.update`` webhook (``POST /v1/webhooks/doppler``, verified by
+signature). The names are kept as changes the rotator's sweep compares with
+the record, so a value changed outside the rotation process is found.
 """
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -18,9 +25,10 @@ from identity.types import Principal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
-from ..config import get_settings
+from ..config import Settings, get_settings
 from ..database import get_db_session
 from ..schemas import (
+    DopplerWebhookResult,
     Envelope,
     KeyUse,
     RotationConfig,
@@ -28,10 +36,18 @@ from ..schemas import (
     RotationEventCreate,
     RotationRequest,
     RotationRequestAccepted,
+    SecretChange,
     api_error,
     success_envelope,
 )
-from ..services import job_queue, key_use, rotation_dispatch, rotation_events
+from ..services import (
+    job_queue,
+    key_use,
+    rotation_dispatch,
+    rotation_events,
+    secret_changes,
+)
+from ..services.webhook_signature import verify_sha256_signature
 
 router = APIRouter()
 
@@ -150,3 +166,97 @@ async def read_key_use(
     """The machine's last use of its previous key."""
     last = await key_use.last_previous_use(session, machine)
     return success_envelope(KeyUse(machine=machine, last_used=last), count=1, total=1)
+
+
+@router.post(
+    "/webhooks/doppler",
+    response_model=Envelope[DopplerWebhookResult],
+    summary="Doppler secrets.update webhook: which secret names changed",
+    description=(
+        "Receives Doppler's config.secrets.update webhook, verifies "
+        "X-Doppler-Signature (HMAC-SHA256 over the raw body), and stores the "
+        "names added, removed and updated in the prd or dev config of the "
+        "recorded project. Doppler sends names, never values, and only names, "
+        "the config and the time are kept. A retried delivery is stored once."
+        " Intentionally public: Doppler's request signature gates it, not a bearer token."
+    ),
+    include_in_schema=False,
+)
+async def doppler_webhook(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[DopplerWebhookResult]:
+    """Verify one Doppler delivery and store the names it lists."""
+    raw_body = await request.body()
+    secret = (settings.DOPPLER_WEBHOOK_SECRET or "").strip()
+    if not secret:
+        # Fail closed: an unsigned delivery is never stored.
+        raise api_error(500, "config_error", "Doppler webhook secret is not configured")
+    # The previous secret is accepted only beside a current one.
+    previous = (settings.DOPPLER_WEBHOOK_SECRET_PREVIOUS or "").strip()
+    if not verify_sha256_signature(
+        secrets=[secret, previous] if previous else [secret],
+        raw_body=raw_body,
+        signature=request.headers.get("X-Doppler-Signature"),
+    ):
+        raise api_error(401, "unauthorized", "Invalid webhook signature")
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        raise api_error(400, "parse_error", "Body is not valid JSON") from None
+    if not isinstance(payload, dict):
+        raise api_error(400, "parse_error", "Body is not a JSON object")
+
+    def ignored(reason: str) -> Envelope[DopplerWebhookResult]:
+        # 200, not an error: Doppler should not retry a delivery this route
+        # chose not to store.
+        return success_envelope(
+            DopplerWebhookResult(stored=0, reason=reason), count=1, total=1
+        )
+
+    if payload.get("type") != "config.secrets.update":
+        return ignored("other_type")
+    if secret_changes.project_of(payload) != settings.DOPPLER_WEBHOOK_PROJECT:
+        return ignored("other_project")
+    config = secret_changes.config_of(payload)
+    if config is None:
+        return ignored("other_config")
+
+    stored = await secret_changes.record_delivery(
+        session,
+        raw_body=raw_body,
+        config=config,
+        changes=secret_changes.changed_names(payload),
+    )
+    if stored == 0:
+        return ignored("retried")
+    return success_envelope(DopplerWebhookResult(stored=stored), count=1, total=1)
+
+
+@router.get(
+    "/secrets/changes",
+    response_model=Envelope[list[SecretChange]],
+    summary="Secret names Doppler reported changed, oldest first",
+    description=(
+        "From Doppler's secrets.update webhook: one change per name added, "
+        "removed or updated, with the config and when it arrived. since is "
+        "inclusive and until exclusive. Names only; no value is ever received. "
+        "meta.total counts every match, across pages."
+    ),
+)
+async def list_secret_changes(
+    config: Annotated[RotationConfig | None, Query()] = None,
+    since: Annotated[datetime | None, Query()] = None,
+    until: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    principal: Principal = Depends(require_scope("secrets.changes.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[SecretChange]]:
+    """The changes that match, oldest first."""
+    changes, total = await secret_changes.list_changes(
+        session, config=config, since=since, until=until, limit=limit, offset=offset
+    )
+    return success_envelope(changes, count=len(changes), total=total)

@@ -139,7 +139,8 @@ def _csv_filter(raw: str | None) -> list[str] | None:
     "/evaluations",
     response_model=Envelope[list[PipelineEvaluationItem]],
     summary="List evaluation findings",
-    description="List pipeline evaluation findings with optional filtering.",
+    description="List pipeline evaluation findings with optional filtering."
+    " Intentionally public: read-only Pipeline Health, with no per-owner content.",
 )
 async def list_evaluations(
     repo: Annotated[str | None, Query()] = None,
@@ -235,7 +236,8 @@ async def list_evaluations(
     "/evaluations/summary",
     response_model=Envelope[list[EvaluationSummaryItem]],
     summary="Evaluation summary",
-    description="Aggregate evaluation findings grouped by dimension.",
+    description="Aggregate evaluation findings grouped by dimension."
+    " Intentionally public: read-only Pipeline Health, with no per-owner content.",
 )
 async def evaluations_summary(
     run_id: Annotated[str | None, Query()] = None,

@@ -22,8 +22,9 @@ Route groups:
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
-- `/v1/tasks`, `/v1/tasks/sweeps` — enqueue a task request / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records
+- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
+- `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
 - `/v1/secrets/key-use` — when a machine last proved itself with its previous key, from the audit trail's key slot; rotator-cog retires a previous key once that is a day old
 - `/v1/standards/catalog`, `/v1/standards/versions` — published standards catalog
@@ -38,6 +39,7 @@ Route groups:
 - `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
 - `/v1/ingest` — set ingestion endpoint
 - `/v1/webhooks/github` — GitHub org webhook; filters deliveries by event, action and branch before forwarding to Discord (signature-verified)
+- `/v1/webhooks/doppler` — Doppler `config.secrets.update` webhook; stores the changed secret names, never values (signature-verified)
 - `/v1/notify` — ad-hoc Discord notifications for cogs and scripts
 - `/v1/contact` — public contact form (CORS + Turnstile gated)
 - `/v1/resume` — resume PDF proxy (Google Drive)
@@ -47,8 +49,14 @@ Route groups:
 - `/v1/wcs/wiki/concepts|techniques|patterns|drills`, `…/{slug}` — entity views
 - `/v1/wcs/wiki/instructors`, `/v1/wcs/wiki/instructors/{slug}` — instructor views
 - `/v1/wcs/wiki/sources`, `/v1/wcs/wiki/sources/{id}`, `/v1/wcs/wiki/admin/sources[/{id}]` — source views
+- `/v1/wcs/wiki/pages`, `/v1/wcs/wiki/pages/{slug}`, `/v1/wcs/wiki/admin/pages[/{slug}]` — the stored wiki pages wiki-curator-cog builds (it writes them; the site reads them)
+- `/v1/wcs/wiki/state/links|facets|prose|thin` — wiki-curator-cog's build state between passes (cog-only)
+- `/v1/wcs/wiki/jobs` — put wiki jobs on the curator's queue (cog-only); `/v1/wcs/wiki/admin/jobs` — start a free wiki operation (admin)
+- `/v1/wcs/wiki/admin/revisions`, `…/revisions/sources`, `…/revisions/{id}` — page revision history (admin)
+- `/v1/wcs/wiki/admin/notes` — send a note written on the site (admin)
 - `/v1/wcs/wiki/export` — bulk corpus export (for wiki-curator-cog); built once per corpus revision, ETag/304, 503 + `Retry-After` when busy
-- `/v1/wcs/me`, `/v1/wcs/admin/users`, `/v1/wcs/admin/grants`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control
+- `/v1/wcs/me`, `/v1/wcs/admin/users[/{id}]`, `/v1/wcs/admin/grants[/{id}]`, `/v1/wcs/admin/notes/{id}`, `/v1/wcs/admin/notes/{id}/visibility` — WCS access control and note metadata
+- `/v1/wcs/admin/sources/{id}`, `/v1/wcs/admin/sources/{id}/visibility` — direct edits of a source's metadata and visibility
 - `/v1/wcs/admin/corrections/*`, `/v1/wcs/admin/additions/*` — input-layer overrides
 - `/v1/wcs/admin/recompose/{source_id}` — manual composition trigger
 - `/v1/wcs/admin/gaps/*` — curation gap-finding
@@ -219,15 +227,15 @@ row inserted by hand.
 
 Every route is in exactly one of three states:
 
-- **Scope-guarded** (58) — `Depends(require_scope("<domain>.<resource>.<action>"))`.
+- **Scope-guarded** — `Depends(require_scope("<domain>.<resource>.<action>"))`.
   Roles are named bundles of scopes; a suspended principal is denied
   before roles are consulted.
-- **Authenticated-only** (3) — a verified credential, no scope. This is
+- **Authenticated-only** — a verified credential, no scope. This is
   the whole list: `POST /v1/wcs/me` (where a person first becomes known,
   so it cannot require a principal in order to grant one), `GET /v1/wcs/me`
   (reads only the caller's own profile), and `GET /v1/identity/whoami`
   (reports what verify and resolve saw, and authorizes nothing).
-- **Public** (31) — see below.
+- **Public** — see below. Each one's OpenAPI description says why it is intentionally public (DOC-011).
 
 Every decision is audited, allow and deny alike, with the enforcement
 point, principal, scope, outcome and reason.
@@ -247,6 +255,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/standards/catalog`, `/v1/standards/versions` | Standards rule text, already public; reads stay off the credential path every evaluation depends on. |
 | `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
 | `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. Signed with `GITHUB_WEBHOOK_SECRET`, or `GITHUB_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. |
+| `POST /v1/webhooks/doppler` | Doppler's secrets.update webhook. Gated by `X-Doppler-Signature` over the raw body, signed with `DOPPLER_WEBHOOK_SECRET`, or `DOPPLER_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. Stores names only. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,

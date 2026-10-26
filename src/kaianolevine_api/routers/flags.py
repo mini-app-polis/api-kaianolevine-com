@@ -25,7 +25,8 @@ router = APIRouter()
     "/flags",
     response_model=Envelope[list[FeatureFlagItem]],
     summary="List feature flags",
-    description="List all feature flags. Protected.",
+    description="List all feature flags."
+    " Intentionally public: read-only flag states, with no per-owner content.",
 )
 async def list_flags(
     session: AsyncSession = Depends(get_db_session),

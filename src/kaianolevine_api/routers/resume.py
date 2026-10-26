@@ -110,6 +110,7 @@ def _safe_filename(name: str) -> str:
     description=(
         "Streams the resume PDF from Google Drive. "
         "Supports iframe embedding on software.kaianolevine.com."
+        " Intentionally public: the resume PDF the website links to."
     ),
     response_model=None,
 )

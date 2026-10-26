@@ -3,7 +3,13 @@
 The callers of ``POST /v1/tasks`` are the fleet's sources of tasks. A source
 hands over a draft of the work; task-manager-cog adds the board's template,
 the id, tags and column, and creates the task. See
-``mini_app_polis.api.contract.tasks``.
+``mini_app_polis.api.contract.tasks``. ``POST /v1/tasks/updates`` lets the
+same caller comment on a task it asked for and move it to Review.
+
+A machine may only ask for, and update, tasks under the sources it owns
+(``task_sources`` in identity_registry.py). A task's external_id starts with
+its source and a dot, so that is the whole check: the API keeps no record of
+who asked for which task. A person who holds the scope is not limited.
 
 The ``/v1/tasks/groomings`` routes are task-manager-cog's memory between
 sweeps of the board, the month's paid grooming, the hand-offs between
@@ -31,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import require_scope
 from ..config import get_settings
 from ..database import get_db_session
+from ..identity_registry import task_sources_for
 from ..schemas import (
     AgentResultAccepted,
     AgentRun,
@@ -54,6 +61,8 @@ from ..schemas import (
     TaskCreateAccepted,
     TaskCreateRequest,
     TaskSweepAccepted,
+    TaskUpdateAccepted,
+    TaskUpdateRequest,
     api_error,
     success_envelope,
 )
@@ -67,6 +76,24 @@ from ..services import (
 )
 
 router = APIRouter()
+
+#: The one column a machine may move its task to: the work is done, for the
+#: owner to check. Leaving ``section`` out only comments.
+UPDATABLE_SECTIONS = frozenset({"Review"})
+
+
+def _require_owned(principal: Principal, external_id: str) -> None:
+    """403 unless a machine owns the source ``external_id`` starts with."""
+    if principal.kind != "machine":
+        return
+    owned = task_sources_for(principal.subject)
+    if not any(external_id.startswith(f"{source}.") for source in owned):
+        raise api_error(
+            403,
+            "forbidden",
+            f"{principal.subject} may only change tasks under its own sources"
+            f" ({', '.join(sorted(owned)) or 'none'}).",
+        )
 
 
 @router.post(
@@ -91,6 +118,7 @@ async def create_task_request(
     while the caller is still on the line, and one message in the errors
     channel (its fault report), since a cog will not act on the 502.
     """
+    _require_owned(principal, payload.external_id)
     settings = get_settings()
     try:
         accepted = await task_dispatch.dispatch_task(payload, settings=settings)
@@ -103,6 +131,48 @@ async def create_task_request(
     data = TaskCreateAccepted(
         message_id=str(accepted.get("message_id") or ""),
         source=payload.source,
+        external_id=payload.external_id,
+    )
+    return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/tasks/updates",
+    response_model=Envelope[TaskUpdateAccepted],
+    status_code=202,
+    summary="Ask task-manager-cog to comment on a task and move it to Review",
+    description=(
+        "Enqueues one task update and acknowledges. The task is changed "
+        "afterwards, by task-manager-cog, which reports a key that names no "
+        "task. For the sources that ask for tasks: a machine may only update "
+        "tasks under its own sources (403 otherwise). section may only be "
+        "Review, or left out to only comment."
+    ),
+)
+async def update_task_request(
+    payload: TaskUpdateRequest,
+    request: Request,
+    principal: Principal = Depends(require_scope("tasks.requests.update")),
+) -> Envelope[TaskUpdateAccepted]:
+    """Accept one update to a task the caller asked for, and put it on the queue."""
+    _require_owned(principal, payload.external_id)
+    if payload.section is not None and payload.section not in UPDATABLE_SECTIONS:
+        raise api_error(
+            422,
+            "validation_error",
+            f"section may only be {', '.join(sorted(UPDATABLE_SECTIONS))}, or left out.",
+        )
+    settings = get_settings()
+    try:
+        accepted = await task_dispatch.dispatch_task_update(payload, settings=settings)
+    except task_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502, "dispatch_failed", f"The task update was not enqueued: {exc}"
+        ) from exc
+
+    data = TaskUpdateAccepted(
+        message_id=str(accepted.get("message_id") or ""),
         external_id=payload.external_id,
     )
     return success_envelope(data, count=1, total=1)

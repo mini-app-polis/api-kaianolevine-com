@@ -1,146 +1,45 @@
-# WCS pipeline — end-to-end architecture
+# WCS pipeline — the API's part
 
-This document describes the West Coast Swing data pipeline from raw audio recording through the published wiki, naming each stage and the artifact it produces. It is the cross-cutting reference for how the substrate is built, written to, read from, and projected.
+The West Coast Swing pipeline runs from a recorded lesson in Google Drive, through `watcher-cog` and `transcription-cog`, into this API's substrate, and out to the website and the wiki. The end-to-end architecture, with every stage and the repository that runs it, is in [`ecosystem-standards`' `docs/wcs-pipeline.md`](https://github.com/mini-app-polis/ecosystem-standards/blob/main/docs/wcs-pipeline.md).
 
-The pipeline spans five repositories:
+This document covers what this API owns: the two ingest calls, the substrate they write, the corrections and edits made on top of it, the read surface, and the operator workflows.
 
-- **`watcher-cog`** — polls Google Drive for new files and signals downstream.
-- **`transcription-cog`** — the ingest pipeline: transcribes audio, runs LLM extraction, registers the source via the API.
-- **`api-kaianolevine-com`** — owns the substrate (Postgres), runs the Composition Service, exposes read/write/admin endpoints.
-- **`wiki-curator-cog`** — the wiki: LLM passes that link, fold and write prose over the canonical graph (their state held by this API), a Lambda worker that runs them per composed source, and a deterministic renderer into markdown.
-- **`website-astro-wcs`** — the SSR site that surfaces per-lesson notes and operator admin pages.
-- **`wcs-wiki`** — the markdown projection of the canonical entity graph, browsable in Obsidian and on GitHub.
+The ADRs behind it:
 
-The ADRs that ground this pipeline:
-
-- **`api-kaianolevine-com` ADR-0002** — the WCS entity substrate.
-- **`api-kaianolevine-com` ADR-0003** — versioned extractions and corrections.
-- **`api-kaianolevine-com` ADR-0004** — rebuild from scratch (the migration that produced the current substrate).
-- **`api-kaianolevine-com` ADR-0006** — operator direct edits on canonical state.
-- **`wiki-curator-cog` ADR-0002** — repurpose curator as a renderer over canonical entities.
-- **`wiki-curator-cog` ADR-0005 / ADR-0006** — the self-generating wiki, and its state, jobs and worker in this pipeline.
-- **`wcs-wiki/CLAUDE.md`** — the render spec (v1.0).
+- **ADR-0002**: the WCS entity substrate.
+- **ADR-0003**: versioned extractions and corrections.
+- **ADR-0004**: the rebuild from scratch that produced the current substrate.
+- **ADR-0006**: operator direct edits on canonical state.
 
 ---
 
-## Pipeline overview
+## Ingest: the two calls
 
-```
-[lesson] → [audio file in Drive]
-              │
-              │ filename: YYYY-MM-DD instructors > students/org - Topic
-              │ (filename-authoritative metadata)
-              ▼
-       watcher-cog (polls Drive)
-              │
-              │ POST /v1/transcription/runs → SQS (one job per file)
-              ▼
-       transcription-cog.process_transcript (Lambda worker)
-       ┌────────────────────────────────────────────────┐
-       │ 1. parse filename → ParsedFilename             │
-       │ 2. read transcript text                        │
-       │ 3. POST /v1/wcs/transcripts → wcs_transcripts  │
-       │    (idempotent on drive_file_id)               │
-       │ 4. LLM extraction call → extraction dict       │
-       │ 5. POST /v1/wcs/sources                        │
-       │    ├─ creates/updates wcs_sources              │
-       │    ├─ writes wcs_source_extractions (active)   │
-       │    └─ runs Composition Service synchronously   │
-       │ 6. archive Drive file                          │
-       └────────────────────────────────────────────────┘
-              │
-              ▼
-       api-kaianolevine-com substrate
-       (canonical-layer rows committed)
-              │
-              ├─────────────────┬──────────────────┬─────────────────┐
-              ▼                 ▼                  ▼                 ▼
-       wiki renderer    website notes UI    admin portal       Q&A agent
-       (wiki-curator-   (website-astro-     (in website-       (future,
-        cog)             wcs /notes/*)       astro-wcs           reads via
-              │                                /admin/*)         retrieval
-              ▼                                                   endpoints)
-       wcs-wiki repo
-       (markdown bundle)
-```
+`transcription-cog`'s worker calls the API twice for each file. It stores the transcript once it has the text, and it stores the source once the LLM extraction is done.
 
-The forward flow (input → canonical) runs through the cogs and the API. Operator edits and corrections write directly to the API; the canonical layer is regenerated when needed (recompose for corrections; direct edits take effect immediately).
+### Transcript persistence
 
----
+`POST /v1/wcs/transcripts` creates a row in `wcs_transcripts` with the raw text, the `drive_file_id`, the inferred `source_type` and an auto-assigned UUID. The endpoint is **idempotent on `drive_file_id`** (unique constraint `uq_wcs_transcripts_drive_file_id`). Ingesting a file again with the same Drive id returns the existing row.
 
-## Stages, named
+The result is a **`transcript_id`**. This row is the substrate's permanent record of *what was said*, and it is **immutable** from the moment it lands. There is no operator surface for editing transcript text. (See ADR-0006 for the rationale.)
 
-### 1. Recording
+### Source store and composition
 
-A lesson, class, or workshop is recorded. The output is an **audio file** in the configured Google Drive folder. The filename follows the convention:
+`POST /v1/wcs/sources` (the cog's `task_store_source`) does the following in one synchronous call:
 
-```
-YYYY-MM-DD instructors > students/org - Topic
-```
-
-Examples:
-
-- `2026-05-15 Kaiano > Sarah - Anchor step quality`
-- `2026-03-12 Robert Royston > Kaiano, Libby - Whip variations`
-- `2025-09-08 Kaiano - Beginner WCS week 1`
-
-The filename is **authoritative for who taught (`instructors`), who attended (`students`), the organization/context, the session date, and the topic**. The LLM downstream does not re-infer these fields from the transcript body; the filename is the source of truth.
-
-A filename that doesn't parse cleanly is skipped by the cog with a `Sentry` warning and is not ingested.
-
-### 2. Drive watch
-
-`watcher-cog` polls the configured WCS notes folder on a schedule. For each file it finds, it calls `POST /v1/transcription/runs`; the API claims the file and enqueues one job per file on `transcription-cog`'s SQS queue. `watcher-cog` itself is generic — it watches multiple folders for multiple cogs and is not WCS-specific.
-
-### 3. Ingest pipeline
-
-`transcription-cog`'s Lambda worker runs `process_transcript` once per queued file; jobs run one at a time (the queue consumer's concurrency setting). Per file:
-
-#### 3a. Parse filename
-
-`filename_parser.parse_filename(name)` returns a `ParsedFilename` with `session_date`, `session_type`, `instructors` (list of raw name strings), `students` (list), `organization`, `title`. Parse failures skip the file.
-
-The output is **filename-derived metadata** for use throughout the rest of the pipeline.
-
-#### 3b. Read transcript
-
-The audio file is read from Drive. (The transcription itself happens inside this step or as a sub-task; the result is plain transcript text.) Transcripts shorter than the configured minimum are skipped with a `transcript_too_short` reason.
-
-The output is **transcript text** — a string of what was said, with whatever speaker-labelling and timestamp conventions the transcription model produces.
-
-#### 3c. Transcript persistence
-
-`POST /v1/wcs/transcripts` creates a row in `wcs_transcripts` containing the raw text, the `drive_file_id`, the parsed `source_type` inference, and an auto-assigned UUID. The endpoint is **idempotent on `drive_file_id`** (unique constraint `uq_wcs_transcripts_drive_file_id`); attempting to re-ingest a file with the same Drive id returns the existing row.
-
-The output is **`transcript_id`**. This row is the substrate's permanent record of *what was said* and is **immutable** from the moment it lands. There is no operator surface for editing transcript text. (See ADR-0006 for the rationale.)
-
-#### 3d. LLM extraction
-
-The cog runs an LLM call against the transcript text plus the parsed filename metadata. The prompt asks the LLM to produce a structured representation: per-source attributions, definitions, relations, drill purposes, technique requirements, references. The output is a structured dict (a JSON blob).
-
-The output is the **extraction**.
-
-#### 3e. Source store + composition
-
-`POST /v1/wcs/sources` (the cog's `task_store_source`). In one synchronous API call, the API:
-
-1. Creates or updates the `wcs_sources` row with the filename-derived metadata.
-2. Writes the extraction as a new row in `wcs_source_extractions`, marked active. Demotes any previously-active extraction for this source to inactive (but does not delete it — extractions are versioned and preserved).
-3. Runs the **Composition Service** (`services/wcs_composition.py`) synchronously. The composition step derives all canonical-layer rows for this source:
-   - Resolves each `instructors_raw` and `students_raw` name through `resolve_instructor`, producing `wcs_instructors` rows (creating new ones, finding existing by slug/alias, applying any matching `wcs_name_corrections`).
+1. Creates or updates the `wcs_sources` row with the filename-derived metadata. The filename is authoritative for instructors, students, organization, date and topic.
+2. Writes the extraction as a new active row in `wcs_source_extractions`. Any extraction that was active for this source is marked inactive but not deleted, because extractions are versioned and kept.
+3. Runs the **Composition Service** (`services/wcs_composition.py`) synchronously. It derives all the canonical-layer rows for this source:
+   - Resolves each `instructors_raw` and `students_raw` name through `resolve_instructor`, producing `wcs_instructors` rows. It creates new rows, finds existing ones by slug or alias, and applies any matching `wcs_name_corrections`.
    - Resolves each entity reference in the extraction through `resolve_entity`, producing `wcs_entities` rows.
-   - Writes the per-source content rows: `wcs_source_attributions`, `wcs_entity_definitions`, `wcs_entity_relations`, `wcs_drill_purposes`, `wcs_technique_requirements`, `wcs_source_references`.
+   - Writes the per-source content rows: `wcs_source_attributions`, `wcs_entity_definitions`, `wcs_entity_relations`, `wcs_drill_purposes`, `wcs_technique_requirements` and `wcs_source_references`.
 4. Returns the refreshed `WcsSourceItem` only after all canonical rows are committed.
 
-There is **no eventual consistency**. The canonical layer is current the instant the API call returns.
+There is **no eventual consistency**. The canonical layer is current the instant the call returns.
 
-Then, if `flags.wcs.wiki_jobs_enabled` is on (seeded off, migration 055), the API enqueues a wiki `link` job for the source on `wiki-curator-jobs.fifo` (`services/wiki_dispatch.py`). A dropped job is reported to the errors channel and never fails the ingest.
+Then, if `flags.wcs.wiki_jobs_enabled` is on, the API queues a wiki `link` job for the source on `wiki-curator-jobs.fifo` (`services/wiki_dispatch.py`). The flag was seeded off in migration 055. A dropped job is reported to the errors channel and never fails the ingest.
 
-The output is the **canonical state** of the substrate for that source.
-
-#### 3f. Archive
-
-The processed Drive file is moved to the configured processed-files folder. This is the last step; if it fails, the source has already been ingested and is queryable, but the Drive file may need to be moved manually.
+The result is the **canonical state** of the substrate for that source.
 
 ---
 
@@ -215,31 +114,33 @@ Additions are first-class, not corrections to absent content. They carry `origin
 
 ### Direct edits (canonical-layer, ADR-0006)
 
-Direct edits **modify canonical rows in place**. They are the right tool for fixing data that is already wrong in the canonical layer and that you don't want to fix indirectly through a correction record.
+Direct edits **modify canonical rows in place**. Two exist today:
 
-- **`PATCH /v1/wcs/admin/sources/{id}`** — direct edit of source metadata fields. (Already exists.)
-- **`PATCH /v1/wcs/admin/sources/{id}/visibility`** — direct edit of source visibility. (Already exists.)
-- **`PATCH /v1/wcs/admin/instructors/{id}`** — direct edit of canonical name, slug, prose columns. (Per ADR-0006.)
-- **`PATCH /v1/wcs/admin/entities/{id}`** — direct edit of canonical name, slug, kind, status, overview_md. (Per ADR-0006.)
-- **`POST /v1/wcs/admin/instructors/{id}/repoint`** and **`/entities/{id}/repoint`** — move FK references from this row to another, for de-duplicating before deletion. (Per ADR-0006.)
-- **`DELETE`** for both — hard delete when no live references remain. (Per ADR-0006.)
-- **Alias add/remove** for both alias tables. (Per ADR-0006.)
-- **Direct edits on per-source content rows** (attributions, definitions, relations, drill_purposes, technique_requirements, references) — also per ADR-0006. Re-extraction is rare-to-never, so the historical risk of "the edit gets overwritten" is not a practical concern.
+- **`PATCH /v1/wcs/admin/sources/{id}`** — direct edit of source metadata fields.
+- **`PATCH /v1/wcs/admin/sources/{id}/visibility`** — direct edit of source visibility.
 
-Direct edits write to `wcs_admin_audit_log` (new table) with `operator_id`, `table`, `row_id`, `field`, `before`, `after`, `timestamp`, and an optional `reason`.
+**Planned (ADR-0006 Pass 1), not built.** None of these routes exist; calling them is a 404:
+
+- `PATCH /v1/wcs/admin/instructors/{id}` and `PATCH /v1/wcs/admin/entities/{id}` — edit a canonical row's name, slug and prose.
+- `POST /v1/wcs/admin/instructors/{id}/repoint` and `/entities/{id}/repoint` — move references to another row before deleting.
+- `DELETE` on instructors and entities, and alias add/remove on both alias tables.
+- Direct edits on per-source content rows (attributions, definitions, relations, drill purposes, technique requirements, references).
+- A `wcs_admin_audit_log` table recording each direct edit.
+
+Until they exist, canonical rows are fixed through corrections and recompose, and duplicate entities are merged through notes (see "Operator workflows"). A canonical row left with no references has no route to delete it.
 
 ### Choosing between correction and direct edit
 
 | Situation | Tool |
 |---|---|
-| Fix one canonical row's current state. | Direct edit. |
+| Fix a wrong name on an instructor or entity. | `name_correction`, then recompose the affected sources. |
 | Make a resolution rule apply to all future ingests too. | `name_correction` (global). |
-| Both — fix the current row *and* prevent future duplicates from the same name variant. | Direct edit first, then `name_correction`. |
+| Fix a wrong filename-derived field on a source. | `source_metadata_correction` (it recomposes the source). |
+| Two entities are the same thing. | A note saying so: the extraction records `alias_of`, and the wiki merges them at render. |
 | Add a row that doesn't exist (an attribution that the LLM missed, a relation that should be recorded). | Addition. |
+| Edit a canonical row directly, or delete one. | Not available yet (planned direct edits, above). |
 | Edit a transcript. | Not supported. (See "Transcript immutability" below.) |
 | Re-run the LLM with an updated prompt. | Re-extraction. Rare-to-never (see "Re-extraction policy" below). |
-
----
 
 ## Transcript immutability
 
@@ -330,70 +231,37 @@ Before adding curator concurrency that would read the export in parallel, check 
 
 ---
 
-## Consumers
-
-### Website (`website-astro-wcs`)
-
-SSR Astro site at `wcs.kaianolevine.com`. Reads the caller-scoped endpoints. Pages:
-
-- `/notes` — visible sources, list.
-- `/notes/[id]` — one source detail.
-- `/admin/notes`, `/admin/notes/[id]` — source visibility/metadata admin (uses the admin-scoped endpoints).
-- `/admin/*` (future) — the operator admin portal surfacing corrections, additions, direct edits, and gap discovery (per ADR-0002's deferred future work).
-
-Authenticated via Clerk session JWT.
-
-### Wiki worker (`wiki-curator-cog` ADR-0006)
-
-A Lambda behind `wiki-curator-jobs.fifo`, one job at a time. A `link` job links one source's statements and names its follow-ons — `consolidate` for its new entities, `generate` for the pages it touched, and after each `generate` a `materialise` that stores the changed pages' documents — which the worker posts back to `POST /v1/wcs/wiki/jobs`. Each job reads the export and the state from this API and writes back what it changed; every pass is watermarked, so a repeated job costs no model call. The Railway renderer that cloned, rendered and pushed the markdown wiki is retired; the `wcs-wiki` repo is a local export of the same page documents, written by the curator's `render` command.
-
-### Wiki repo (`wcs-wiki`)
-
-A local markdown export of the page documents, written by `python -m wiki_curator_cog.main render` and committed by hand if at all; browsable in Obsidian or on GitHub. Not an edit surface: a render overwrites derived pages. Corrections go in as notes, through the same ingestion as lessons (wiki-curator-cog ADR-0005).
-
-### Q&A agent
-
-A retrieval-based agent behind `POST /v1/wcs/ask`, surfaced at `wcs.kaianolevine.com/notes/ask` (see `docs/wcs-qa-agent.md`). It currently reads the legacy notes and transcript tables, not the canonical layer; moving it onto canonical state is still future work.
-
----
-
 ## Operator workflows
 
 The common cleanup and curation workflows, mapped to which write surface they use.
 
-### Fix a typo on a single canonical row
+### Fix a typo in an instructor's name
 
-**Tool:** direct edit.
-**Calls:** one `PATCH` on the affected canonical row.
-**Example:** Rename instructor `Kristenwallace` → `Kristen Wallace`.
-
-```
-PATCH /v1/wcs/admin/instructors/{id}
-{ "canonical_name": "Kristen Wallace", "slug": "kristen-wallace" }
-```
-
-### Collapse a duplicate canonical row
-
-**Tool:** repoint + delete (direct edit primitives).
-**Calls:** `POST /repoint` to move attributions and definitions, then `DELETE` on the orphan row. Optionally add the merged-away name as an alias on the canonical row so future ingests of the variant resolve correctly.
-**Example:** Collapse `robertroyston` into `robert-royston`.
+**Tool:** name correction, then recompose.
+**Calls:** `POST /v1/wcs/admin/corrections/name`, then `POST /v1/wcs/admin/recompose/{source_id}` for each source the name appears in. A global correction defers the recompose, so run it yourself.
+**Example:** Sources resolve `Kristenwallace` instead of `Kristen Wallace`.
 
 ```
-POST /v1/wcs/admin/instructors/{robertroyston-id}/repoint
-{ "target_id": "{robert-royston-id}" }
+POST /v1/wcs/admin/corrections/name
+{ "raw_name": "Kristenwallace", "corrected_name": "Kristen Wallace", "scope": "global" }
 
-POST /v1/wcs/admin/instructors/{robert-royston-id}/aliases
-{ "alias": "Robertroyston" }
-
-DELETE /v1/wcs/admin/instructors/{robertroyston-id}
+POST /v1/wcs/admin/recompose/{source_id}
 ```
 
-For broader protection against future re-creation of the duplicate, also add a global name correction.
+### Collapse a duplicate
+
+**Instructors.** A name correction from the duplicate's spelling to the canonical name, then a recompose of each source that used it, moves those sources' attributions onto the canonical row and stops future ingests from creating the duplicate again.
 
 ```
 POST /v1/wcs/admin/corrections/name
 { "raw_name": "Robertroyston", "corrected_name": "Robert Royston", "scope": "global" }
+
+POST /v1/wcs/admin/recompose/{source_id}
 ```
+
+The duplicate row stays in the database with no references: deleting it needs the planned `DELETE` route.
+
+**Entities.** Write a note saying the two names are the same thing and which to use ("underarm turn is the same pattern as right side pass with underarm turn"). Its extraction records an `alias_of` relation, and the wiki merges the two at render: the preferred page absorbs the other's content and lists its name as an alias. Nothing changes in the database, so a later note saying they are distinct splits them again.
 
 ### Fix a wrong filename on a source
 
@@ -408,7 +276,7 @@ POST /v1/wcs/admin/corrections/metadata
 
 `field` is one of `title`, `organization`, `session_date`, `session_type`, `instructors`, `students`, `visibility`, `is_default_visible`. `corrected_value` is that field's plain value: a string (`session_type` one of `private_lesson`, `group_class`, `other`; `visibility` one of `private`, `public`), an ISO date string for `session_date`, a boolean for `is_default_visible`, a list of names for `instructors` and `students`. A value that does not fit its field is a 422 and nothing is written.
 
-After recompose, the synthetic `kaiano-amy` instructor row is orphan. `DELETE` it.
+After recompose, the synthetic `kaiano-amy` instructor row has no references. It stays in the database until the planned `DELETE` route exists.
 
 ### Add a relation between entities the LLM missed
 
@@ -436,19 +304,15 @@ These are explicitly out-of-scope and worth naming so future work knows where th
 - **Transcript editing.** Not supported. See "Transcript immutability" above. If the need ever arises, it would be a meaningful design extension; the current model rules it out.
 - **Retroactive re-extraction.** Capable but not used. See "Re-extraction policy."
 - **In-place mutation of `wcs_source_extractions.raw_output`.** Not supported. The blob is preserved for evaluation and debugging.
-- **Operator UI in `wcs-wiki`.** The wiki is read-only from an operator perspective; edits go to the API.
-- **Inter-cog direct DB access.** All cogs are API clients. The substrate is owned by `api-kaianolevine-com`.
 
 ---
 
 ## Cross-references
 
-- The ingest cog: `transcription-cog/src/transcription_cog/flow.py`, function `process_transcript`.
-- The Composition Service: `api-kaianolevine-com/src/kaianolevine_api/services/wcs_composition.py`.
-- Admin endpoints: `api-kaianolevine-com/src/kaianolevine_api/routers/wcs_admin.py`.
-- Visibility logic: `api-kaianolevine-com/src/kaianolevine_api/services/wcs_source_visibility.py`.
-- Wiki export endpoint: `api-kaianolevine-com/src/kaianolevine_api/routers/wcs_wiki.py`, function `export_wiki`.
-- Renderer: `wiki-curator-cog/src/wiki_curator_cog/render.py`.
-- Render spec: `wcs-wiki/CLAUDE.md` (v1.0).
-- Website notes UI: `website-astro-wcs/src/pages/notes/`.
-- ADRs: `api-kaianolevine-com/docs/decisions/`, `wiki-curator-cog/docs/decisions/`.
+- The Composition Service: `src/kaianolevine_api/services/wcs_composition.py`.
+- Admin endpoints: `src/kaianolevine_api/routers/wcs_admin.py`.
+- Visibility logic: `src/kaianolevine_api/services/wcs_source_visibility.py`.
+- Wiki export endpoint: `src/kaianolevine_api/routers/wcs_wiki.py`, function `export_wiki`.
+- The Q&A agent: `docs/wcs-qa-agent.md`.
+- The end-to-end pipeline, and who reads what: `ecosystem-standards`' `docs/wcs-pipeline.md`.
+- ADRs: `docs/decisions/`.
