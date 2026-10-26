@@ -1,3 +1,18 @@
+# [2.40.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.39.0...v2.40.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.29.0 ([447b69d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/447b69dff845794b4958bea29f29c06fae6d31ba))
+* leave DOPPLER_WEBHOOK_PROJECT out of the Railway variables, and list the Doppler routes ([d6e7408](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d6e7408a9bc85b2fcf55c93e0c0a472f5c36472d))
+
+
+### Features
+
+* **secrets:** record the secret names Doppler reports changed ([3770758](https://github.com/mini-app-polis/api-kaianolevine-com/commit/37707586b4b704220742e7ccb21cf2a9743c2a86))
+* **secrets:** record the secret names Doppler reports changed ([bc08aa7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bc08aa7f10bfcfff34466a2bf6bc23ae2dbcd7cb))
+* **tasks:** let a machine comment on its own task and move it to Review ([d19a4ef](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d19a4effde7c28e1495f13608183d2544e4948b4))
+
 # [2.39.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.38.2...v2.39.0) (2026-10-26)
 
 
