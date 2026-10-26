@@ -24,6 +24,7 @@ Route groups:
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
 - `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
+- `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
 - `/v1/secrets/key-use` — when a machine last proved itself with its previous key, from the audit trail's key slot; rotator-cog retires a previous key once that is a day old
 - `/v1/standards/catalog`, `/v1/standards/versions` — published standards catalog
@@ -38,6 +39,7 @@ Route groups:
 - `/v1/live-plays`, `/v1/live-plays/recent` — VirtualDJ live play history
 - `/v1/ingest` — set ingestion endpoint
 - `/v1/webhooks/github` — GitHub org webhook; filters deliveries by event, action and branch before forwarding to Discord (signature-verified)
+- `/v1/webhooks/doppler` — Doppler `config.secrets.update` webhook; stores the changed secret names, never values (signature-verified)
 - `/v1/notify` — ad-hoc Discord notifications for cogs and scripts
 - `/v1/contact` — public contact form (CORS + Turnstile gated)
 - `/v1/resume` — resume PDF proxy (Google Drive)
@@ -253,6 +255,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/standards/catalog`, `/v1/standards/versions` | Standards rule text, already public; reads stay off the credential path every evaluation depends on. |
 | `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
 | `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. Signed with `GITHUB_WEBHOOK_SECRET`, or `GITHUB_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. |
+| `POST /v1/webhooks/doppler` | Doppler's secrets.update webhook. Gated by `X-Doppler-Signature` over the raw body, signed with `DOPPLER_WEBHOOK_SECRET`, or `DOPPLER_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. Stores names only. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,
