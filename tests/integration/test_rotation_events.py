@@ -87,6 +87,13 @@ async def test_a_failed_verification_says_why(client) -> None:
     assert event["verification_reason"] == "the new key was refused with a 401"
 
 
+async def test_an_unchecked_rotation_is_recorded_without_a_reason(client) -> None:
+    event = await _record(client, kind="manual", verification="unchecked")
+    assert event["verification"] == "unchecked"
+    assert event["verification_reason"] is None
+    assert [e["verification"] for e in (await _list(client))["data"]] == ["unchecked"]
+
+
 async def test_an_aws_key_records_only_the_last_four_of_its_id(client) -> None:
     event = await _record(
         client, name="AWS_ACCESS_KEY_ID", kind="aws-access-key", aws_key_last4="7QXZ"
@@ -105,6 +112,8 @@ async def test_an_aws_key_records_only_the_last_four_of_its_id(client) -> None:
         {"actor": "not an actor"},
         {"config": "stg"},
         {"verification_reason": "a verified rotation has no failure reason"},
+        {"verification": "unchecked", "verification_reason": "no check ran"},
+        {"verification": "skipped"},
         {"aws_key_last4": "7QXZ"},
         {"aws_key_last4": "7qxz-and-more", "kind": "aws-access-key"},
         {"retired": "2026-09-30T09:00:00Z"},
@@ -137,6 +146,26 @@ async def test_the_table_refuses_what_the_contract_refuses(
                 ":verification)"
             ),
             row,
+        )
+    await db_session.rollback()
+
+
+async def test_the_table_takes_unchecked_and_refuses_any_other_verification(
+    db_session: AsyncSession,
+) -> None:
+    insert = text(
+        "INSERT INTO rotation_events "
+        "(name, config, kind, mode, actor, minted, verification) "
+        "VALUES (:name, 'prd', 'manual', 'routine', 'rotator-cog', "
+        "now(), :verification)"
+    )
+    await db_session.execute(
+        insert, {"name": "ACOUSTID_API_KEY", "verification": "unchecked"}
+    )
+    # Another secret, so only the verification can be what is refused.
+    with pytest.raises(IntegrityError):
+        await db_session.execute(
+            insert, {"name": "BREVO_API_KEY", "verification": "skipped"}
         )
     await db_session.rollback()
 
