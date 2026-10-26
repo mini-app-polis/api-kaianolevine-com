@@ -51,6 +51,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     RotationEventCreate,
     RotationRequest,
     RotationRequestAccepted,
+    SecretChange,
+    SecretChangeKind,
     SpotifyPlaylistIngest,
     SpotifyPlaylistsIngest,
     SpotifyPlaylistsIngestResponse,
@@ -518,6 +520,19 @@ class SpotifyPlaylistItem(BaseModel):
     )
     owner_name: str | None = Field(..., description="Semantic value for owner name.")
     captured_at: dt.datetime = Field(..., description="Semantic value for captured at.")
+
+
+class DopplerWebhookResult(BaseModel):
+    """What a Doppler delivery was taken as. Names are not echoed back."""
+
+    stored: int = Field(
+        ..., ge=0, description="Changes stored; 0 for a retry or an ignored delivery."
+    )
+    reason: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Why nothing was stored: retried, other_type, other_config, other_project.",
+    )
 
 
 class TaskUpdateAccepted(BaseModel):

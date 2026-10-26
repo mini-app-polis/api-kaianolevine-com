@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     # rotation overlaps. Unset or blank means there is none. It never stands
     # in for a missing current secret.
     GITHUB_WEBHOOK_SECRET_PREVIOUS: str | None = None
+    # Secret set on the Doppler webhook that reports which secret names
+    # changed (POST /v1/webhooks/doppler). Unset means every delivery is
+    # rejected. The _PREVIOUS slot works as GITHUB_WEBHOOK_SECRET_PREVIOUS does.
+    DOPPLER_WEBHOOK_SECRET: str | None = None
+    DOPPLER_WEBHOOK_SECRET_PREVIOUS: str | None = None
+    # The Doppler project whose changes are recorded. A delivery for any other
+    # project is acknowledged and stored nowhere.
+    DOPPLER_WEBHOOK_PROJECT: str = "mini-app-polis-ecosystem"
     # Which GitHub events this service has a policy for. The outer gate only:
     # what each event actually forwards is decided per-event in
     # routers.notifications, since GitHub's webhooks filter by event type and

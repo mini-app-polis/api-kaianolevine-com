@@ -133,6 +133,7 @@ def test_every_secret_is_compared_even_after_a_match(
 ) -> None:
     """No short-circuit: timing must not say which secret matched."""
     from kaianolevine_api.routers import notifications
+    from kaianolevine_api.services import webhook_signature
 
     calls: list[bytes] = []
     real = hmac.compare_digest
@@ -141,7 +142,7 @@ def test_every_secret_is_compared_even_after_a_match(
         calls.append(a)
         return real(a, b)
 
-    monkeypatch.setattr(notifications.hmac, "compare_digest", counting)
+    monkeypatch.setattr(webhook_signature.hmac, "compare_digest", counting)
     body, headers = _signed(_push(), "push")
     assert notifications.verify_github_signature(
         secrets=[SECRET, "test-github-secret-old"],

@@ -87,6 +87,7 @@ os.environ.setdefault(
     "DISCORD_WEBHOOK_URL", "https://discord.test/api/webhooks/1/token"
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
+os.environ.setdefault("DOPPLER_WEBHOOK_SECRET", "test-doppler-secret")
 # Discord embed titles stay unmarked unless a test opts into non-production.
 # Unset would resolve to local via the shared environment resolver.
 # Deterministic, not setdefault: Settings is constructed at import time
@@ -351,6 +352,7 @@ _DEV_ROLES = {
         "secrets.rotation-events.write",
         "secrets.rotations.create",
         "secrets.key-use.read",
+        "secrets.changes.read",
     ],
     "wcs-reader": ["wcs.notes.read"],
     "corpus-reader": ["wcs.notes.read", "wcs.corpus.read"],
@@ -381,6 +383,7 @@ _DEV_ROLES = {
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
         "secrets.key-use.read",
+        "secrets.changes.read",
     ],
 }
 
