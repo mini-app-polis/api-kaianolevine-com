@@ -94,6 +94,16 @@ async def test_an_unchecked_rotation_is_recorded_without_a_reason(client) -> Non
     assert [e["verification"] for e in (await _list(client))["data"]] == ["unchecked"]
 
 
+async def test_a_secret_minted_through_a_provider_api_is_recorded(client) -> None:
+    event = await _record(
+        client,
+        name="TURNSTILE_SECRET_KEY",
+        kind="provider-api",
+        retired="2026-10-01T11:00:00Z",
+    )
+    assert event["kind"] == "provider-api"
+
+
 async def test_an_aws_key_records_only_the_last_four_of_its_id(client) -> None:
     event = await _record(
         client, name="AWS_ACCESS_KEY_ID", kind="aws-access-key", aws_key_last4="7QXZ"
