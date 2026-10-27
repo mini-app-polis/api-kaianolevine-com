@@ -1,8 +1,7 @@
 """Every name the production service reads reaches it.
 
-Doppler syncs secrets to Railway's shared variables, but the service only
-sees the names .railway/railway.ts declares, and the next apply removes any
-variable the file does not declare. A machine declared in identity_registry
+Doppler syncs the service's own config to the service, and the next apply
+removes any variable .railway/railway.ts does not declare. A machine declared in identity_registry
 without its key listed there is reconciled, holds its roles, and still
 answers 401 to every request — which is how wiki-curator-deploy shipped. A
 Settings field missing from the file is the same failure one step later:
