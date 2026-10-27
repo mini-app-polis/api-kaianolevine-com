@@ -22,16 +22,19 @@
 // The start command is the image's CMD (Dockerfile), and is deliberately not
 // declared here as well: two declarations are two to keep in step.
 //
-// Variables are references to the environment's shared variables, which
-// Doppler keeps current (`ctx.shared.NAME` is `${{shared.NAME}}`); no value
-// lives in this file. Only the names the service reads are declared: the
+// Variables come from the service's own Doppler config (the
+// api-kaianolevine-com project's prd), synced to the service itself; no
+// value lives in this file. Each is declared with preserve(), so an apply
+// keeps what the sync wrote, and the next apply would remove one left out.
+// Only the names the service reads are declared: the
 // Settings fields in src/kaianolevine_api/config.py, each declared
 // machine's <NAME>_API_KEY and <NAME>_API_KEY_PREVIOUS (identity_registry.py),
-// and what mini_app_polis reads on its behalf. DATABASE_URL is not shared — it references the
-// Postgres service — and is kept as Railway has it.
+// and what mini_app_polis reads on its behalf. DATABASE_URL is not in
+// Doppler — it references the Postgres service — and is kept as Railway
+// has it.
 //
 // The rest of the Settings fields the service reads in production are not
-// shared either, and are kept as Railway has them with preserve(): set on
+// in Doppler either, and are kept as Railway has them with preserve(): set on
 // the service when needed and left unset otherwise, so the code's default
 // applies without Doppler holding every one of them.
 // tests/unit/test_railway_variables.py fails when a Settings field
@@ -138,7 +141,11 @@ export default defineRailway((ctx) => {
       limitOverride: { containers: { cpu: 4, memoryBytes: 4294967296 } },
     },
     env: {
-      ...Object.fromEntries(SHARED.map((n) => [n, ctx.shared[n]])),
+      ...Object.fromEntries(SHARED.map((n) => [n, preserve()])),
+      // Doppler's own names, which its sync writes beside the rest.
+      DOPPLER_CONFIG: preserve(),
+      DOPPLER_ENVIRONMENT: preserve(),
+      DOPPLER_PROJECT: preserve(),
       DATABASE_URL: preserve(),
       // OPS-002: the schema-owning role's connection, read by
       // scripts/apply_migrations.py. Like DATABASE_URL, a database URL.
