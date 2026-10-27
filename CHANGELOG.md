@@ -1,3 +1,10 @@
+# [2.42.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.41.0...v2.42.0) (2026-10-27)
+
+
+### Features
+
+* **spotify:** write the refresh token to its own Doppler config ([0434b0c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0434b0c4dabd7b117b9723bd4143726bb21b3c01))
+
 # [2.41.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.40.0...v2.41.0) (2026-10-27)
 
 
