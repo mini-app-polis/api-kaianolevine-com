@@ -1,3 +1,10 @@
+# [2.43.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.42.0...v2.43.0) (2026-10-27)
+
+
+### Features
+
+* **secrets:** accept provider-api rotation events ([660b0bf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/660b0bf7c8d6eb5821ced80a472f3d04250c848c))
+
 # [2.42.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.41.0...v2.42.0) (2026-10-27)
 
 
