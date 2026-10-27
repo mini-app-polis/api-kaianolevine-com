@@ -3,7 +3,7 @@
 Run with:
     RUN_EVALS=1 doppler run -- pytest tests/evals/
 
-doppler.yaml pins this repo to the shared `dev` config, so that command
+doppler.yaml pins this repo to its own project's `dev` config, so that command
 targets the development database and ENVIRONMENT=development. The harness
 still writes rows and spends on real OpenAI and Anthropic calls, so it is
 opt-in (CD-033): skipped unless RUN_EVALS=1 is set — having the keys in the
