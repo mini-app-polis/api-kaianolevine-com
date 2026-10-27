@@ -1,3 +1,10 @@
+# [2.41.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.40.0...v2.41.0) (2026-10-27)
+
+
+### Features
+
+* **railway:** keep the variables Doppler syncs to the service itself ([0608ed4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0608ed486ab09523fa311f36b27962311323658b))
+
 # [2.40.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.39.0...v2.40.0) (2026-10-26)
 
 
