@@ -80,7 +80,7 @@ uv sync --all-extras
 # 2. Install pre-commit hooks
 uv run pre-commit install
 
-# 3. Secrets come from Doppler's shared dev config — nothing reads a .env
+# 3. Secrets come from this repo's own Doppler dev config — nothing reads a .env
 #    file, and local runs never use prd. Once per machine, then per clone:
 brew install gnupg dopplerhq/cli/doppler && doppler login
 doppler setup                 # reads doppler.yaml: mini-app-polis-ecosystem / dev

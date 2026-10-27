@@ -33,10 +33,11 @@
 // Doppler — it references the Postgres service — and is kept as Railway
 // has it.
 //
-// The rest of the Settings fields the service reads in production are not
-// in Doppler either, and are kept as Railway has them with preserve(): set on
-// the service when needed and left unset otherwise, so the code's default
-// applies without Doppler holding every one of them.
+// The rest of the Settings fields the service reads in production are
+// declared with preserve() too and are usually unset, so the code's default
+// applies. To set one, add it to the service's own Doppler config, as a
+// value of its own or a reference into the vault; its sync puts it on the
+// service. Never set one on the service by hand.
 // tests/unit/test_railway_variables.py fails when a Settings field
 // is neither declared here nor listed there as deliberately left out.
 
