@@ -5,11 +5,14 @@ Spotify refresh tokens expire six months after sign-in (enforced from
 approve the app in a browser, so it cannot be automatic; what this module
 makes it is one click, announced ahead of time, with nothing to copy.
 
-**Where the token lives.** In Doppler, in the config deejay-cog reads, as
+**Where the token lives.** In Doppler, in a config of its own
+(``SPOTIFY_DOPPLER_PROJECT`` / ``SPOTIFY_DOPPLER_CONFIG``), as
 ``SPOTIPY_REFRESH_TOKEN`` with its sign-in date in
-``SPOTIPY_REFRESH_TOKEN_ISSUED_AT``. Doppler syncs that config to SSM, and
-the deejay worker re-reads SSM at the start of every invocation, so a token
-written here is in use from the worker's next run with no redeploy.
+``SPOTIPY_REFRESH_TOKEN_ISSUED_AT``. The write token reaches that config
+and nothing else. deejay-cog's own config references the token there and
+syncs to SSM, and the deejay worker re-reads SSM at the start of every
+invocation, so a token written here is in use from the worker's next run
+with no redeploy.
 ``scripts/get_spotify_refresh_token.py`` in deejay-cog writes the same two
 names, and stays the manual fallback.
 

@@ -279,13 +279,12 @@ class Settings(BaseSettings):
     # other account, so a link opened by someone else cannot swap the cog
     # onto their playlists.
     SPOTIFY_OWNER_USER_ID: str | None = None
-    # A Doppler service token with write access to the config deejay-cog
-    # reads. The config is shared with the whole fleet and Doppler scopes a
-    # token to a config, not to names, so this token could rewrite any prd
-    # secret; services.spotify_token writes the two Spotify names and
-    # nothing else.
+    # A Doppler service token with write access to the config that holds the
+    # refresh token and its sign-in date, which deejay-cog references.
+    # Doppler scopes a token to a config, not to names, so that config holds
+    # those two values and nothing else.
     DOPPLER_SPOTIFY_WRITE_TOKEN: str | None = None
-    SPOTIFY_DOPPLER_PROJECT: str = "mini-app-polis-ecosystem"
+    SPOTIFY_DOPPLER_PROJECT: str = "spotify"
     SPOTIFY_DOPPLER_CONFIG: str = "prd"
     # How often the reminder loop checks the token's age. Each due reminder
     # is sent once (spotify_token_reminders), so this is only how late one
