@@ -124,7 +124,7 @@ async def test_callback_renews_writes_doppler_and_announces(client) -> None:
         doppler.calls.last.request.headers["Authorization"] == "Bearer dp.st.prd.write"
     )
     assert written == {
-        "project": "mini-app-polis-ecosystem",
+        "project": "spotify",
         "config": "prd",
         "secrets": {
             "SPOTIPY_REFRESH_TOKEN": ROTATED_TOKEN,
@@ -278,7 +278,7 @@ async def test_a_due_reminder_is_sent_once(db_session) -> None:
     assert f"{ORIGIN}/v1/spotify/authorize" in body
     params = dict(read.calls.last.request.url.params)
     assert params == {
-        "project": "mini-app-polis-ecosystem",
+        "project": "spotify",
         "config": "prd",
         "name": "SPOTIPY_REFRESH_TOKEN_ISSUED_AT",
     }
