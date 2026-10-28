@@ -1,3 +1,10 @@
+# [2.44.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.43.1...v2.44.0) (2026-10-28)
+
+
+### Features
+
+* **groomings:** store and serve grooming budget stops ([fc342bf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fc342bfbc19982d1ea53cee61771e5e22e424979))
+
 ## [2.43.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.43.0...v2.43.1) (2026-10-28)
 
 
