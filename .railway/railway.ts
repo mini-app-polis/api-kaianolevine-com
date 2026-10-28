@@ -76,6 +76,7 @@ const SHARED = [
   "OPENAI_API_KEY",
   "RESUME_FILE_ID",
   "SENTRY_DSN_APIS",
+  "SIGNAL_CI_BRANCHES",
   "SPOTIPY_CLIENT_ID",
   "SPOTIPY_CLIENT_SECRET",
   "TURNSTILE_SECRET_KEY",
@@ -158,7 +159,6 @@ export default defineRailway((ctx) => {
       // Switches config.py documents as changed without a deploy.
       GITHUB_NOTIFY_EVENTS: preserve(),
       SIGNAL_ORGS: preserve(),
-      SIGNAL_CI_BRANCHES: preserve(),
       SIGNAL_CI_RERUN: preserve(),
       SIGNAL_CI_ESCALATE_AFTER: preserve(),
       SIGNAL_RUN_ESCALATE_AFTER: preserve(),
