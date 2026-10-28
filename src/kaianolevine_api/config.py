@@ -371,8 +371,10 @@ class Settings(BaseSettings):
         return email, key
 
     # The process environment only: Doppler supplies it (`doppler run`
-    # locally, the Railway sync deployed). No .env file is read.
-    model_config = SettingsConfigDict(extra="ignore")
+    # locally, the Railway sync deployed). No .env file is read. An empty
+    # value is treated as unset, so the default above applies: the vault
+    # holds every optional name, empty until it is given a value of its own.
+    model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
 
 
 @lru_cache(maxsize=1)
