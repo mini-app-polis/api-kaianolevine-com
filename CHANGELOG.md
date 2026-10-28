@@ -1,3 +1,10 @@
+## [2.43.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.43.0...v2.43.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **doc-004:** list the Doppler webhook settings in .env.example ([525405c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/525405ceb9aaa0e379e26106153bbadb057e7993))
+
 # [2.43.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.42.0...v2.43.0) (2026-10-27)
 
 
