@@ -22,6 +22,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     Envelope,
     ErrorDetail,
     ErrorEnvelope,
+    GroomingBudgetSpentMarked,
+    GroomingBudgetSpentRequest,
     GroomingClaimReleased,
     GroomingClaimRequest,
     GroomingClaimResult,

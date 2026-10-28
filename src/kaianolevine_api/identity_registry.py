@@ -221,13 +221,14 @@ MACHINES: tuple[Machine, ...] = (
     # task-groomer-cog reads a task and the code it names, and proposes what
     # the task should say. It hands the proposal back through this API and
     # never writes to the board. It records each paid run and reads the
-    # month's spend, which caps it.
+    # month's spend, which caps it, and reports a run the cap stopped.
     Machine(
         name="task-groomer-cog",
         roles=("task-groomer", "pipeline-writer", "notifier"),
         notes=(
             "POST /v1/tasks/groomings/proposals, /v1/tasks/groomings/runs, "
-            "/v1/tasks/groomings/claims and /v1/tasks/groomings/claims/release; "
+            "/v1/tasks/groomings/claims, /v1/tasks/groomings/claims/release and "
+            "/v1/tasks/groomings/budget-spent; "
             "GET /v1/tasks/groomings/spend; POST /v1/evaluations, /v1/notify "
             "(run reports)."
         ),

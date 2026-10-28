@@ -22,7 +22,7 @@ Route groups:
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
-- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records
+- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records; `POST /v1/tasks/groomings/budget-spent` — task-groomer-cog reports a run the spent budget stopped, served on each grooming record as `budget_spent_fingerprint` and cleared by a won claim for the same content
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
 - `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
