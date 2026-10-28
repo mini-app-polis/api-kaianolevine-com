@@ -1,3 +1,10 @@
+## [2.45.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.2...v2.45.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **config:** treat an empty setting as unset so its default applies ([b91addd](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b91addda29b1173992028fe14b18b07aa3bb19dd))
+
 ## [2.45.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.1...v2.45.2) (2026-10-28)
 
 
