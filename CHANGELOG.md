@@ -1,3 +1,10 @@
+# [2.45.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.44.0...v2.45.0) (2026-10-28)
+
+
+### Features
+
+* **groomings:** store and serve groom_sent_at and groom_attempts ([25a3af1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/25a3af108485c81461f35467c94bc5ac5a42ce0f))
+
 # [2.44.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.43.1...v2.44.0) (2026-10-28)
 
 
