@@ -30,13 +30,15 @@ from ..schemas import (
 
 _COLUMNS = (
     "task_gid, task_id, fingerprint, outcome, problems, moved_to_ready_at, "
-    "returned_count, groomed_fingerprint, updated_at"
+    "returned_count, groomed_fingerprint, groom_sent_at, groom_attempts, "
+    "updated_at"
 )
 
 # A record as served: its columns, and the budget stop kept apart from it.
 _SERVED = (
     "g.task_gid, g.task_id, g.fingerprint, g.outcome, g.problems, "
     "g.moved_to_ready_at, g.returned_count, g.groomed_fingerprint, "
+    "g.groom_sent_at, g.groom_attempts, "
     "g.updated_at, s.fingerprint AS budget_spent_fingerprint"
 )
 
@@ -78,10 +80,11 @@ async def write_record(
                   INSERT INTO task_groomings
                     (task_gid, task_id, fingerprint, outcome, problems,
                      moved_to_ready_at, returned_count, groomed_fingerprint,
-                     updated_at)
+                     groom_sent_at, groom_attempts, updated_at)
                   VALUES (:task_gid, :task_id, :fingerprint, :outcome,
                           CAST(:problems AS jsonb), :moved_to_ready_at,
-                          :returned_count, :groomed_fingerprint, now())
+                          :returned_count, :groomed_fingerprint,
+                          :groom_sent_at, :groom_attempts, now())
                   ON CONFLICT (task_gid) DO UPDATE SET
                     task_id = EXCLUDED.task_id,
                     fingerprint = EXCLUDED.fingerprint,
@@ -90,6 +93,8 @@ async def write_record(
                     moved_to_ready_at = EXCLUDED.moved_to_ready_at,
                     returned_count = EXCLUDED.returned_count,
                     groomed_fingerprint = EXCLUDED.groomed_fingerprint,
+                    groom_sent_at = EXCLUDED.groom_sent_at,
+                    groom_attempts = EXCLUDED.groom_attempts,
                     updated_at = now()
                   RETURNING {_COLUMNS}
                 )
