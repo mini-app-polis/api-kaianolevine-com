@@ -1,3 +1,10 @@
+## [2.45.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.1...v2.45.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **railway:** declare SIGNAL_CI_BRANCHES with the Doppler-referenced names ([9f45ed4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9f45ed4429da1946a0de47a926da2e7e18ae74d7))
+
 ## [2.45.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.0...v2.45.1) (2026-10-28)
 
 
