@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from kaianolevine_api.config import Settings
 from kaianolevine_api.services import ci_signals
 
 ORGS = ["mini-app-polis"]
@@ -74,3 +75,18 @@ def test_fixed_workflow_names_are_unchanged(name: str) -> None:
     assert _signal("failure", name, branch="dev").key == (
         f"mini-app-polis/db-ops/{name}@dev"
     )
+
+
+def test_by_default_only_main_failures_are_signals() -> None:
+    branches = Settings.model_fields["SIGNAL_CI_BRANCHES"].default
+
+    on_dev = ci_signals.signal_from_workflow_run(
+        _run("failure", "CI", branch="dev"), orgs=ORGS, branches=branches
+    )
+    on_main = ci_signals.signal_from_workflow_run(
+        _run("failure", "CI", branch="main"), orgs=ORGS, branches=branches
+    )
+
+    assert on_dev is None
+    assert on_main is not None
+    assert on_main.state == "failing"

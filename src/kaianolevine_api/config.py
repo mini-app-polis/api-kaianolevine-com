@@ -123,9 +123,10 @@ class Settings(BaseSettings):
     # real repository.
     #
     # The orgs and branches whose CI runs are signals. Independent of what is
-    # announced on Discord, which stays on the default branch.
+    # announced on Discord, which stays on the default branch. main only: dev
+    # is where work is expected to break, so a failure there is not a task.
     SIGNAL_ORGS: list[str] = ["mini-app-polis"]
-    SIGNAL_CI_BRANCHES: list[str] = ["main", "dev"]
+    SIGNAL_CI_BRANCHES: list[str] = ["main"]
     # Try one remedy before anything reaches the board (a failed dependency
     # audit dispatches the org's dependency-fix workflow; anything else is
     # re-run), then escalate on the next failure of the same streak.
