@@ -351,3 +351,117 @@ async def test_the_groomer_holds_the_claim_scope() -> None:
     cog = identity_registry.declared("task-groomer-cog")
     assert cog is not None
     assert "task-groomer" in cog.roles
+
+
+# ── runs the spent budget stopped ─────────────────────────────────────────
+
+STOP = {"task_gid": RECORD["task_gid"], "fingerprint": RECORD["fingerprint"]}
+
+
+async def _listed_stop(client, task_gid: str) -> str | None:
+    listed = (await client.get("/v1/tasks/groomings")).json()["data"]
+    (record,) = (r for r in listed if r["task_gid"] == task_gid)
+    return record["budget_spent_fingerprint"]
+
+
+async def test_a_stop_is_marked_and_served_on_the_record(client) -> None:
+    await client.post("/v1/tasks/groomings", json=RECORD)
+    assert await _listed_stop(client, RECORD["task_gid"]) is None
+
+    marked = await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["data"] == STOP
+    assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
+
+
+async def test_a_later_stop_replaces_the_tasks_last(client) -> None:
+    await client.post("/v1/tasks/groomings", json=RECORD)
+    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    later = {**STOP, "fingerprint": "e" * 64}
+    await client.post("/v1/tasks/groomings/budget-spent", json=later)
+    assert await _listed_stop(client, RECORD["task_gid"]) == "e" * 64
+
+
+async def test_a_stop_is_marked_before_the_task_has_a_record(client) -> None:
+    marked = await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    assert marked.status_code == 200, marked.text
+    assert (await client.get("/v1/tasks/groomings")).json()["data"] == []
+
+    # The sweep's first record for the task is served with it.
+    written = await client.post("/v1/tasks/groomings", json=RECORD)
+    assert written.json()["data"]["budget_spent_fingerprint"] == STOP["fingerprint"]
+    assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
+
+
+async def test_a_won_claim_for_the_stopped_content_clears_the_stop(client) -> None:
+    await client.post("/v1/tasks/groomings", json=RECORD)
+    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+
+    won = await client.post("/v1/tasks/groomings/claims", json=STOP)
+    assert won.json()["data"] == {**STOP, "claimed": True}
+    assert await _listed_stop(client, RECORD["task_gid"]) is None
+
+
+async def test_a_claim_that_does_not_clear_the_stop(client) -> None:
+    await client.post("/v1/tasks/groomings", json=RECORD)
+    other = {**STOP, "fingerprint": "f" * 64}
+
+    # A claim held before the stop is not won again, so the stop stays.
+    await client.post("/v1/tasks/groomings/claims", json=STOP)
+    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    held = await client.post("/v1/tasks/groomings/claims", json=STOP)
+    assert held.json()["data"]["claimed"] is False
+    assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
+
+    # A claim won for other content leaves the stop for this content.
+    won = await client.post("/v1/tasks/groomings/claims", json=other)
+    assert won.json()["data"]["claimed"] is True
+    assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
+
+
+async def test_a_record_write_leaves_the_stop_and_groomed_fingerprint(
+    client,
+) -> None:
+    groomed = {**RECORD, "groomed_fingerprint": "b" * 64}
+    await client.post("/v1/tasks/groomings", json=groomed)
+    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+
+    rewritten = {**groomed, "outcome": "questions", "returned_count": 2}
+    response = await client.post("/v1/tasks/groomings", json=rewritten)
+    data = response.json()["data"]
+    assert data["groomed_fingerprint"] == "b" * 64
+    assert data["budget_spent_fingerprint"] == STOP["fingerprint"]
+
+    (listed,) = (await client.get("/v1/tasks/groomings")).json()["data"]
+    assert listed["groomed_fingerprint"] == "b" * 64
+    assert listed["budget_spent_fingerprint"] == STOP["fingerprint"]
+
+    # A stop changes nothing in the record either.
+    await client.post(
+        "/v1/tasks/groomings/budget-spent", json={**STOP, "fingerprint": "e" * 64}
+    )
+    (listed,) = (await client.get("/v1/tasks/groomings")).json()["data"]
+    assert listed["groomed_fingerprint"] == "b" * 64
+    assert listed["fingerprint"] == RECORD["fingerprint"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"fingerprint": "not-a-sha"}, {"task_gid": "MINI-151"}, {"extra": True}],
+)
+async def test_a_malformed_stop_is_rejected(client, change) -> None:
+    response = await client.post(
+        "/v1/tasks/groomings/budget-spent", json={**STOP, **change}
+    )
+    assert response.status_code == 422
+
+
+async def test_a_caller_without_the_scope_may_not_mark_a_stop(
+    client, role_client
+) -> None:
+    async with role_client("agent-reporter") as reporter:
+        response = await reporter.post("/v1/tasks/groomings/budget-spent", json=STOP)
+        assert response.status_code == 403
+    async with role_client("task-groomer") as groomer:
+        response = await groomer.post("/v1/tasks/groomings/budget-spent", json=STOP)
+        assert response.status_code == 200, response.text

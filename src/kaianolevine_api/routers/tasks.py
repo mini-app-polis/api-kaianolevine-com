@@ -13,8 +13,9 @@ who asked for which task. A person who holds the scope is not limited.
 
 The ``/v1/tasks/groomings`` routes are task-manager-cog's memory between
 sweeps of the board, the month's paid grooming, the hand-offs between
-task-manager-cog and task-groomer-cog (services/grooming_dispatch.py), and
-the claims task-groomer-cog takes on a job before grooming it. See
+task-manager-cog and task-groomer-cog (services/grooming_dispatch.py), the
+claims task-groomer-cog takes on a job before grooming it, and the runs it
+reports the spent budget stopped. See
 ``mini_app_polis.api.contract.groomings``.
 
 The ``/v1/tasks/agent-runs`` routes record the agent runs task-manager-cog
@@ -46,6 +47,8 @@ from ..schemas import (
     AgentRunResult,
     AgentSpend,
     Envelope,
+    GroomingBudgetSpentMarked,
+    GroomingBudgetSpentRequest,
     GroomingClaimReleased,
     GroomingClaimRequest,
     GroomingClaimResult,
@@ -352,6 +355,27 @@ async def release_grooming_claim(
 ) -> Envelope[GroomingClaimReleased]:
     """Release the claim, if one is held."""
     result = await groomings.release_claim(session, payload)
+    return success_envelope(result, count=1, total=1)
+
+
+@router.post(
+    "/tasks/groomings/budget-spent",
+    response_model=Envelope[GroomingBudgetSpentMarked],
+    summary="Report a grooming run the spent budget stopped",
+    description=(
+        "Keyed on the task, holding the fingerprint of the content the job was "
+        "sent for; a later stop for the task replaces it. Served on each "
+        "record as budget_spent_fingerprint, and cleared when a claim for the "
+        "same task and content is won. Marking needs no record for the task."
+    ),
+)
+async def mark_grooming_budget_spent(
+    payload: GroomingBudgetSpentRequest,
+    principal: Principal = Depends(require_scope("tasks.groomings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[GroomingBudgetSpentMarked]:
+    """Store the stop, so the sweep sends the same content again."""
+    result = await groomings.mark_budget_spent(session, payload)
     return success_envelope(result, count=1, total=1)
 
 
