@@ -404,18 +404,34 @@ async def _post(client: AsyncClient, payload: dict):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_the_webhook_reruns_then_escalates_a_failing_dev_build(
+async def test_the_webhook_reruns_then_escalates_a_failing_main_build(
     client: AsyncClient, db_session: AsyncSession, dispatch
 ) -> None:
-    """dev is not announced on Discord, and is still watched for problems."""
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    with patch.object(ci_signals, "remediate", AsyncMock(return_value=True)) as rerun:
+        first = await _post(client, _run("failure", branch="main"))
+        second = await _post(client, _run("failure", branch="main", attempt=2))
+
+    assert first.status_code == second.status_code == 200
+    rerun.assert_awaited_once()
+    dispatch.assert_awaited_once()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_the_webhook_does_not_watch_dev_builds(
+    client: AsyncClient, db_session: AsyncSession, dispatch
+) -> None:
+    """dev is where work is expected to break: no streak, no re-run, no task."""
     discord = respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     with patch.object(ci_signals, "remediate", AsyncMock(return_value=True)) as rerun:
         first = await _post(client, _run("failure"))
         second = await _post(client, _run("failure", attempt=2))
 
     assert first.status_code == second.status_code == 200
-    rerun.assert_awaited_once()
-    dispatch.assert_awaited_once()
+    rerun.assert_not_awaited()
+    dispatch.assert_not_awaited()
+    assert await _streaks(db_session) == []
     assert not discord.called
 
 
@@ -426,7 +442,7 @@ async def test_outside_production_the_webhook_observes_nothing(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
-    await _post(client, _run("failure"))
+    await _post(client, _run("failure", branch="main"))
 
     dispatch.assert_not_awaited()
     assert await _streaks(db_session) == []

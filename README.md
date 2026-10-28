@@ -388,7 +388,7 @@ closes quietly and is only logged. Production only.
 
 | Kind | Key | Before a task | Closes on |
 |------|-----|---------------|-----------|
-| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
+| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` (`main` only: a dev failure makes no task) | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
 | `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 | `api-fault` | `<method> <route template> <status>`, from the activity middleware | none. `SIGNAL_FAULT_ESCALATE_AFTER` (3) 5xx answers, each within `SIGNAL_FAULT_WINDOW_MINUTES` (30) of the last, escalate | a quiet window: the next 5xx after it starts a new streak. Paths in `NOTIFY_EXCLUDED_PATHS` are not watched |
 
