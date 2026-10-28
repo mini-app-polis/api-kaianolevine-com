@@ -63,6 +63,27 @@ async def test_writing_a_record_again_replaces_it(client) -> None:
     assert len(listed) == 1
 
 
+async def test_a_record_keeps_a_send_until_a_grooming_clears_it(client) -> None:
+    fresh = (await client.post("/v1/tasks/groomings", json=RECORD)).json()["data"]
+    assert (fresh["groom_sent_at"], fresh["groom_attempts"]) == (None, 0)
+
+    sent = {
+        **RECORD,
+        "groomed_fingerprint": RECORD["fingerprint"],
+        "groom_sent_at": "2026-10-28T09:15:00Z",
+        "groom_attempts": 2,
+    }
+    data = (await client.post("/v1/tasks/groomings", json=sent)).json()["data"]
+    assert data["groom_sent_at"].startswith("2026-10-28T09:15:00")
+    assert data["groom_attempts"] == 2
+    listed = (await client.get("/v1/tasks/groomings")).json()["data"][0]
+    assert listed["groom_attempts"] == 2
+
+    groomed = {**RECORD, "groomed_fingerprint": "b" * 64}
+    data = (await client.post("/v1/tasks/groomings", json=groomed)).json()["data"]
+    assert (data["groom_sent_at"], data["groom_attempts"]) == (None, 0)
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -70,6 +91,7 @@ async def test_writing_a_record_again_replaces_it(client) -> None:
         {"outcome": "maybe"},
         {"task_gid": "MINI-151"},
         {"returned_count": -1},
+        {"groom_attempts": -1},
         {"extra": True},
     ],
 )
