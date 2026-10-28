@@ -1,3 +1,10 @@
+## [2.45.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.0...v2.45.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **signals:** open CI signal streaks for failures on main only ([f04a072](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f04a07278e35914188718d994278e8d26d86941a))
+
 # [2.45.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.44.0...v2.45.0) (2026-10-28)
 
 
