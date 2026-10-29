@@ -40,7 +40,7 @@ def test_summary_renders_marks_per_table():
     rec.record("sets", activity.DELETED)
     rec.promote()
 
-    assert rec.summary(set()) == "`sets` -1\n`tracks` +2 ~1"
+    assert rec.summary(set()) == "sets · 1 deleted\ntracks · 2 created, 1 updated"
 
 
 def test_uncommitted_work_is_not_reported():
@@ -68,7 +68,7 @@ def test_bulk_statements_are_counted_as_statements():
     rec = activity.Recorder()
     rec.record("wcs_source_extractions", activity.BULK)
     rec.promote()
-    assert rec.summary(set()) == "`wcs_source_extractions` *1"
+    assert rec.summary(set()) == "wcs_source_extractions · 1 bulk write"
     assert rec.has_bulk() is True
 
 

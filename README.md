@@ -370,7 +370,9 @@ events that environment sends, as JSON in a variable:
 An event left out of an environment's list is not sent, and an environment
 with no entry sends every event. The defaults (in `config.py`) send both
 in production and only `fault` in development, where the writes are
-contract-suite runs and test cleanup. The `NOTIFY_DATA_CHANGES`,
+contract-suite runs and test cleanup — but neither event posts outside
+production whatever the list says (common-python-utils 7), so
+development's entry has no effect. The `NOTIFY_DATA_CHANGES`,
 `NOTIFY_FAULTS` and `NOTIFY_MACHINE_CLIENT_ERRORS` switches still apply on
 top. It decides what reaches Discord only: run reports in `runs` and
 `errors`, and the signals detectors, are not affected. Unsetting a

@@ -564,9 +564,7 @@ def _report(
             {
                 "title": title,
                 "description": description,
-                "footer": {
-                    "text": f"{severity} · flow_inline · pipeline_reliability · run r1"
-                },
+                "footer": {"text": f"{severity} · run r1"},
             }
         ],
         "username": "db-ops",
@@ -601,6 +599,15 @@ def test_a_failing_run_carries_what_a_task_needs() -> None:
     assert not signal.remediable
     assert signal.done_when == "A db-backup run of db-ops finishes without an error."
     assert signal.constraints is not None
+
+
+def test_an_older_footer_still_names_the_run() -> None:
+    """Before common-python-utils 7, the footer carried more fields."""
+    embeds = _report("ERROR")["embeds"]
+    embeds[0]["footer"]["text"] = "ERROR · flow_inline · pipeline_reliability · run r2"
+    signal = run_signals.signal_from_report(embeds)
+    assert signal is not None
+    assert ("Run", "r2") in signal.sections
 
 
 @pytest.mark.parametrize(
