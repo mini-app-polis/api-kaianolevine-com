@@ -8,6 +8,13 @@ now (services/rotation_dispatch.py), under a scope of its own: holding the
 record's scopes does not let a caller start one. No event or request carries
 a secret value. See ``mini_app_polis.api.contract.secret_rotations``.
 
+The owner can also declare an incident: a compromised rotation of every
+secret in the rotator's inventory, tracked under one id
+(services/rotation_incidents.py). Starting one takes the same scope as
+asking for one rotation; the rotator registers the incident's entries and
+marks their tasks under scopes of its own, and anyone holding the read
+scope can see where each secret stands.
+
 Doppler reports which secret names changed in a config through its
 ``config.secrets.update`` webhook (``POST /v1/webhooks/doppler``, verified by
 signature). The names are kept as changes the rotator's sweep compares with
@@ -20,7 +27,7 @@ import json
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from identity.types import Principal
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +41,12 @@ from ..schemas import (
     RotationConfig,
     RotationEvent,
     RotationEventCreate,
+    RotationIncident,
+    RotationIncidentAccepted,
+    RotationIncidentEntryStatus,
+    RotationIncidentRegistration,
+    RotationIncidentRequest,
+    RotationIncidentTaskRequested,
     RotationRequest,
     RotationRequestAccepted,
     SecretChange,
@@ -45,11 +58,23 @@ from ..services import (
     key_use,
     rotation_dispatch,
     rotation_events,
+    rotation_incidents,
     secret_changes,
 )
 from ..services.webhook_signature import verify_sha256_signature
 
 router = APIRouter()
+
+#: An incident's id, as the API mints it: a lowercase UUID.
+_INCIDENT_ID = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+IncidentId = Annotated[
+    str, Path(pattern=_INCIDENT_ID, description="The incident's id.")
+]
+
+
+def _incident_not_found(incident_id: str) -> Exception:
+    return api_error(404, "not_found", f"No rotation incident {incident_id}")
 
 
 @router.post(
@@ -77,14 +102,15 @@ async def record_rotation_event(
     response_model=Envelope[list[RotationEvent]],
     summary="Rotation events, newest minted first",
     description=(
-        "Narrowed by name and config when given. latest=true keeps only the "
-        "newest event for each name and config, which is what the daily "
-        "sweep reads. meta.total counts every match, across pages."
+        "Narrowed by name, config and incident when given. latest=true "
+        "keeps only the newest event for each name and config, which is what "
+        "the daily sweep reads. meta.total counts every match, across pages."
     ),
 )
 async def list_rotation_events(
     name: Annotated[str | None, Query(max_length=128)] = None,
     config: Annotated[RotationConfig | None, Query()] = None,
+    incident: Annotated[str | None, Query(pattern=_INCIDENT_ID)] = None,
     latest: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -100,6 +126,7 @@ async def list_rotation_events(
         session,
         name=name,
         config=config,
+        incident_id=incident,
         latest=latest,
         limit=limit,
         offset=offset,
@@ -144,6 +171,151 @@ async def request_rotation(
         config=payload.config,
     )
     return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/secrets/rotation-incidents",
+    response_model=Envelope[RotationIncidentAccepted],
+    status_code=202,
+    summary="Declare a rotation incident: rotate every secret, compromised, now",
+    description=(
+        "Mints an incident and queues it for rotator-cog, which rotates every "
+        "secret in its inventory in both configs, prd first and tier 0 first, "
+        "with no previous value kept, and opens a board task for each secret "
+        "a person must rotate. The answer carries the incident id every job, "
+        "event and task of it carries. With incident_id, the incident is "
+        "queued again (resumed) and the rotator skips what is done. Only "
+        "production has a rotator queue."
+    ),
+)
+async def start_rotation_incident(
+    payload: RotationIncidentRequest,
+    request: Request,
+    principal: Principal = Depends(require_scope("secrets.rotations.create")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RotationIncidentAccepted]:
+    """Start or resume an incident and put it on the rotator's queue.
+
+    The incident is recorded before it is queued, so the rotator can always
+    register it. A dropped enqueue is a 502 that names the incident, which
+    is resumed by asking again with its id.
+    """
+    # Known future direction, out of scope here: targeted invalidations, an
+    # incident over a chosen set of secrets rather than every one.
+    if payload.incident_id is None:
+        incident_id, started_at = await rotation_incidents.start_incident(session)
+        resumed = False
+    else:
+        incident_id = payload.incident_id
+        try:
+            started_at = await rotation_incidents.started_at(session, incident_id)
+        except rotation_incidents.IncidentNotFound:
+            raise _incident_not_found(incident_id) from None
+        resumed = True
+    try:
+        accepted = await rotation_dispatch.dispatch_incident(
+            incident_id, settings=get_settings()
+        )
+    except rotation_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502,
+            "dispatch_failed",
+            f"Rotation incident {incident_id} was recorded but not enqueued: "
+            f"{exc}. Resume it with its incident_id.",
+        ) from exc
+    data = RotationIncidentAccepted(
+        message_id=str(accepted.get("message_id") or ""),
+        incident_id=incident_id,
+        started_at=started_at,
+        resumed=resumed,
+    )
+    return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/secrets/rotation-incidents/{incident_id}/entries",
+    response_model=Envelope[RotationIncident],
+    summary="Register a rotation incident's entries",
+    description=(
+        "The rotator's inventory as it stood when the incident was declared: "
+        "each secret in each config, its tier, and whether the rotator "
+        "rotates it or a person does from a board task. Registering again "
+        "replaces the list and keeps each entry's task flag. Returns the "
+        "incident as it now stands."
+    ),
+)
+async def register_rotation_incident(
+    incident_id: IncidentId,
+    payload: RotationIncidentRegistration,
+    principal: Principal = Depends(require_scope("secrets.rotation-incidents.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RotationIncident]:
+    """Register the incident's entries."""
+    try:
+        incident = await rotation_incidents.register_entries(
+            session, incident_id, payload
+        )
+    except rotation_incidents.IncidentNotFound:
+        raise _incident_not_found(incident_id) from None
+    return success_envelope(incident, count=1, total=1)
+
+
+@router.post(
+    "/secrets/rotation-incidents/{incident_id}/task-requested",
+    response_model=Envelope[RotationIncidentEntryStatus],
+    summary="Record that an incident entry's board task was asked for",
+    description=(
+        "Set by the rotator once the task manager accepted its ask for the "
+        "entry's task. Idempotent. The entry must be registered."
+    ),
+)
+async def mark_rotation_incident_task_requested(
+    incident_id: IncidentId,
+    payload: RotationIncidentTaskRequested,
+    principal: Principal = Depends(require_scope("secrets.rotation-incidents.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RotationIncidentEntryStatus]:
+    """Mark one entry's task as asked for."""
+    try:
+        entry = await rotation_incidents.mark_task_requested(
+            session, incident_id, payload.name, payload.config
+        )
+    except rotation_incidents.IncidentNotFound:
+        raise _incident_not_found(incident_id) from None
+    except rotation_incidents.EntryNotFound:
+        raise api_error(
+            404,
+            "not_found",
+            f"Rotation incident {incident_id} has no entry {payload.name} "
+            f"in {payload.config}",
+        ) from None
+    return success_envelope(entry, count=1, total=1)
+
+
+@router.get(
+    "/secrets/rotation-incidents/{incident_id}",
+    response_model=Envelope[RotationIncident],
+    summary="Where a rotation incident stands",
+    description=(
+        "Each registered entry's state (rotated, failed, task-opened, "
+        "outstanding, in that precedence), from the rotation events minted "
+        "since the incident started and whether its task was asked for. "
+        "outstanding lists every entry not rotated: failed first, then prd "
+        "before dev, then by tier. Names only; no value."
+    ),
+)
+async def get_rotation_incident(
+    incident_id: IncidentId,
+    principal: Principal = Depends(require_scope("secrets.rotation-incidents.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RotationIncident]:
+    """Read the incident."""
+    try:
+        incident = await rotation_incidents.read_incident(session, incident_id)
+    except rotation_incidents.IncidentNotFound:
+        raise _incident_not_found(incident_id) from None
+    return success_envelope(incident, count=1, total=1)
 
 
 @router.get(

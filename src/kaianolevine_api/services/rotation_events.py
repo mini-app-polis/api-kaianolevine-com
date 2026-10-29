@@ -24,13 +24,15 @@ from ..schemas import RotationConfig, RotationEvent, RotationEventCreate
 
 _COLUMNS = (
     "id, name, config, kind, mode, actor, minted, retired, verification, "
-    "verification_reason, aws_key_last4, recorded_at"
+    "verification_reason, aws_key_last4, incident_id, recorded_at"
 )
 
 
 def _event(row: Any) -> RotationEvent:
     data = dict(row._mapping)
     data["id"] = str(data["id"])
+    if data.get("incident_id") is not None:
+        data["incident_id"] = str(data["incident_id"])
     return RotationEvent.model_validate(data)
 
 
@@ -45,10 +47,10 @@ async def record_event(
                 INSERT INTO rotation_events
                   (name, config, kind, mode, actor, minted, retired,
                    verification, verification_reason, aws_key_last4,
-                   recorded_at)
+                   incident_id, recorded_at)
                 VALUES (:name, :config, :kind, :mode, :actor, :minted,
                         :retired, :verification, :verification_reason,
-                        :aws_key_last4, now())
+                        :aws_key_last4, CAST(:incident_id AS UUID), now())
                 ON CONFLICT (name, config, minted) DO UPDATE SET
                   kind = EXCLUDED.kind,
                   mode = EXCLUDED.mode,
@@ -57,6 +59,7 @@ async def record_event(
                   verification = EXCLUDED.verification,
                   verification_reason = EXCLUDED.verification_reason,
                   aws_key_last4 = EXCLUDED.aws_key_last4,
+                  incident_id = COALESCE(EXCLUDED.incident_id, rotation_events.incident_id),
                   recorded_at = now()
                 RETURNING {_COLUMNS}
                 """
@@ -73,17 +76,21 @@ async def list_events(
     *,
     name: str | None = None,
     config: RotationConfig | None = None,
+    incident_id: str | None = None,
     latest: bool = False,
     limit: int,
     offset: int = 0,
 ) -> tuple[list[RotationEvent], int]:
     """Events, newest minted first, and how many match in all.
 
-    ``latest`` keeps only the newest event for each name and config.
+    ``incident_id`` keeps only the incident's rotations. ``latest`` keeps
+    only the newest event for each name and config.
     """
     where = """
         WHERE (CAST(:name AS TEXT) IS NULL OR name = :name)
           AND (CAST(:config AS TEXT) IS NULL OR config = :config)
+          AND (CAST(:incident_id AS UUID) IS NULL
+               OR incident_id = CAST(:incident_id AS UUID))
     """
     if latest:
         source = f"""
@@ -93,7 +100,11 @@ async def list_events(
         """
     else:
         source = f"rotation_events {where}"
-    params: dict[str, Any] = {"name": name, "config": config}
+    params: dict[str, Any] = {
+        "name": name,
+        "config": config,
+        "incident_id": incident_id,
+    }
     total = (
         await session.execute(text(f"SELECT count(*) FROM {source}"), params)
     ).scalar_one()
