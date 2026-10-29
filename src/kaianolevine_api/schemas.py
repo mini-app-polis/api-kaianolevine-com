@@ -33,6 +33,7 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     GroomingProposalAccepted,
     GroomingRecord,
     GroomingRecordWrite,
+    GroomingReturnRate,
     GroomingRunCreate,
     GroomingRunRecorded,
     GroomingSpend,

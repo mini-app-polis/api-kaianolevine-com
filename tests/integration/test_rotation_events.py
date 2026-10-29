@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
+from identity.apikey import API_KEY_ISSUER
+from identity.types import VerifiedSubject
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kaianolevine_api import auth as auth_mod
 from kaianolevine_api import identity_registry
 
 pytestmark = pytest.mark.asyncio
@@ -292,3 +296,40 @@ async def test_the_rotator_machine_records_rotations_and_asks_for_tasks() -> Non
     assert rotator is not None
     assert set(rotator.roles) == {"secrets-rotator", "task-requester", "notifier"}
     assert rotator.key_env_var == "ROTATOR_COG_API_KEY"
+
+
+# ── the owner's local scripts ─────────────────────────────────────────────
+
+
+def test_the_owner_console_holds_only_the_rotator_role() -> None:
+    console = identity_registry.declared("owner-console")
+    assert console is not None
+    assert console.roles == ("secrets-rotator",)
+    assert console.key_env_var == "OWNER_CONSOLE_API_KEY"
+    assert console.task_sources == ()
+    assert not console.development_only
+
+
+async def test_the_owner_console_records_and_reads_rotations_and_nothing_else(
+    client, db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await identity_registry.reconcile(db_session)
+    await db_session.commit()
+    monkeypatch.setattr(
+        auth_mod,
+        "verify_bearer",
+        AsyncMock(
+            return_value=VerifiedSubject(
+                issuer=API_KEY_ISSUER, subject="owner-console", kind="machine"
+            )
+        ),
+    )
+
+    assert (await client.post(ROUTE, json=EVENT)).status_code == 200
+    assert (await client.get(ROUTE, params={"latest": "true"})).status_code == 200
+
+    assert (
+        await client.post("/v1/notify", json={"content": "hello"})
+    ).status_code == 403
+    assert (await client.post("/v1/tasks/sweeps")).status_code == 403
+    assert (await client.get("/v1/tasks/groomings")).status_code == 403

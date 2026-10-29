@@ -102,7 +102,8 @@ class Machine:
 # ---------------------------------------------------------------------------
 
 MACHINES: tuple[Machine, ...] = (
-    # Every machine holds "notifier". Its one scope, notify.messages.send,
+    # Every fleet machine holds "notifier" (owner-console, a key for the
+    # owner's local scripts, is the one exception). Its one scope, notify.messages.send,
     # posts a message to a Discord channel and does nothing else — it reads
     # nothing, writes to no table, and grants no one anything. A cog that
     # cannot say "I failed" is a cog whose failures are found later than they
@@ -272,6 +273,20 @@ MACHINES: tuple[Machine, ...] = (
             "(that task, once the secret is rotated); POST /v1/notify."
         ),
         task_sources=("secret-rotation",),
+    ),
+    # The key the owner's local scripts use: rotator-cog's rotate.py, run by
+    # hand for a rotation the owner does himself, records that rotation here.
+    # It holds the rotation record's role and nothing else, not even
+    # notifier: a script on the owner's machine has no run report to post,
+    # and a key that leaves the fleet's hosts should be able to do as little
+    # as the job needs.
+    Machine(
+        name="owner-console",
+        roles=("secrets-rotator",),
+        notes=(
+            "GET and POST /v1/secrets/rotation-events, from the owner's local "
+            "scripts (rotator-cog's rotate.py)."
+        ),
     ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
