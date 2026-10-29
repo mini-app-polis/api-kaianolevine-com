@@ -391,7 +391,7 @@ async def test_visibility_filters_private_source(client, async_engine) -> None:
                 "ON CONFLICT (user_id) DO NOTHING"
             )
         )
-        # A profile row no longer confers anything; the principal does. This
+        # A profile row confers nothing; the principal does. This
         # caller is a legitimate reader who simply cannot see a private
         # source — 404, not 403. Without the principal the request would be
         # refused before visibility was ever consulted.

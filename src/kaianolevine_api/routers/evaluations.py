@@ -432,9 +432,9 @@ async def create_evaluation_run(
     drop), because the caller will not read the 502.
 
     Once the message is on the queue the job is durable: retried on
-    failure, dead-lettered when it cannot be processed. That is the whole
-    point of the change — the window between "accepted" and "done" used to
-    be one process's memory, and a deploy or an OOM emptied it silently.
+    failure, dead-lettered when it cannot be processed. The window between
+    "accepted" and "done" is not held in one process's memory, where a
+    deploy or an OOM would empty it silently.
     """
     settings = get_settings()
     job = evaluation_dispatch.EvaluationJob(

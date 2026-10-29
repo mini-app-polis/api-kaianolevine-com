@@ -105,7 +105,7 @@ async def test_rejects_wrong_signature(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_rejects_tampered_body(client: AsyncClient) -> None:
-    """A body edited after signing no longer matches its digest."""
+    """A body edited after signing does not match its digest."""
     body, headers = _signed(_push(), "push")
     resp = await client.post(
         "/v1/webhooks/github",

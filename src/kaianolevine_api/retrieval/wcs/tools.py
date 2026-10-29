@@ -60,8 +60,8 @@ def lesson_url(site_url: str, source_id: uuid.UUID) -> str:
     """The lesson's page on the site.
 
     /notes/detail?id=, not /notes/<id>. The site is a static build and cannot
-    serve a path-shaped id without a rewrite; the rewrite that used to do it
-    looped in production and was removed. The page reads a source id.
+    serve a path-shaped id without a rewrite, and a rewrite for it loops in
+    production. The page reads a source id.
     """
     return f"{site_url.rstrip('/')}/notes/detail?id={source_id}"
 

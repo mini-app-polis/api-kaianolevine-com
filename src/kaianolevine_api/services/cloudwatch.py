@@ -4,7 +4,7 @@ The middleware lives in common-python-utils and takes no dependency on
 boto3; it asks for a client on its first publish. This is the API's
 answer: the same AWS identity that enqueues cog jobs, whose IAM policy also
 allows cloudwatch:PutMetricData in the MiniAppPolis/Api namespace and
-nowhere else (mini-app-polis/infra, account.tf).
+nowhere else (the infra repo's account IAM policy).
 
 Built once, on the flush thread, never on a request.
 """

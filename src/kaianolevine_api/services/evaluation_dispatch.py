@@ -25,7 +25,7 @@ deploy or an OOM discarded it silently. An accepted message is durable,
 retried, and dead-lettered if it cannot be processed — so the window
 between "accepted" and "done" stops being a place where work disappears.
 
-**This no longer learns the run id.** The evaluator mints it from the
+**This does not learn the run id.** The evaluator mints it from the
 catalog version it actually grades against, and that version is resolved
 when the job *runs*, not when it is enqueued — a job accepted while a
 catalog release is in flight must be identified by the version it was
@@ -159,10 +159,9 @@ class IntrospectionJob:
     """The checks that are scoped to no repository at all.
 
     EVAL-003, MONO-003, XSTACK-006, XSTACK-007, XSTACK-008 and EVAL-007
-    grade the inventory, the stored findings and the catalog itself. They
-    used to run at the tail of a fleet sweep because that was the one
-    place in the old design that happened once per pass. Fan-out removed
-    that place, so they get their own job.
+    grade the inventory, the stored findings and the catalog itself.
+    Fan-out has no step that happens once per pass, so they get their own
+    job.
 
     Called, not scheduled. What invalidates these is a standards release
     or a fleet pass, and both are events something already knows about —

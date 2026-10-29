@@ -174,12 +174,10 @@ async def create_note(
 
     # Parse session_date from ISO-8601 string if provided.
     #
-    # A rejected date used to become None and the route still answered 200,
-    # so a caller sending "2026-09-09T14:00:00Z" instead of "2026-09-09" had
-    # every note in the batch stored with a NULL date — sorting to the bottom
-    # of both listing queries and showing no date in citations — with nothing
-    # anywhere saying why. The caller sent a value; if it cannot be used, the
-    # caller is the one who can fix it.
+    # A date that cannot be parsed is rejected rather than stored as NULL,
+    # which would sort the note to the bottom of both listing queries and
+    # show no date in citations, with nothing saying why. The caller sent a
+    # value; if it cannot be used, the caller is the one who can fix it.
     session_date: dt.date | None = None
     if payload.session_date:
         try:

@@ -69,8 +69,8 @@ METRICS_ROUTES = (
 
 Each is a billed metric. The evaluator's two calls, to find which one its run
 time is going to: the catalog it fetches at the start of every run, and the
-finding write. Must match ``dashboard_api_routes`` in mini-app-polis/infra
-``observability.tf``.
+finding write. Must match the routes infra's CloudWatch dashboard
+charts.
 """
 
 

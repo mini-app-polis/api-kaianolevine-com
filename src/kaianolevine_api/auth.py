@@ -1,23 +1,13 @@
 """Authentication and authorization — a conformant identity enforcement point.
 
-This module used to carry its own Clerk verification: JWKS fetch and cache,
-RS256 decode, M2M opaque verification via Clerk BAPI. Its own docstring said
-what to do when a second service needed the same logic —
-
-    "If a second service ever needs to verify Clerk tokens, upstream this
-     logic ... and convert this module into a thin consumer rather than
-     copying it."
-
-A second enforcement point now exists, so that is what happened. Verification
-lives in ``identity.clerk``; the decision lives in ``identity.policy``; the
-store lives in ``identity.store``. What remains here is what the contract says
-should remain in a service: configuration, and thin FastAPI adapters.
+Verification lives in ``identity.clerk``; the decision lives in
+``identity.policy``; the store lives in ``identity.store``. What remains here
+is what the contract says should remain in a service: configuration, and thin
+FastAPI adapters.
 
 ``require_scope(...)`` is the only guard: verify, resolve, authorize, emit
-audit, once per request. The earlier dependencies it replaced
-(``get_current_caller``, ``require_wcs_admin``, ``require_wcs_service``) are
-gone — they encoded authority in a boolean column and in the shape of a token,
-which is what roles and scopes now express properly.
+audit, once per request. Authority is expressed by roles and scopes, never by
+a boolean column or the shape of a token.
 
 Three routes are authenticated-only — a verified credential, no scope — and
 this is the whole list (ecosystem-standards AUTH-003):

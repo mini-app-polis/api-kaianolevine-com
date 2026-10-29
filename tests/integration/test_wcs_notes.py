@@ -272,7 +272,7 @@ async def test_create_note_invalid_transcript_id(client) -> None:
 
 
 async def test_create_note_invalid_session_type(client) -> None:
-    """class_attended is no longer a valid session type."""
+    """class_attended is not a valid session type."""
     transcript = await _create_transcript(client)
     resp = await client.post(
         "/v1/wcs/notes",
@@ -329,9 +329,9 @@ async def test_valid_session_date_still_parses(client) -> None:
 async def test_invalid_session_date_is_rejected_not_dropped(client, bad_date) -> None:
     """A date the caller sent and the API cannot read is a request problem.
 
-    It used to become NULL behind a 200, which sorted the note to the bottom
-    of both listing queries and left it dateless in citations, while the cog
-    saw nothing but successful writes.
+    Storing it as NULL behind a 200 would sort the note to the bottom of both
+    listing queries and leave it dateless in citations, while the cog saw
+    nothing but successful writes.
     """
     transcript = await _create_transcript(client)
     resp = await client.post(

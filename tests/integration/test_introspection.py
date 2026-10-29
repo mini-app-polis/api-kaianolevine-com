@@ -1,9 +1,8 @@
 """POST /v1/evaluations/introspection — the checks that name no repository.
 
 Six of them carry ``applies_to: None`` and grade the inventory, the stored
-findings and the catalog itself. They used to run at the tail of a fleet
-sweep, which was the one place in the old design that happened once per
-pass; fan-out removed it.
+findings and the catalog itself. Fan-out has no step that happens once per
+pass, so they run as their own job.
 
 A dropped one of these is the quietest failure in the system. Nothing goes
 red, no repository's record changes, and six checks that grade whether the

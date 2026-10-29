@@ -19,8 +19,8 @@ async def sees_whole_corpus(session: AsyncSession, viewer_id: str) -> bool:
     """Whether the viewer's roles carry ``wcs.corpus.read``.
 
     Roles are the one authority for access. The profile's ``is_admin`` flag
-    used to decide this too, so promoting someone by that flag gave them the
-    whole corpus without the role, and demoting them left the role in place.
+    plays no part: setting or clearing it does not change who sees the whole
+    corpus.
     """
     stmt = (
         select(RoleScope.scope)
