@@ -30,7 +30,7 @@ from kaianolevine_api.main import app
 pytestmark = pytest.mark.asyncio
 
 SECRET = "test-doppler-secret"
-PROJECT = "mini-app-polis-ecosystem"
+PROJECT = "mini-app-polis-secrets"
 
 
 def _delivery(
