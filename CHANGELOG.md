@@ -1,3 +1,10 @@
+# [2.46.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.3...v2.46.0) (2026-10-29)
+
+
+### Features
+
+* **secrets:** rotation incidents: start or resume, register entries, mark tasks, read their state ([19ba70c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/19ba70c88d2a610f41c98888fe074bff2ea579cd))
+
 ## [2.45.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.2...v2.45.3) (2026-10-28)
 
 
