@@ -377,6 +377,7 @@ _DEV_ROLES = {
     "deejay-trigger": ["deejay.runs.create"],
     "transcription-trigger": ["transcription.runs.create"],
     "task-requester": ["tasks.requests.create", "tasks.requests.update"],
+    "task-filer": ["tasks.requests.create"],
     "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
     "agent-dispatcher": ["tasks.agent-runs.read", "tasks.agent-runs.write"],
     "agent-reporter": ["tasks.agent-runs.report"],

@@ -80,6 +80,7 @@ const SHARED = [
   "TURNSTILE_SECRET_KEY",
   // Machine principals' keys (identity_registry.MACHINES).
   "CI_VALIDATOR_API_KEY",
+  "CLAUDE_SESSION_API_KEY",
   "DB_OPS_API_KEY",
   "DEEJAY_COG_API_KEY",
   "ECOSYSTEM_STANDARDS_API_KEY",
@@ -99,6 +100,7 @@ const SHARED = [
   // so a rotation that set one would lose it, and every caller still on the
   // old key would answer 401.
   "CI_VALIDATOR_API_KEY_PREVIOUS",
+  "CLAUDE_SESSION_API_KEY_PREVIOUS",
   "DB_OPS_API_KEY_PREVIOUS",
   "DEEJAY_COG_API_KEY_PREVIOUS",
   "ECOSYSTEM_STANDARDS_API_KEY_PREVIOUS",

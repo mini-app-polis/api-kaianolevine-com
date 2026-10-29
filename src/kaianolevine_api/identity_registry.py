@@ -102,8 +102,8 @@ class Machine:
 # ---------------------------------------------------------------------------
 
 MACHINES: tuple[Machine, ...] = (
-    # Every fleet machine holds "notifier" (owner-console, a key for the
-    # owner's local scripts, is the one exception). Its one scope, notify.messages.send,
+    # Every fleet machine holds "notifier" (owner-console and claude-session,
+    # keys used from the owner's own machine, are the exceptions). Its one scope, notify.messages.send,
     # posts a message to a Discord channel and does nothing else — it reads
     # nothing, writes to no table, and grants no one anything. A cog that
     # cannot say "I failed" is a cog whose failures are found later than they
@@ -287,6 +287,18 @@ MACHINES: tuple[Machine, ...] = (
             "GET and POST /v1/secrets/rotation-events, from the owner's local "
             "scripts (rotator-cog's rotate.py)."
         ),
+    ),
+    # A Claude session working with the owner files the board's manual tasks
+    # (MINI-) here rather than in Asana, so task-manager-cog mints their ids
+    # like any other source's. It owns the manual source and no other, and
+    # holds task-filer, which can ask for a task and do nothing else: it
+    # cannot comment on, move or read one. Like owner-console it holds no
+    # notifier; a session has no run report to post.
+    Machine(
+        name="claude-session",
+        roles=("task-filer",),
+        notes="POST /v1/tasks (a manual task, from a Claude session).",
+        task_sources=("manual",),
     ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development

@@ -19,6 +19,7 @@ Route groups:
 - `/v1/sets`, `/v1/sets/{id}`, `/v1/sets/{id}/tracks` — DJ sets and per-set tracks
 - `/v1/tracks`, `/v1/tracks/{id}` — track catalog
 - `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries
+- `POST /v1/catalog/lookup` — each track's catalog entry for the caller, found by the set ingest's own matching; records nothing (`catalog.sets.write`, as the ingest)
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
@@ -218,6 +219,9 @@ Required environment variables:
 - `OWNER_CONSOLE_API_KEY` — optional; the `owner-console` machine's key,
   used by the owner's local scripts (rotator-cog's `rotate.py`). It holds
   only the `secrets-rotator` role: read and record rotation events.
+- `CLAUDE_SESSION_API_KEY` — optional; the `claude-session` machine's
+  key, used by a Claude session to file manual tasks (`POST /v1/tasks`
+  under the `manual` source). It holds only the `task-filer` role.
 
 Every variable the service reads, auth's included, is listed with whether it
 is required in [`.env.example`](.env.example); defaults are in
@@ -350,7 +354,7 @@ rebase-and-merge cannot be told apart from a direct push, so a rebase
 merge is announced twice — once by the PR closing, once by the push.
 
 `/v1/notify` posts to the `runs` channel and requires
-`notify.messages.send`, carried by the `notifier` role. Every fleet machine holds it (`owner-console`, the key for the owner's local scripts, is the one exception): the scope posts a message and does
+`notify.messages.send`, carried by the `notifier` role. Every fleet machine holds it (`owner-console` and `claude-session`, keys used from the owner's own machine, are the exceptions): the scope posts a message and does
 nothing else, and a cog that cannot report its own failure reports it
 later than it should. `ops-notifier` exists for notifications that belong
 to no cog — scripts, one-offs, GitHub Actions — so those never have to
