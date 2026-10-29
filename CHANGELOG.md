@@ -1,3 +1,11 @@
+## [2.47.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.47.0...v2.47.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.1.1 ([a1b2dc6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a1b2dc67b2602e243be5bcfbb7c61fba3564c047))
+* **webhooks:** record Doppler changes from mini-app-polis-secrets ([004fca1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/004fca15a0394c45be644d6d29ade897bd55d3c2))
+
 # [2.47.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.46.0...v2.47.0) (2026-10-29)
 
 
