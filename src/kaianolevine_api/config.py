@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     DOPPLER_WEBHOOK_SECRET_PREVIOUS: str | None = None
     # The Doppler project whose changes are recorded. A delivery for any other
     # project is acknowledged and stored nowhere.
-    DOPPLER_WEBHOOK_PROJECT: str = "mini-app-polis-ecosystem"
+    DOPPLER_WEBHOOK_PROJECT: str = "mini-app-polis-secrets"
     # Which GitHub events this service has a policy for. The outer gate only:
     # what each event actually forwards is decided per-event in
     # routers.notifications, since GitHub's webhooks filter by event type and
