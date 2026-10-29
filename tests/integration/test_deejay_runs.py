@@ -96,9 +96,11 @@ async def notifier_client(
 # ── the route ────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("mode", ["process-new-files", "ingest-live-history"])
+@pytest.mark.parametrize(
+    "mode", ["process-new-files", "ingest-live-history", "retag-music"]
+)
 async def test_a_run_is_enqueued_and_acknowledged(client, monkeypatch, mode) -> None:
-    """202, naming the message it became. Both of watcher's modes."""
+    """202, naming the message it became, in each mode deejay-cog runs."""
     _settings(monkeypatch)
 
     with patch.object(

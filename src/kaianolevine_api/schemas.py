@@ -16,6 +16,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     AgentRunFailure,
     AgentRunResult,
     AgentSpend,
+    CatalogLookupRequest,
+    CatalogMatch,
     DeejayRunAccepted,
     DeejayRunRequest,
     DriveFileRef,
