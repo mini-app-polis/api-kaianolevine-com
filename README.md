@@ -26,6 +26,7 @@ Route groups:
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
 - `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
+- `/v1/secrets/rotation-incidents` — declare an incident: rotate every secret in the rotator's inventory, compromised, under one incident id (admin only, production only; `incident_id` resumes one). The rotator registers its entries (`/{id}/entries`) and marks their tasks (`/{id}/task-requested`); `GET /{id}` shows each secret as rotated, failed, task-opened or outstanding. Names only
 - `/v1/secrets/key-use` — when a machine last proved itself with its previous key, from the audit trail's key slot; rotator-cog retires a previous key once that is a day old
 - `/v1/standards/catalog`, `/v1/standards/versions` — published standards catalog
 - `/v1/github/status` — public repository status board

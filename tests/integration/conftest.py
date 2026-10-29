@@ -351,6 +351,7 @@ _DEV_ROLES = {
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
         "secrets.rotations.create",
+        "secrets.rotation-incidents.read",
         "secrets.key-use.read",
         "secrets.changes.read",
     ],
@@ -382,6 +383,8 @@ _DEV_ROLES = {
     "secrets-rotator": [
         "secrets.rotation-events.read",
         "secrets.rotation-events.write",
+        "secrets.rotation-incidents.read",
+        "secrets.rotation-incidents.write",
         "secrets.key-use.read",
         "secrets.changes.read",
     ],

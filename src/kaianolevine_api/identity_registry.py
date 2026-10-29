@@ -258,12 +258,16 @@ MACHINES: tuple[Machine, ...] = (
     # decide what is due. A secret it cannot rotate itself becomes one task
     # on the board, asked for through /v1/tasks. It writes the record of a
     # rotation, never a secret value, and cannot start a rotation through
-    # this API.
+    # this API. For an incident the owner declared, it registers the
+    # incident's entries and marks their tasks, and reads where it stands.
     Machine(
         name="rotator-cog",
         roles=("secrets-rotator", "task-requester", "notifier"),
         notes=(
             "GET and POST /v1/secrets/rotation-events (the rotation record); "
+            "POST /v1/secrets/rotation-incidents/{id}/entries and "
+            "/task-requested, GET /v1/secrets/rotation-incidents/{id} (an "
+            "incident it is expanding); "
             "POST /v1/tasks (a manual secret that is due) and /v1/tasks/updates "
             "(that task, once the secret is rotated); POST /v1/notify."
         ),
