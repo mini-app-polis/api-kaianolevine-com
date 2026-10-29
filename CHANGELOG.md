@@ -1,3 +1,20 @@
+# [2.47.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.46.0...v2.47.0) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 6.36.0 ([189fbd9](https://github.com/mini-app-polis/api-kaianolevine-com/commit/189fbd9b450ca59f72b323eedac8f3f8687844b7))
+* **deps:** bump miniapppolis-common-utils to 7.1.0 ([f66cb2d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f66cb2d4e3288a3a30138119cf781b8e0ebcafad))
+* **deps:** move to common-python-utils 7.x, and read the run id from its shorter run-report footer ([b5c9c9a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b5c9c9a5bce7de42563482318f4752e1a3659116))
+* **railway:** stop declaring the GH_TOKEN and GITHUB_TOKEN fallbacks ([4e240df](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4e240df9e08453dc9390abe3165cbd397b273599))
+
+
+### Features
+
+* **catalog:** look up tracks' catalog entries with the set ingest's own matching ([f66b6e6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f66b6e61afedee829243e3d6f4823127d00dd352))
+* **identity:** declare the claude-session machine, which may file manual tasks and nothing else ([7c4b9e6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7c4b9e62680d9a6e9312d3f0fd95c365cda5b68e))
+* **tasks:** read the 30-day return-from-Ready ratio, and declare the owner-console machine ([14fa2b6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/14fa2b6a8a49f25677802428b975bebd0e02bb5e))
+
 # [2.46.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.45.3...v2.46.0) (2026-10-29)
 
 
