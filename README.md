@@ -19,10 +19,11 @@ Route groups:
 - `/v1/sets`, `/v1/sets/{id}`, `/v1/sets/{id}/tracks` — DJ sets and per-set tracks
 - `/v1/tracks`, `/v1/tracks/{id}` — track catalog
 - `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries
+- `POST /v1/catalog/lookup` — each track's catalog entry for the caller, found by the set ingest's own matching; records nothing (`catalog.sets.write`, as the ingest)
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
-- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records; `POST /v1/tasks/groomings/budget-spent` — task-groomer-cog reports a run the spent budget stopped, served on each grooming record as `budget_spent_fingerprint` and cleared by a won claim for the same content
+- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records; `GET /v1/tasks/groomings/return-rate?days=30` — how often a task moved to Ready came back out (returned ÷ moved over the window, counted from migration 083 at the earliest); `POST /v1/tasks/groomings/budget-spent` — task-groomer-cog reports a run the spent budget stopped, served on each grooming record as `budget_spent_fingerprint` and cleared by a won claim for the same content
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
 - `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
@@ -215,6 +216,12 @@ Required environment variables:
   out: either key proves the machine while a rotation overlaps, and each
   audit event records which one matched (`key_slot`), so the old key is
   retired once nothing presents it.
+- `OWNER_CONSOLE_API_KEY` — optional; the `owner-console` machine's key,
+  used by the owner's local scripts (rotator-cog's `rotate.py`). It holds
+  only the `secrets-rotator` role: read and record rotation events.
+- `CLAUDE_SESSION_API_KEY` — optional; the `claude-session` machine's
+  key, used by a Claude session to file manual tasks (`POST /v1/tasks`
+  under the `manual` source). It holds only the `task-filer` role.
 
 Every variable the service reads, auth's included, is listed with whether it
 is required in [`.env.example`](.env.example); defaults are in
@@ -347,7 +354,7 @@ rebase-and-merge cannot be told apart from a direct push, so a rebase
 merge is announced twice — once by the PR closing, once by the push.
 
 `/v1/notify` posts to the `runs` channel and requires
-`notify.messages.send`, carried by the `notifier` role. Every declared machine holds it: the scope posts a message and does
+`notify.messages.send`, carried by the `notifier` role. Every fleet machine holds it (`owner-console` and `claude-session`, keys used from the owner's own machine, are the exceptions): the scope posts a message and does
 nothing else, and a cog that cannot report its own failure reports it
 later than it should. `ops-notifier` exists for notifications that belong
 to no cog — scripts, one-offs, GitHub Actions — so those never have to
@@ -370,7 +377,9 @@ events that environment sends, as JSON in a variable:
 An event left out of an environment's list is not sent, and an environment
 with no entry sends every event. The defaults (in `config.py`) send both
 in production and only `fault` in development, where the writes are
-contract-suite runs and test cleanup. The `NOTIFY_DATA_CHANGES`,
+contract-suite runs and test cleanup — but neither event posts outside
+production whatever the list says (common-python-utils 7), so
+development's entry has no effect. The `NOTIFY_DATA_CHANGES`,
 `NOTIFY_FAULTS` and `NOTIFY_MACHINE_CLIENT_ERRORS` switches still apply on
 top. It decides what reaches Discord only: run reports in `runs` and
 `errors`, and the signals detectors, are not affected. Unsetting a

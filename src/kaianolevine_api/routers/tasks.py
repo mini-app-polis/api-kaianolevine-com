@@ -33,6 +33,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
+from mini_app_polis.api.contract import RETURN_RATE_DEFAULT_DAYS, RETURN_RATE_MAX_DAYS
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
@@ -58,6 +59,7 @@ from ..schemas import (
     GroomingProposalAccepted,
     GroomingRecord,
     GroomingRecordWrite,
+    GroomingReturnRate,
     GroomingRunCreate,
     GroomingRunRecorded,
     GroomingSpend,
@@ -285,6 +287,30 @@ async def grooming_spend(
     """The month's paid runs and their cost so far."""
     spend = await groomings.month_spend(session)
     return success_envelope(spend, count=1, total=1)
+
+
+@router.get(
+    "/tasks/groomings/return-rate",
+    response_model=Envelope[GroomingReturnRate],
+    summary="How often a task moved to Ready came back out",
+    description=(
+        "Over the last `days` (default 30): the tasks moved to Ready, the "
+        "tasks sent back out of Ready, and returned ÷ moved (null when "
+        "nothing moved). Counted from when these events began to be recorded "
+        "when that is later than the window's start: `counting_since` says "
+        "where the counts start."
+    ),
+)
+async def grooming_return_rate(
+    days: Annotated[
+        int, Query(ge=1, le=RETURN_RATE_MAX_DAYS)
+    ] = RETURN_RATE_DEFAULT_DAYS,
+    principal: Principal = Depends(require_scope("tasks.groomings.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[GroomingReturnRate]:
+    """Moves to Ready, returns from it, and their ratio, over a window."""
+    rate = await groomings.return_rate(session, days)
+    return success_envelope(rate, count=1, total=1)
 
 
 @router.post(

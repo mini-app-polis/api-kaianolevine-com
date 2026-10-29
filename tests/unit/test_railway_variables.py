@@ -47,6 +47,12 @@ NOT_DECLARED: dict[str, str] = {
     "WCS_QA_MAX_OUTPUT_TOKENS_DEFAULT": "agent budget, reviewed in config.py",
     "WCS_QA_MAX_OUTPUT_TOKENS_LIMIT": "agent budget, reviewed in config.py",
     "WCS_SITE_URL": "the one public site, reviewed in config.py",
+    "GH_TOKEN": (
+        "a local-run fallback for GITHUB_DASHBOARD_TOKEN, which production sets"
+    ),
+    "GITHUB_TOKEN": (
+        "a local-run fallback for GITHUB_DASHBOARD_TOKEN, which production sets"
+    ),
 }
 
 

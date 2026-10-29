@@ -487,3 +487,76 @@ async def test_a_caller_without_the_scope_may_not_mark_a_stop(
     async with role_client("task-groomer") as groomer:
         response = await groomer.post("/v1/tasks/groomings/budget-spent", json=STOP)
         assert response.status_code == 200, response.text
+
+
+# ── return from Ready ───────────────────────────────────────────────────
+
+
+async def test_the_return_rate_of_an_empty_window_is_none(client) -> None:
+    response = await client.get("/v1/tasks/groomings/return-rate")
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["days"] == 30
+    assert (data["moved_to_ready"], data["returned"], data["ratio"]) == (0, 0, None)
+    # Events began with migration 083, applied when this database was built.
+    assert data["counting_since"] >= data["since"]
+
+
+async def test_moves_and_returns_are_counted_from_the_records(client) -> None:
+    moved_at = "2099-01-01T00:00:00Z"  # in the window, whatever now is
+    other = {**RECORD, "task_gid": "1219755103049632", "task_id": "MINI-152"}
+    for record in (RECORD, other):
+        await client.post(
+            "/v1/tasks/groomings",
+            json={**record, "outcome": "ready", "moved_to_ready_at": moved_at},
+        )
+    # The same move written again is not a second move.
+    await client.post(
+        "/v1/tasks/groomings",
+        json={**RECORD, "outcome": "ready", "moved_to_ready_at": moved_at},
+    )
+    # One of them comes back out of Ready.
+    await client.post(
+        "/v1/tasks/groomings",
+        json={**RECORD, "moved_to_ready_at": None, "returned_count": 1},
+    )
+
+    data = (await client.get("/v1/tasks/groomings/return-rate")).json()["data"]
+    assert (data["moved_to_ready"], data["returned"]) == (2, 1)
+    assert data["ratio"] == pytest.approx(0.5)
+
+
+async def test_events_before_the_window_are_not_counted(
+    client, db_session: AsyncSession
+) -> None:
+    await db_session.execute(
+        text(
+            "INSERT INTO task_ready_events (task_gid, kind, occurred_at) VALUES "
+            "('1', 'moved_to_ready', now() - interval '40 days'), "
+            "('1', 'returned', now() - interval '40 days'), "
+            "('2', 'moved_to_ready', now() - interval '1 day')"
+        )
+    )
+    await db_session.execute(
+        text(
+            "UPDATE schema_migrations SET applied_at = now() - interval '400 days' "
+            "WHERE filename = '083_task_ready_events.sql'"
+        )
+    )
+    await db_session.commit()
+
+    data = (await client.get("/v1/tasks/groomings/return-rate")).json()["data"]
+    assert (data["moved_to_ready"], data["returned"], data["ratio"]) == (1, 0, 0.0)
+    assert data["counting_since"] == data["since"]
+    wide = (
+        await client.get("/v1/tasks/groomings/return-rate", params={"days": 60})
+    ).json()["data"]
+    assert (wide["moved_to_ready"], wide["returned"]) == (2, 1)
+
+
+@pytest.mark.parametrize("days", ["0", "366", "x"])
+async def test_the_window_is_bounded(client, days: str) -> None:
+    response = await client.get(
+        "/v1/tasks/groomings/return-rate", params={"days": days}
+    )
+    assert response.status_code == 422

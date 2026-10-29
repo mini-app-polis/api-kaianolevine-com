@@ -4,7 +4,8 @@ The detector reads the run reports cogs already send to ``POST /v1/notify``
 (routers/notifications.py), independently of where they are posted on
 Discord. A run report is the message ``mini_app_polis.pipeline_status``
 renders: an embed titled ``"<repo> · <flow>"`` with a footer that starts
-with the run's severity. The severity is the signal, never the text:
+with the run's severity and names the run (``"ERROR · run 1a2b3c4d"``).
+The severity is the signal, never the text:
 
 - ``ERROR`` and ``CRITICAL`` are failing.
 - ``SUCCESS``, ``INFO`` and ``WARN`` recover: the run did its job.
@@ -13,8 +14,9 @@ A run is keyed by repo and flow, so one flow failing is one streak however
 many of its runs fail. There is no remediation: the next run is the retry,
 and two failing runs in a row escalate.
 
-A report from outside production says so in its title (``"[DEVELOPMENT] "``)
-and is not a signal, whichever service it reached. Any other message on the
+Only production sends run reports. One from an older client outside
+production says so in its title (``"[DEVELOPMENT] "``) and is not a signal,
+whichever service it reached. Any other message on the
 route — no embed, no severity, no ``" · "`` in the title — says nothing.
 
 An idle run that succeeded is not reported at all (pipeline_status logs it
@@ -61,7 +63,10 @@ def signal_from_report(embeds: list[dict[str, Any]] | None) -> Signal | None:
             continue
 
         key = f"{repo}/{flow}"
-        run_id = fields[-1].removeprefix("run").strip() if len(fields) > 3 else ""
+        run_id = next(
+            (f.removeprefix("run").strip() for f in fields[1:] if f.startswith("run ")),
+            "",
+        )
         if severity in _RECOVERED:
             # A run report carries no link, so the run is named instead.
             return Signal(

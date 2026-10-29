@@ -447,3 +447,95 @@ async def test_each_task_requester_owns_its_source() -> None:
     for machine in identity_registry.MACHINES:
         if "task-requester" in machine.roles:
             assert machine.task_sources, machine.name
+
+
+# ── a Claude session files manual tasks ──────────────────────────────────
+
+MANUAL = {
+    "source": "manual",
+    "external_id": "manual.2026-10-29-claude-session-1",
+    "draft": {"title": "A task filed from a Claude session"},
+}
+
+
+@pytest.fixture
+async def declared_machine(client, db_session: AsyncSession, monkeypatch):
+    """Authenticate as a machine with exactly the roles identity_registry declares."""
+    from identity.apikey import API_KEY_ISSUER
+
+    await identity_registry.reconcile(db_session)
+    await db_session.commit()
+
+    def as_machine(name: str) -> httpx.AsyncClient:
+        monkeypatch.setattr(
+            auth_mod,
+            "verify_bearer",
+            AsyncMock(
+                return_value=VerifiedSubject(
+                    issuer=API_KEY_ISSUER, subject=name, kind="machine"
+                )
+            ),
+        )
+        return client
+
+    return as_machine
+
+
+async def test_the_claude_session_owns_manual_and_can_only_file() -> None:
+    session = identity_registry.declared("claude-session")
+    assert session is not None
+    assert session.roles == ("task-filer",)
+    assert session.task_sources == ("manual",)
+    assert session.key_env_var == "CLAUDE_SESSION_API_KEY"
+    assert not session.development_only
+
+
+async def test_the_claude_session_files_a_manual_task(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    session = declared_machine("claude-session")
+    with patch.object(
+        dispatch, "dispatch_task", AsyncMock(return_value={"message_id": "m-1"})
+    ) as dispatched:
+        response = await session.post("/v1/tasks", json=MANUAL)
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["source"] == "manual"
+    dispatched.assert_awaited_once()
+
+
+async def test_the_claude_session_may_file_under_no_other_source(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    session = declared_machine("claude-session")
+    with patch.object(dispatch, "dispatch_task", AsyncMock()) as dispatched:
+        response = await session.post("/v1/tasks", json=VOICENOTE)
+    assert response.status_code == 403
+    assert "own sources (manual)" in response.json()["error"]["message"]
+    dispatched.assert_not_awaited()
+
+
+async def test_the_claude_session_can_do_nothing_but_file(declared_machine) -> None:
+    session = declared_machine("claude-session")
+    update = {"external_id": MANUAL["external_id"], "comment": "done"}
+    assert (await session.post("/v1/tasks/updates", json=update)).status_code == 403
+    assert (await session.post("/v1/tasks/sweeps")).status_code == 403
+    assert (await session.get("/v1/tasks/groomings")).status_code == 403
+    assert (
+        await session.post("/v1/notify", json={"content": "hello"})
+    ).status_code == 403
+
+
+async def test_no_other_machine_may_file_a_manual_task(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    cog = declared_machine("transcription-cog")
+    with patch.object(dispatch, "dispatch_task", AsyncMock()) as dispatched:
+        response = await cog.post("/v1/tasks", json=MANUAL)
+    assert response.status_code == 403
+    dispatched.assert_not_awaited()
+    for machine in identity_registry.MACHINES:
+        if machine.name != "claude-session":
+            assert "manual" not in machine.task_sources, machine.name

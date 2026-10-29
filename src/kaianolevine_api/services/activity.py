@@ -14,10 +14,9 @@ request: ``NOTIFY_*`` switches, the per-environment event allow-list
 machine callers (``request.state.caller_kind``, stamped by ``auth``), and
 delivery through ``services.discord`` so webhooks resolve from
 ``Settings``. Every message's footer names ``api-kaianolevine-com`` and
-``settings.ENVIRONMENT``, and outside production its title is prefixed
-with the environment (``label=True``, ``[DEVELOPMENT] fault · 500``), as
-api-deejaytools' are: the channels are shared, and a development fault
-must not be read as production's.
+``settings.ENVIRONMENT``. Only production posts change summaries and
+faults, as in api-deejaytools: the channels are production's record, and a
+development process logs what it changed and what broke instead.
 """
 
 from __future__ import annotations

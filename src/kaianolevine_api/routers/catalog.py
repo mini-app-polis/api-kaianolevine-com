@@ -16,12 +16,15 @@ from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
     CatalogDetail,
     CatalogListItem,
+    CatalogLookupRequest,
+    CatalogMatch,
     CatalogPatch,
     CatalogPlayHistoryItem,
     Envelope,
     api_error,
     success_envelope,
 )
+from ..services.reconciliation import lookup_catalog
 
 router = APIRouter()
 
@@ -95,6 +98,44 @@ async def list_catalog(
     ]
 
     return success_envelope(data, count=len(data), total=total)
+
+
+@router.post(
+    "/catalog/lookup",
+    response_model=Envelope[list[CatalogMatch | None]],
+    summary="Find tracks' catalog entries, as their plays would be filed",
+    description=(
+        "Resolves each track with the set ingest's own matching, for the "
+        "caller's catalog, and returns its entry or null, in the order sent. "
+        "Records nothing: no play, no entry. Requires catalog.sets.write, as "
+        "the ingest does."
+    ),
+)
+async def lookup_catalog_entries(
+    payload: CatalogLookupRequest,
+    principal: Principal = Depends(require_scope("catalog.sets.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[CatalogMatch | None]]:
+    """Each track's catalog entry for the caller, or null."""
+    found = await lookup_catalog(
+        session=session, owner_id=principal.subject, tracks=payload.tracks
+    )
+    data = [
+        None
+        if entry is None
+        else CatalogMatch(
+            id=entry.id,
+            title=entry.title,
+            remix=entry.remix,
+            artist=entry.artist,
+            label=entry.label,
+            genre=entry.genre,
+            bpm=entry.bpm,
+            release_year=entry.release_year,
+        )
+        for entry in found
+    ]
+    return success_envelope(data, count=len(data), total=len(data))
 
 
 @router.get(

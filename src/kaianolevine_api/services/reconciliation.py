@@ -88,6 +88,186 @@ def _escalate_confidence(
     return current_lower
 
 
+@dataclasses.dataclass(frozen=True)
+class TrackKeys:
+    """How a played track is keyed against the catalog."""
+
+    #: The title with its version, as the catalog names a song.
+    display: str
+    #: (title key, artist key): the catalog's normalized pair.
+    pair: tuple[str, str]
+    #: Whether the title names a version (remix, live, acoustic).
+    is_version: bool
+
+
+def track_keys(track: IngestTrack) -> TrackKeys:
+    """The keys a played track is matched to its catalog entry by."""
+    display = display_title(track.title, track.remix)
+    norm_title = catalog_title_key(display)
+    _, norm_artist = normalize_for_matching(display, catalog_artist(track.artist))
+    return TrackKeys(
+        display=display,
+        pair=(norm_title, norm_artist),
+        is_version=bool(version_tokens(display)),
+    )
+
+
+class CatalogMatcher:
+    """Finds the catalog entry a played track belongs to, for one owner.
+
+    The one copy of the matching rules: the set ingest's reconciliation and
+    the catalog lookup both call :meth:`match`. In order, a row seen before
+    (same title, artist and Remix column) is the song its earlier plays were
+    filed under; then the owner's entry with the track's normalized title and
+    artist; then, for a version, the entry with the same title, version and
+    main artist. A match that is another owner's entry gives its title and
+    keys, and the owner's own entry under those keys, if there is one.
+    Reading only: nothing here writes.
+    """
+
+    def __init__(self, session: AsyncSession, owner_id: str) -> None:
+        self.session = session
+        self.owner_id = owner_id
+        #: The owner's entries by normalized (title, artist). The ingest adds
+        #: the entries it creates, so a later play in the same set finds them.
+        self.by_pair: dict[tuple[str, str], TrackCatalog] = {}
+        self._version_index: dict[tuple[str, str], list[TrackCatalog]] | None = None
+        self._own_by_key: dict[tuple[str, str], TrackCatalog] = {}
+        self._precedent: dict[tuple[str, str, str], uuid.UUID] | None = None
+
+    async def prefetch(self, pairs: Iterable[tuple[str, str]]) -> None:
+        """Load the owner's entries under ``pairs`` in one query."""
+        wanted = list(dict.fromkeys(pairs))
+        if not wanted:
+            return
+        result = await self.session.execute(
+            select(TrackCatalog).where(
+                TrackCatalog.owner_id == self.owner_id,
+                tuple_(
+                    TrackCatalog.title_normalized, TrackCatalog.artist_normalized
+                ).in_(wanted),
+            )
+        )
+        for c in result.scalars().all():
+            self.by_pair[(c.title_normalized, c.artist_normalized)] = c
+
+    # A version with no exact key match may already be in the catalog under
+    # another spelling or owner ("Cruel - Piano Acoustic" for "Cruel" +
+    # "Piano Acoustic"): match it on title + version and main artist, the way
+    # the catalog clean-up migrations did. Loaded once, only when needed.
+    # A play links only to its owner's entry; another owner's match gives the
+    # new entry its title and keys, so the stats count both as one song.
+    async def _load_catalog(self) -> dict[tuple[str, str], list[TrackCatalog]]:
+        if self._version_index is None:
+            self._version_index = {}
+            for c in (await self.session.execute(select(TrackCatalog))).scalars():
+                key = (
+                    loose_title_key(c.title + (f" {c.remix}" if c.remix else "")),
+                    main_artist_key(c.artist),
+                )
+                self._version_index.setdefault(key, []).append(c)
+                if c.owner_id == self.owner_id:
+                    self._own_by_key[(c.title_normalized, c.artist_normalized)] = c
+        return self._version_index
+
+    async def _find_version(self, display: str, artist: str) -> TrackCatalog | None:
+        matches = (await self._load_catalog()).get(
+            (loose_title_key(display), main_artist_key(artist)), []
+        )
+        if not matches:
+            return None
+        _, norm_artist = normalize_for_matching(display, artist)
+        return sorted(
+            matches,
+            key=lambda c: (
+                c.owner_id != self.owner_id,
+                c.artist_normalized != norm_artist,
+                -(c.play_count or 0),
+                str(c.id),
+            ),
+        )[0]
+
+    # A row seen before (same title, artist and Remix column) is the song its
+    # earlier plays were filed under. That keeps every curated filing (a
+    # cover session, a merged remix, a version kept with its song) without
+    # re-deriving it from the text. Loaded once, only when needed.
+    @staticmethod
+    def _row_key(title: str, artist: str, remix: str | None) -> tuple[str, str, str]:
+        return (
+            " ".join(title.lower().split()),
+            " ".join(artist.lower().split()),
+            " ".join((remix or "").lower().split()),
+        )
+
+    async def _find_precedent(self, track: IngestTrack) -> TrackCatalog | None:
+        if self._precedent is None:
+            self._precedent = {}
+            counts: dict[tuple[str, str, str], dict[uuid.UUID, int]] = {}
+            rows = await self.session.execute(
+                select(
+                    DbTrack.title,
+                    DbTrack.artist,
+                    DbTrack.remix,
+                    DbTrack.catalog_id,
+                    func.count(),
+                )
+                .where(DbTrack.catalog_id.is_not(None))
+                .group_by(
+                    DbTrack.title, DbTrack.artist, DbTrack.remix, DbTrack.catalog_id
+                )
+            )
+            for title, artist, remix, catalog_id, n in rows.all():
+                by_catalog = counts.setdefault(self._row_key(title, artist, remix), {})
+                by_catalog[catalog_id] = by_catalog.get(catalog_id, 0) + n
+            for key, by_catalog in counts.items():
+                self._precedent[key] = sorted(
+                    by_catalog, key=lambda cid: (-by_catalog[cid], str(cid))
+                )[0]
+        catalog_id = self._precedent.get(
+            self._row_key(track.title, track.artist, track.remix)
+        )
+        return await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
+
+    async def match(
+        self, track: IngestTrack, keys: TrackKeys
+    ) -> tuple[TrackCatalog | None, str, tuple[str, str]]:
+        """The owner's entry for ``track`` (or None), and the title and keys a
+        new entry for it would take."""
+        new_title, new_keys = keys.display, keys.pair
+        found = await self._find_precedent(track)
+        if found is None:
+            found = self.by_pair.get(keys.pair)
+        if found is None and keys.is_version:
+            found = await self._find_version(keys.display, catalog_artist(track.artist))
+        if found is not None and found.owner_id != self.owner_id:
+            new_title = found.title
+            new_keys = (found.title_normalized, found.artist_normalized)
+            await self._load_catalog()
+            found = self.by_pair.get(new_keys) or self._own_by_key.get(new_keys)
+        return found, new_title, new_keys
+
+
+async def lookup_catalog(
+    *, session: AsyncSession, owner_id: str, tracks: Iterable[IngestTrack]
+) -> list[TrackCatalog | None]:
+    """Each track's catalog entry for ``owner_id``, as its play would be filed.
+
+    The set ingest's matching, without its writes: no play, no entry, no
+    change to an entry. A placeholder ("---SILENCE---") has no entry.
+    """
+    items = [(t, track_keys(t)) for t in tracks]
+    matcher = CatalogMatcher(session, owner_id)
+    await matcher.prefetch(keys.pair for _, keys in items)
+    out: list[TrackCatalog | None] = []
+    for track, keys in items:
+        if is_placeholder(track.title):
+            out.append(None)
+            continue
+        found, _, _ = await matcher.match(track, keys)
+        out.append(found)
+    return out
+
+
 async def reconcile_set_tracks(
     *,
     session: AsyncSession,
@@ -108,30 +288,13 @@ async def reconcile_set_tracks(
     catalog_unchanged = 0
     tracks_inserted = 0
 
-    # Prefetch all catalogs matching the normalized (title, artist) pairs in this set.
-    # This removes the per-track SELECT and speeds up reconciliation significantly.
     # A play's song includes its version: the Remix column's when it names one,
     # and a version in the title is kept in the key (see song_identity). An
     # artist list exported with "_" is read as ",".
-    normalized_pairs: list[tuple[str, str]] = []
-    normalized_set: set[tuple[str, str]] = set()
-    work_items: list[tuple[IngestTrack, str, str, str, bool]] = []
-
     ingest_tracks = [
         t.model_copy(update={"genre": clean_genre(t.genre)}) for t in ingest_tracks
     ]
-    for ingest_track in ingest_tracks:
-        display = display_title(ingest_track.title, ingest_track.remix)
-        norm_title = catalog_title_key(display)
-        _, norm_artist = normalize_for_matching(
-            display, catalog_artist(ingest_track.artist)
-        )
-        is_version = bool(version_tokens(display))
-        pair = (norm_title, norm_artist)
-        if pair not in normalized_set:
-            normalized_set.add(pair)
-            normalized_pairs.append(pair)
-        work_items.append((ingest_track, norm_title, norm_artist, display, is_version))
+    work_items = [(t, track_keys(t)) for t in ingest_tracks]
 
     existing_play_orders: set[int] = set()
     if is_reingestion:
@@ -140,104 +303,12 @@ async def reconcile_set_tracks(
         )
         existing_play_orders = {row[0] for row in po_result.all()}
 
-    catalog_by_pair: dict[tuple[str, str], TrackCatalog] = {}
-    if normalized_pairs:
-        result = await session.execute(
-            select(TrackCatalog).where(
-                TrackCatalog.owner_id == owner_id,
-                tuple_(
-                    TrackCatalog.title_normalized, TrackCatalog.artist_normalized
-                ).in_(normalized_pairs),
-            )
-        )
-        catalogs = result.scalars().all()
-        catalog_by_pair = {
-            (c.title_normalized, c.artist_normalized): c for c in catalogs
-        }
+    matcher = CatalogMatcher(session, owner_id)
+    await matcher.prefetch(keys.pair for _, keys in work_items)
+    catalog_by_pair = matcher.by_pair
 
-    # A version with no exact key match may already be in the catalog under
-    # another spelling or owner ("Cruel - Piano Acoustic" for "Cruel" +
-    # "Piano Acoustic"): match it on title + version and main artist, the way
-    # the catalog clean-up migrations did. Loaded once, only when needed.
-    # A play links only to its owner's entry; another owner's match gives the
-    # new entry its title and keys, so the stats count both as one song.
-    version_index: dict[tuple[str, str], list[TrackCatalog]] | None = None
-    own_by_key: dict[tuple[str, str], TrackCatalog] = {}
-
-    async def load_catalog() -> dict[tuple[str, str], list[TrackCatalog]]:
-        nonlocal version_index
-        if version_index is None:
-            version_index = {}
-            for c in (await session.execute(select(TrackCatalog))).scalars():
-                key = (
-                    loose_title_key(c.title + (f" {c.remix}" if c.remix else "")),
-                    main_artist_key(c.artist),
-                )
-                version_index.setdefault(key, []).append(c)
-                if c.owner_id == owner_id:
-                    own_by_key[(c.title_normalized, c.artist_normalized)] = c
-        return version_index
-
-    async def find_version(display: str, artist: str) -> TrackCatalog | None:
-        matches = (await load_catalog()).get(
-            (loose_title_key(display), main_artist_key(artist)), []
-        )
-        if not matches:
-            return None
-        _, norm_artist = normalize_for_matching(display, artist)
-        return sorted(
-            matches,
-            key=lambda c: (
-                c.owner_id != owner_id,
-                c.artist_normalized != norm_artist,
-                -(c.play_count or 0),
-                str(c.id),
-            ),
-        )[0]
-
-    # A row seen before (same title, artist and Remix column) is the song its
-    # earlier plays were filed under. That keeps every curated filing (a
-    # cover session, a merged remix, a version kept with its song) without
-    # re-deriving it from the text. Loaded once, only when needed.
-    precedent: dict[tuple[str, str, str], uuid.UUID] | None = None
-
-    def _row_key(title: str, artist: str, remix: str | None) -> tuple[str, str, str]:
-        return (
-            " ".join(title.lower().split()),
-            " ".join(artist.lower().split()),
-            " ".join((remix or "").lower().split()),
-        )
-
-    async def find_precedent(track: IngestTrack) -> TrackCatalog | None:
-        nonlocal precedent
-        if precedent is None:
-            precedent = {}
-            counts: dict[tuple[str, str, str], dict[uuid.UUID, int]] = {}
-            rows = await session.execute(
-                select(
-                    DbTrack.title,
-                    DbTrack.artist,
-                    DbTrack.remix,
-                    DbTrack.catalog_id,
-                    func.count(),
-                )
-                .where(DbTrack.catalog_id.is_not(None))
-                .group_by(
-                    DbTrack.title, DbTrack.artist, DbTrack.remix, DbTrack.catalog_id
-                )
-            )
-            for title, artist, remix, catalog_id, n in rows.all():
-                by_catalog = counts.setdefault(_row_key(title, artist, remix), {})
-                by_catalog[catalog_id] = by_catalog.get(catalog_id, 0) + n
-            for key, by_catalog in counts.items():
-                precedent[key] = sorted(
-                    by_catalog, key=lambda cid: (-by_catalog[cid], str(cid))
-                )[0]
-        catalog_id = precedent.get(_row_key(track.title, track.artist, track.remix))
-        return await session.get(TrackCatalog, catalog_id) if catalog_id else None
-
-    for ingest_track, norm_title, norm_artist, display, is_version in work_items:
-        pair = (norm_title, norm_artist)
+    for ingest_track, keys in work_items:
+        pair = keys.pair
 
         # Persist missing play_order as 0 (DB constraint). For data_quality,
         # we still use ingest_track.play_order.
@@ -276,17 +347,7 @@ async def reconcile_set_tracks(
             catalog_unchanged += 1
             continue
 
-        new_title, new_keys = display, pair
-        found = await find_precedent(ingest_track)
-        if found is None:
-            found = catalog_by_pair.get(pair)
-        if found is None and is_version:
-            found = await find_version(display, catalog_artist(ingest_track.artist))
-        if found is not None and found.owner_id != owner_id:
-            new_title = found.title
-            new_keys = (found.title_normalized, found.artist_normalized)
-            await load_catalog()
-            found = catalog_by_pair.get(new_keys) or own_by_key.get(new_keys)
+        found, new_title, new_keys = await matcher.match(ingest_track, keys)
         catalog = found
         if catalog is not None:
             catalog_by_pair[pair] = catalog

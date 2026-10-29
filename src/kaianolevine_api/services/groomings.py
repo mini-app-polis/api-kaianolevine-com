@@ -23,6 +23,7 @@ from ..schemas import (
     GroomingClaimResult,
     GroomingRecord,
     GroomingRecordWrite,
+    GroomingReturnRate,
     GroomingRunCreate,
     GroomingRunRecorded,
     GroomingSpend,
@@ -70,8 +71,21 @@ async def write_record(
 ) -> GroomingRecord:
     """Write one task's record, replacing any it had.
 
-    The budget stop is not part of the write: it is served as stored.
+    The budget stop is not part of the write: it is served as stored. A
+    record that sets ``moved_to_ready_at`` to a new time records a move to
+    Ready, and one that raises ``returned_count`` a return for each step
+    (task_ready_events), in the same transaction.
     """
+    previous = (
+        await session.execute(
+            text(
+                "SELECT moved_to_ready_at, returned_count FROM task_groomings "
+                "WHERE task_gid = :task_gid FOR UPDATE"
+            ),
+            {"task_gid": record.task_gid},
+        )
+    ).first()
+    await _record_ready_events(session, record, previous)
     row = (
         await session.execute(
             text(
@@ -110,6 +124,76 @@ async def write_record(
     ).one()
     await session.commit()
     return _record(row)
+
+
+async def _record_ready_events(
+    session: AsyncSession, record: GroomingRecordWrite, previous: Any
+) -> None:
+    """The moves to Ready and returns from it that this write records."""
+    moved_before = previous.moved_to_ready_at if previous is not None else None
+    if record.moved_to_ready_at is not None and (
+        moved_before is None or record.moved_to_ready_at != moved_before
+    ):
+        await session.execute(
+            text(
+                "INSERT INTO task_ready_events (task_gid, kind, occurred_at) "
+                "VALUES (:task_gid, 'moved_to_ready', :at)"
+            ),
+            {"task_gid": record.task_gid, "at": record.moved_to_ready_at},
+        )
+    returned_before = previous.returned_count if previous is not None else 0
+    for _ in range(max(0, record.returned_count - returned_before)):
+        await session.execute(
+            text(
+                "INSERT INTO task_ready_events (task_gid, kind) "
+                "VALUES (:task_gid, 'returned')"
+            ),
+            {"task_gid": record.task_gid},
+        )
+
+
+#: The migration whose application is when task_ready_events starts.
+READY_EVENTS_MIGRATION = "083_task_ready_events.sql"
+
+
+async def return_rate(session: AsyncSession, days: int) -> GroomingReturnRate:
+    """Moves to Ready and returns from it over the last ``days``, and their ratio.
+
+    Counted from the window's start, or from when task_ready_events began
+    (its migration's application) when that is later.
+    """
+    row = (
+        await session.execute(
+            text(
+                """
+                WITH bounds AS (
+                  SELECT now() - make_interval(days => :days) AS since,
+                         (SELECT applied_at FROM schema_migrations
+                          WHERE filename = :migration) AS started
+                ), window_ AS (
+                  SELECT since, GREATEST(since, COALESCE(started, since)) AS counting_since
+                  FROM bounds
+                )
+                SELECT w.since, w.counting_since,
+                       count(*) FILTER (WHERE e.kind = 'moved_to_ready') AS moved,
+                       count(*) FILTER (WHERE e.kind = 'returned') AS returned
+                FROM window_ w
+                LEFT JOIN task_ready_events e ON e.occurred_at >= w.counting_since
+                GROUP BY w.since, w.counting_since
+                """
+            ),
+            {"days": days, "migration": READY_EVENTS_MIGRATION},
+        )
+    ).one()
+    moved, returned = int(row.moved), int(row.returned)
+    return GroomingReturnRate(
+        days=days,
+        since=row.since,
+        counting_since=row.counting_since,
+        moved_to_ready=moved,
+        returned=returned,
+        ratio=returned / moved if moved else None,
+    )
 
 
 async def record_run(
