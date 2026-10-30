@@ -531,11 +531,11 @@ async def test_github_deliveries_wait_less_than_githubs_timeout(
 
     waits: list[float] = []
 
-    async def post_webhook(url: str, **kwargs) -> bool:
+    async def post_webhook_outcome(url: str, **kwargs) -> transport.SendOutcome:
         waits.append(kwargs["max_wait"])
-        return True
+        return transport.SendOutcome(transport.OutcomeKind.SENT)
 
-    monkeypatch.setattr(transport, "post_webhook", post_webhook)
+    monkeypatch.setattr(transport, "post_webhook_outcome", post_webhook_outcome)
     resp = await _post(client, payload, event)
 
     assert resp.json()["data"]["forwarded"] is True
@@ -557,6 +557,24 @@ async def test_answers_200_when_discord_is_down(client: AsyncClient) -> None:
     data = resp.json()["data"]
     assert data["forwarded"] is False
     assert data["reason"] == "queued"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_refused_github_event_answers_delivery_failed(
+    client: AsyncClient,
+) -> None:
+    """Discord refusing the event outright is a 200 saying so, not a retry."""
+    route = respx.post(DISCORD_GITHUB_URL).mock(
+        return_value=Response(404, json={"message": "Unknown Webhook"})
+    )
+    resp = await _post(client, _push(), "push")
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "delivery_failed"
+    assert route.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -606,8 +624,8 @@ async def test_notify_rejects_empty_message(client: AsyncClient) -> None:
 @respx.mock
 @pytest.mark.asyncio
 async def test_notify_keeps_an_unconfirmed_send(client: AsyncClient) -> None:
-    """A send Discord did not confirm is a 200, kept to be retried, never a 502."""
-    respx.post(DISCORD_URL).mock(return_value=Response(400, text="bad embed"))
+    """A failed send is a 200, kept to be retried, never a 502."""
+    respx.post(DISCORD_URL).mock(return_value=Response(500, text="nope"))
 
     resp = await client.post("/v1/notify", json={"content": "x"})
 
@@ -615,6 +633,22 @@ async def test_notify_keeps_an_unconfirmed_send(client: AsyncClient) -> None:
     data = resp.json()["data"]
     assert data["forwarded"] is False
     assert data["reason"] == "queued"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_notify_refused_by_discord_answers_delivery_failed(
+    client: AsyncClient,
+) -> None:
+    """Discord refusing the message outright is a 200 saying so."""
+    respx.post(DISCORD_URL).mock(return_value=Response(400, text="bad embed"))
+
+    resp = await client.post("/v1/notify", json={"content": "x"})
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "delivery_failed"
 
 
 @pytest.mark.asyncio

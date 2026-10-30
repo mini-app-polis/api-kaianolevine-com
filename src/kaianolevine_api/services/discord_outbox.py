@@ -27,11 +27,12 @@ What the drainer does with a kept message:
   summary row says how many and over what time range, merged while it waits,
   and is posted to runs; the first expiry of an episode is reported to Sentry,
   and the summary's delivery ends the episode.
-- **Gives up after a few unconfirmed sends.** A send the transport did not
-  confirm, with no sign of a rate limit (Discord refused it, or the post
-  failed), counts an attempt; at ``MAX_ATTEMPTS`` the message is deleted and
-  logged. The shared transport has already logged each failure and reported
-  it to Sentry. A message for a channel with no webhook is deleted at once.
+- **Gives up after a few unconfirmed sends.** A send that failed (the post
+  raised, or Discord answered 5xx) counts an attempt; at ``MAX_ATTEMPTS`` the
+  message is deleted and logged. The shared transport has already logged each
+  failure and reported it to Sentry. A message Discord refused outright (a
+  4xx other than 429), or for a channel with no webhook, is deleted at once;
+  a refused pack is split instead, and each message tried on its own.
 
 Rows are leased with ``FOR UPDATE SKIP LOCKED`` inside the transaction that
 sends them, so a process that dies mid-send leaves them for the next drain,
@@ -495,7 +496,9 @@ async def _drain_channel(
         if outcome is Outcome.HELD:
             break
         ids = [row.id for row in unit]
-        if outcome is Outcome.UNCONFIRMED:
+        if outcome is Outcome.UNCONFIRMED or (
+            outcome is Outcome.REFUSED and len(unit) > 1
+        ):
             # Counted against every row, so a pack falls apart and each
             # message is tried on its own from the next drain: one embed may
             # be what Discord refused.

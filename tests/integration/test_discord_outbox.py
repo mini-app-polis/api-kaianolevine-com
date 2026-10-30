@@ -351,7 +351,7 @@ async def test_other_producers_wait_for_a_token_within_their_wait(
 async def test_an_unconfirmed_message_is_retried_a_bounded_number_of_times(
     client: AsyncClient, channels, clocks: Clocks, maker
 ) -> None:
-    runs = respx.post(RUNS_URL).mock(return_value=Response(400, text="bad embed"))
+    runs = respx.post(RUNS_URL).mock(return_value=Response(500, text="nope"))
 
     resp = await client.post("/v1/notify", json={"content": "x"})
     assert resp.json()["data"]["reason"] == "queued"
@@ -364,6 +364,39 @@ async def test_an_unconfirmed_message_is_retried_a_bounded_number_of_times(
             assert rows[0]["attempts"] == attempt
     assert await _rows(maker) == []
     assert runs.call_count == 1 + discord_outbox.MAX_ATTEMPTS
+
+
+@respx.mock
+async def test_a_refused_message_answers_delivery_failed_and_is_not_kept(
+    client: AsyncClient, channels, clocks: Clocks, maker
+) -> None:
+    runs = respx.post(RUNS_URL).mock(return_value=Response(400, text="bad embed"))
+
+    resp = await client.post("/v1/notify", json={"content": "x"})
+    assert resp.json()["data"]["reason"] == "delivery_failed"
+    assert await _rows(maker) == []
+
+    clocks.advance(5)
+    await discord_outbox.drain_once(channels, maker)
+    assert runs.call_count == 1
+
+
+@respx.mock
+async def test_the_drainer_gives_up_a_refused_message_at_once(
+    channels, clocks: Clocks, maker
+) -> None:
+    runs = respx.post(RUNS_URL).mock(return_value=Response(400, text="bad embed"))
+    async with maker() as session:
+        await discord_outbox.enqueue(
+            session, channel="runs", caller="t", payload={"content": "x"}
+        )
+
+    await discord_outbox.drain_once(channels, maker)
+    assert await _rows(maker) == []
+
+    clocks.advance(5)
+    await discord_outbox.drain_once(channels, maker)
+    assert runs.call_count == 1
 
 
 @respx.mock
@@ -425,7 +458,7 @@ async def test_notify_never_answers_502_on_a_discord_outcome(
     resp = await client.post("/v1/notify", json=_report("ERROR"))
 
     assert resp.status_code == 200
-    assert resp.json()["data"]["reason"] in {"forwarded", "queued"}
+    assert resp.json()["data"]["reason"] in {"forwarded", "queued", "delivery_failed"}
 
 
 @respx.mock

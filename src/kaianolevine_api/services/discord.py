@@ -34,15 +34,16 @@ waits for a token within its ``max_wait``; ``attempt_message`` and
 transport's buckets: it is correct while one process sends.
 
 **Attempts.** The two routes and the outbox drainer (``services.discord_outbox``)
-do not wait out a limit: they try once with a short wait, through
-``_attempt``, the one place a send is turned into an ``Outcome``. The shared
-transport answers a send with a bool only, so a False there does not say
-whether the message was held for a rate limit, refused by Discord, or lost to
-a transport fault. ``_attempt`` calls it held when the transport leaves a
-cooldown behind for the webhook (``_transport_hold``) or the send used its
-whole wait, and unconfirmed otherwise. An unconfirmed message is kept like a
-held one; the drainer retries it a bounded number of times before giving it
-up. Only a channel with no webhook at all is refused outright.
+try once, through ``_attempt``, the one place a send is turned into an
+``Outcome``. It posts with the shared transport's ``post_webhook_outcome``,
+which waits out a rate limit that ends within the send's short wait and
+answers what the send came to: sent; held for a rate limit that it did not
+wait out; refused by Discord (a 4xx other than 429); or failed (the post
+raised, or Discord answered 5xx). A held send is kept out of Sentry, since it
+is kept and sent later. A failed send is unconfirmed: kept like a held one,
+and retried by the drainer a bounded number of times before it is given up.
+A refused send, and a channel with no webhook at all, are refused outright
+and not retried.
 """
 
 from __future__ import annotations
@@ -60,6 +61,7 @@ from mini_app_polis.discord import (
     CHANNEL_ERRORS,
     CHANNEL_RUNS,
     GITHUB_SUFFIX,
+    OutcomeKind,
     environment_prefix,
 )
 from mini_app_polis.logger import LOG_WARNING, get_logger, with_log_prefix
@@ -100,11 +102,11 @@ class Outcome(StrEnum):
     #: Not sent yet: no budget token was free, or a rate limit holds the
     #: webhook. The message is to be kept and sent later.
     HELD = "held"
-    #: The transport answered False with no sign of a hold: Discord refused
-    #: the message, or the post failed. The transport has logged it and
-    #: reported it to Sentry. Kept and retried a bounded number of times.
+    #: The post raised, or Discord answered 5xx. The transport has logged it
+    #: and reported it to Sentry. Kept and retried a bounded number of times.
     UNCONFIRMED = "unconfirmed"
-    #: Nothing can deliver it (no webhook for the channel). Not retried.
+    #: Discord refused the message outright (a 4xx other than 429), or
+    #: nothing can deliver it (no webhook for the channel). Not retried.
     REFUSED = "refused"
 
     @property
@@ -201,17 +203,14 @@ async def _take(settings: Settings, url: str, max_wait: float) -> bool:
         await asyncio.sleep(wait)
 
 
-def _transport_hold(url: str) -> float:
-    """Seconds the shared transport will hold ``url`` for a rate limit.
-
-    Read from the transport's own cooldown record, because its sends answer
-    with a bool that does not say whether a failure was a hold or a
-    refusal. Zero when the transport keeps no such record.
-    """
-    remaining = getattr(_transport, "_cooldown_remaining", None)
-    if remaining is None:
-        return 0.0
-    return max(float(remaining(url)), 0.0)
+#: The shared transport's outcome -> this service's.
+_OUTCOMES: dict[OutcomeKind, Outcome] = {
+    OutcomeKind.SENT: Outcome.SENT,
+    OutcomeKind.HELD: Outcome.HELD,
+    OutcomeKind.REFUSED: Outcome.REFUSED,
+    OutcomeKind.FAILED: Outcome.UNCONFIRMED,
+    OutcomeKind.NO_WEBHOOK: Outcome.REFUSED,
+}
 
 
 async def _attempt(
@@ -226,13 +225,14 @@ async def _attempt(
     content: bytes | None = None,
     headers: dict[str, str] | None = None,
 ) -> Outcome:
-    """Try one send without waiting for a token; say what it came to."""
-    if _transport_hold(url) > max_wait:
-        return Outcome.HELD
+    """Try one send without waiting for a token; say what it came to.
+
+    A rate limit that ends within ``max_wait`` is waited out by the
+    transport; a longer one answers held, and is not reported to Sentry.
+    """
     if _try_take(settings, budget_key) > 0:
         return Outcome.HELD
-    started = _now()
-    sent = await _transport.post_webhook(
+    outcome = await _transport.post_webhook_outcome(
         url,
         json=json,
         content=content,
@@ -241,16 +241,10 @@ async def _attempt(
         context=context,
         timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
         max_wait=max_wait,
+        try_only=False,
+        report_drop=False,
     )
-    if sent:
-        return Outcome.SENT
-    # A send that met a 429 leaves its cooldown behind, and one still queued
-    # (or still waiting on a slow Discord) when its wait ran out has used
-    # the whole wait. Anything else is a refusal or a transport fault, which
-    # the bool cannot tell apart.
-    if _transport_hold(url) > 0 or _now() - started >= max_wait:
-        return Outcome.HELD
-    return Outcome.UNCONFIRMED
+    return _OUTCOMES[outcome.kind]
 
 
 def webhook_source(settings: Settings) -> dict[str, str | None]:
