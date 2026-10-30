@@ -45,3 +45,4 @@ What becomes easier or more difficult to do because of this change?
 | [0006](./ADR-0006-operator-direct-edits.md) | Operator direct edits on canonical state | Accepted |
 | [0007](./ADR-0007-extraction-rows-null-instructor.md) | Extraction rows write NULL instructor_id; co-instructor derived at read time | Accepted |
 | [0008](./ADR-0008-upstream-clerk-verification.md) | Upstream Clerk token verification to common-python-utils | Superseded by machine API keys (no ADR) |
+| [0009](./ADR-0009-discord-delivery-outbox.md) | Discord delivery through a Postgres outbox | Accepted |
