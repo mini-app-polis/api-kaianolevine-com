@@ -1,3 +1,10 @@
+# [2.49.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.48.0...v2.49.0) (2026-10-30)
+
+
+### Features
+
+* **notify:** deliver Discord through a Postgres outbox with a send budget ([32a74f4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/32a74f48e6dc40a583364b7eb35c7227964186f2))
+
 # [2.48.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.47.1...v2.48.0) (2026-10-30)
 
 
