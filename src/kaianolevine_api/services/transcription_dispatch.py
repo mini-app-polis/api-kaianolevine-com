@@ -16,7 +16,7 @@ carries its own text instead of naming a file. The API produces it itself,
 from ``POST /v1/wcs/wiki/admin/notes``; watcher-cog never asks for it.
 
 Two requests for one file produce two jobs. That is safe: the cog skips a
-file that is no longer in its inbox, and runs one job at a time — which is
+file that is gone from its inbox, and runs one job at a time — which is
 the consumer's concurrency setting to provide, not something the message
 can express.
 
