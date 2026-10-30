@@ -1,3 +1,17 @@
+# [2.50.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.49.1...v2.50.0) (2026-10-30)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.6.0 ([e3ad0f7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e3ad0f763d4a77d4b08984b4e8de96e6b0ff6f18))
+* **notify:** answer delivery_failed for a refused Discord send using the transport's send outcome ([ab1a61e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ab1a61e901f7363cdf8761842e48cdf8f6c2eb67))
+* **tasks:** declare task-manager-sweep's key for Railway and require common-utils 7.6.0 for sweep flags ([1672230](https://github.com/mini-app-polis/api-kaianolevine-com/commit/167223026985f4c867cc5d09db5a44c684739891))
+
+
+### Features
+
+* **tasks:** accept optional groom/agents flags on POST /v1/tasks/sweeps and grant claude-session the sweep scope ([81bce6f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/81bce6f95b0c6ea8b3a450fed1d772ff74bc4c2d))
+
 ## [2.49.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.49.0...v2.49.1) (2026-10-30)
 
 
