@@ -1,3 +1,16 @@
+# [2.48.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.47.1...v2.48.0) (2026-10-30)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.2.0 ([ecc2236](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ecc22368a74f8153fbe592d7cf7f7eb55de2c149))
+* **deps:** bump miniapppolis-common-utils to 7.3.0 ([5d15f9d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5d15f9d133b50421823fbd21caf5f567401fdcc8))
+
+
+### Features
+
+* **notify:** forward nothing from development except the contract suite's marked result ([0395202](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0395202b8d4021aaee60a10ca1225733ce7735d4))
+
 ## [2.47.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.47.0...v2.47.1) (2026-10-29)
 
 
