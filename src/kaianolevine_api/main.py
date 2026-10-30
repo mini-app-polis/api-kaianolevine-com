@@ -56,7 +56,7 @@ from .schemas import ErrorDetail, ErrorEnvelope
 # activity is imported for its side effect as well as its middleware:
 # importing it is what registers the SQLAlchemy listeners that tally
 # data changes.
-from .services import activity, cloudwatch, discord, github_dashboard
+from .services import activity, cloudwatch, discord, discord_outbox, github_dashboard
 from .version import package_version
 
 logger = get_logger()
@@ -99,6 +99,9 @@ async def lifespan(_app: FastAPI):
     await github_dashboard.warm(settings)
     github_refresh = asyncio.create_task(github_dashboard.refresh_loop(settings))
     reminders = _start_spotify_token_reminders(settings)
+    # Sends what the notification routes kept, including what a stopped
+    # process left in the outbox.
+    outbox = discord_outbox.start(settings)
     # Picks up any content a stopped process left unembedded.
     auto_refresh.request_refresh(settings)
 
@@ -107,6 +110,9 @@ async def lifespan(_app: FastAPI):
     github_refresh.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await github_refresh
+    outbox.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await outbox
     if reminders is not None:
         reminders.cancel()
         with contextlib.suppress(asyncio.CancelledError):

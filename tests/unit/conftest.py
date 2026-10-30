@@ -27,6 +27,21 @@ from kaianolevine_api.config import get_settings  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def reset_discord_limits() -> Iterator[None]:
+    """The send budget and the transport's cooldowns are process state; one
+    test's burst or 429 must not hold the next."""
+    from mini_app_polis import discord as transport
+
+    from kaianolevine_api.services import discord
+
+    discord.reset_budget()
+    transport.reset_cooldowns()
+    yield
+    discord.reset_budget()
+    transport.reset_cooldowns()
+
+
+@pytest.fixture(autouse=True)
 def clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield

@@ -82,6 +82,31 @@ class Settings(BaseSettings):
     DISCORD_WEBHOOK_URL_ERRORS: str | None = None
     DISCORD_WEBHOOK_URL_ACTIVITY: str | None = None
     DISCORD_WEBHOOK_URL_RUNS: str | None = None
+    # ── Discord delivery (services.discord, services.discord_outbox) ─────
+    # The wait a route's send, or one of the outbox drainer's, gets on
+    # Discord's rate limits before the message is kept in the outbox and
+    # sent later. GitHub deliveries wait GITHUB_MAX_WAIT_SECS instead.
+    DISCORD_SEND_WAIT_SECS: float = 1.0
+    # The send budget: token buckets every send takes a token from. One per
+    # webhook, under Discord's bucket (five posts per two seconds), and one
+    # across every webhook, under the rate at which Cloudflare starts
+    # refusing this service's address (error 1015). Rates are tokens a
+    # second; a burst is how many may go at once after a quiet spell. Both
+    # held with headroom: too low delays messages for nothing, too high
+    # lets holds through.
+    DISCORD_WEBHOOK_RATE_PER_SEC: float = 2.0
+    DISCORD_WEBHOOK_BURST: int = 4
+    DISCORD_GLOBAL_RATE_PER_SEC: float = 4.0
+    DISCORD_GLOBAL_BURST: int = 8
+    # How long a kept message may wait in the outbox before it is counted
+    # and not sent. Messages at WARN, ERROR or CRITICAL and anything for the
+    # errors channel never expire.
+    DISCORD_OUTBOX_EXPIRE_HOURS: float = 6.0
+    # A message sent from the outbox later than this after it arrived
+    # carries the time it arrived.
+    DISCORD_LATE_AFTER_SECS: float = 60.0
+    # How often the outbox drainer looks for messages to send.
+    DISCORD_OUTBOX_POLL_SECS: float = 2.0
     # Shared secret configured on the GitHub org webhook. Unset means the
     # route rejects every delivery rather than accepting unsigned ones.
     GITHUB_WEBHOOK_SECRET: str | None = None

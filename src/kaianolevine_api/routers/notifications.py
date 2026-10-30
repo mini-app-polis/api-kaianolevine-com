@@ -31,9 +31,13 @@ indistinguishable from success at every layer above it, which is why the
 workflow embed is built here and posted to the bare webhook URL as an ordinary
 message instead.
 
-Both routes return promptly and neither retries. GitHub disables a webhook that
-keeps receiving 5xx, so a Discord outage must not become one; see
-``services.discord`` for where delivery failures go instead.
+Both routes return promptly and answer 200 whatever Discord does. Each tries
+its send once with a short wait; a message that cannot go out straight away
+is kept in the Discord outbox (``services.discord_outbox``) and sent later by
+its drainer, and the route answers ``queued``. GitHub disables a webhook that
+keeps receiving 5xx, and a first-party caller reads a 5xx as an outage, so a
+Discord rate limit must not become one; see ``services.discord`` for where
+delivery failures go instead.
 """
 
 from __future__ import annotations
@@ -65,7 +69,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import ci_signals, discord, run_signals, signals
+from ..services import ci_signals, discord, discord_outbox, run_signals, signals
 from ..services.webhook_signature import verify_sha256_signature
 
 router = APIRouter()
@@ -462,16 +466,19 @@ async def github_webhook(
     )
 
     if decision.message is not None:
-        forwarded = await discord.send_message(
-            settings=settings,
+        sent = await discord_outbox.deliver_message(
+            session,
+            settings,
             payload=decision.message,
             channel=decision.channel,
             context=f"github/{event}",
+            caller="github",
             max_wait=discord.GITHUB_MAX_WAIT_SECS,
         )
     else:
-        forwarded = await discord.forward_github_event(
-            settings=settings,
+        sent = await discord_outbox.deliver_github(
+            session,
+            settings,
             raw_body=raw_body,
             event=event,
             delivery=delivery,
@@ -482,8 +489,8 @@ async def github_webhook(
         settings,
         event=event,
         outcome=decision.outcome,
-        reason="forwarded" if forwarded else "delivery_failed",
-        forwarded=forwarded,
+        reason=sent.reason,
+        forwarded=sent is discord.Outcome.SENT,
     )
 
 
@@ -588,7 +595,13 @@ def is_contract_suite_result(payload: NotifyRequest, principal: Principal) -> bo
         "runs of one flow become a task. Outside production nothing is "
         "posted (forwarded=false, reason development_not_reported) except "
         "the contract-suite machine's result, marked contract_suite_result. "
-        "Requires notify.messages.send."
+        "Every Discord outcome answers 200: forwarded=true with reason "
+        "forwarded when the message was posted; forwarded=false with reason "
+        "queued when it could not go out straight away (a send budget or a "
+        "Discord rate limit held it, or Discord did not confirm it) and is "
+        "kept to be sent later, carrying its original time if it is late; "
+        "forwarded=false with reason delivery_failed when nothing can deliver "
+        "it. Requires notify.messages.send."
     ),
 )
 async def notify(
@@ -599,10 +612,9 @@ async def notify(
 ) -> Envelope[NotificationResult]:
     """Post one message to the notification channel on the caller's behalf.
 
-    A rejected delivery answers 502 rather than a cheerful 200: the caller is
-    first-party and can decide for itself whether a missed notification is
-    worth failing over. Callers for which it is not should ignore the status
-    rather than have this route lie about what happened.
+    Answers 200 for every Discord outcome, with the outcome as the reason. A
+    held message is kept in the outbox and sent later, so a rate limit is
+    not a lost report, and a caller does not read one as an outage.
     """
     logger.info(
         with_log_prefix(
@@ -625,29 +637,37 @@ async def notify(
     )
 
     message = payload.to_discord()
-    sent = await discord.send_message(
-        settings=settings,
+    severity = report_severity(payload)
+    caller = principal.display_name or principal.subject
+    sent = await discord_outbox.deliver_message(
+        session,
+        settings,
         payload=message,
         channel=discord.CHANNEL_RUNS,
         context="notify",
+        caller=caller,
+        severity=severity,
     )
-    if not sent:
-        raise api_error(502, "notify_failed", "Discord rejected the notification")
 
-    # The copy is best-effort. The report reached runs, which is the record;
-    # a missed copy is logged by send_message and is not worth a 502 that
-    # would tell the caller its report was lost when it was not.
-    severity = report_severity(payload)
+    # The copy goes the same way, and its outcome is not the caller's: the
+    # report's answer is about runs, which is the record.
     if severity in COPY_TO_ERRORS:
-        await discord.send_message(
-            settings=settings,
+        await discord_outbox.deliver_message(
+            session,
+            settings,
             payload=message,
             channel=discord.CHANNEL_ERRORS,
             context=f"notify/{severity.lower()}",
+            caller=caller,
+            severity=severity,
         )
 
     return _result(
-        settings, event="notify", outcome=None, reason="forwarded", forwarded=True
+        settings,
+        event="notify",
+        outcome=None,
+        reason=sent.reason,
+        forwarded=sent is discord.Outcome.SENT,
     )
 
 
