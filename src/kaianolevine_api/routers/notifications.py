@@ -598,10 +598,11 @@ def is_contract_suite_result(payload: NotifyRequest, principal: Principal) -> bo
         "Every Discord outcome answers 200: forwarded=true with reason "
         "forwarded when the message was posted; forwarded=false with reason "
         "queued when it could not go out straight away (a send budget or a "
-        "Discord rate limit held it, or Discord did not confirm it) and is "
-        "kept to be sent later, carrying its original time if it is late; "
-        "forwarded=false with reason delivery_failed when nothing can deliver "
-        "it. Requires notify.messages.send."
+        "Discord rate limit held it, or the post failed) and is kept to be "
+        "sent later, carrying its original time if it is late; "
+        "forwarded=false with reason delivery_failed when Discord refused it "
+        "outright or no webhook can deliver it, which is not retried. "
+        "Requires notify.messages.send."
     ),
 )
 async def notify(

@@ -23,7 +23,7 @@ Route groups:
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
 - `/v1/deejay/runs`, `/v1/transcription/runs` — enqueue deejay-cog / transcription-cog jobs (SQS)
-- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records; `GET /v1/tasks/groomings/return-rate?days=30` — how often a task moved to Ready came back out (returned ÷ moved over the window, counted from migration 083 at the earliest); `POST /v1/tasks/groomings/budget-spent` — task-groomer-cog reports a run the spent budget stopped, served on each grooming record as `budget_spent_fingerprint` and cleared by a won claim for the same content
+- `/v1/tasks`, `/v1/tasks/updates`, `/v1/tasks/sweeps` — enqueue a task request / a comment and move to Review on a task the caller asked for / a sweep of the board for task-manager-cog (SQS; an optional `{"groom": true, "agents": true}` body makes that sweep groom and dispatch agents whatever the time of day, every switch and cap still applying); `/v1/tasks/groomings/*`, `/v1/tasks/agent-runs/*` — its grooming and agent-run records; `GET /v1/tasks/groomings/return-rate?days=30` — how often a task moved to Ready came back out (returned ÷ moved over the window, counted from migration 083 at the earliest); `POST /v1/tasks/groomings/budget-spent` — task-groomer-cog reports a run the spent budget stopped, served on each grooming record as `budget_spent_fingerprint` and cleared by a won claim for the same content
 - `/v1/secrets/rotation-events` — the record of secret rotations: rotator-cog (and the owner's hand-run rotations) write one event per rotation; `latest=true` reads the newest per secret and config. No event carries a secret value
 - `/v1/secrets/changes` — secret names Doppler reported changed, per config, oldest first; the rotator's sweep compares them with the rotation record. Names only
 - `/v1/secrets/rotations` — ask rotator-cog to rotate one secret now (SQS, rotator-jobs.fifo; admin only, production only, with `config` naming the Doppler config)
@@ -221,7 +221,9 @@ Required environment variables:
   only the `secrets-rotator` role: read and record rotation events.
 - `CLAUDE_SESSION_API_KEY` — optional; the `claude-session` machine's
   key, used by a Claude session to file manual tasks (`POST /v1/tasks`
-  under the `manual` source). It holds only the `task-filer` role.
+  under the `manual` source) and to ask for a sweep of the board now
+  (`POST /v1/tasks/sweeps`). It holds only the `task-filer` and
+  `sweep-requester` roles.
 
 Every variable the service reads, auth's included, is listed with whether it
 is required in [`.env.example`](.env.example); defaults are in
@@ -376,7 +378,7 @@ Every Discord outcome of `/v1/notify` answers 200, in the same
 |---|---|---|
 | `true` | `forwarded` | posted to Discord |
 | `false` | `queued` | not posted yet: kept in the outbox and sent later |
-| `false` | `delivery_failed` | nothing can deliver it (no webhook for the channel) |
+| `false` | `delivery_failed` | not posted, and not retried: Discord refused it outright (a 4xx other than 429), or no webhook can deliver it |
 
 Callers read the answer, not the channel, and treat `queued` as accepted.
 
@@ -391,11 +393,12 @@ still apply on top.
 
 Both routes try a send once, with a short wait. A message that cannot go
 out straight away — no token free, a rate limit holding the webhook, older
-messages for the channel still waiting, or a send Discord did not confirm —
-is written to the `discord_outbox` table and the route answers `queued`.
-The `errors` copy of a WARN-or-worse report goes the same way. A drainer
-started with the app sends what is kept, one channel's messages in order,
-leasing rows with `FOR UPDATE SKIP LOCKED`, so a restart loses nothing:
+messages for the channel still waiting, or a post that failed (it raised, or
+Discord answered 5xx) — is written to the `discord_outbox` table and the
+route answers `queued`. The `errors` copy of a WARN-or-worse report goes the
+same way. A drainer started with the app sends what is kept, one channel's
+messages in order, leasing rows with `FOR UPDATE SKIP LOCKED`, so a restart
+loses nothing:
 
 - Embed-only messages waiting for one channel are packed, up to ten embeds
   and 6000 characters, into one message under the webhook's own name; each
@@ -408,9 +411,10 @@ leasing rows with `FOR UPDATE SKIP LOCKED`, so a restart loses nothing:
   unsent and counted: one message to `runs` says how many were not
   delivered and the time range they covered, and the episode is reported to
   Sentry once.
-- A send the transport did not confirm with no sign of a rate limit
-  (Discord refused it, or the post failed) is retried a few times, then
-  given up and logged; the transport reports each failure to Sentry.
+- A failed send (the post raised, or Discord answered 5xx) is retried a few
+  times, then given up and logged; the transport reports each failure to
+  Sentry. A message Discord refuses outright is given up at once; a refused
+  pack is split and each message tried on its own.
 
 | Setting | Default | |
 |---|---|---|

@@ -23,15 +23,17 @@ dispatches for Ready tasks, their month's spend, and each run's result,
 which the run's workflow posts and this API hands to task-manager-cog
 (services/agent_dispatch.py). See ``mini_app_polis.api.contract.agent_runs``.
 
-``POST /v1/tasks/sweeps`` is the admin's: it puts a sweep of the board on
-task-manager-cog's queue now, rather than waiting for the hourly schedule.
+``POST /v1/tasks/sweeps`` is the admin's, and the claude-session machine's:
+it puts a sweep of the board on task-manager-cog's queue now, rather than
+waiting for the hourly schedule. Its optional body can make that sweep the
+one for grooming, for agent dispatch, or both, whatever the time of day.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from identity.types import Principal
 from mini_app_polis.api.contract import RETURN_RATE_DEFAULT_DAYS, RETURN_RATE_MAX_DAYS
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,6 +68,7 @@ from ..schemas import (
     TaskCreateAccepted,
     TaskCreateRequest,
     TaskSweepAccepted,
+    TaskSweepRequest,
     TaskUpdateAccepted,
     TaskUpdateRequest,
     api_error,
@@ -192,17 +195,24 @@ async def update_task_request(
         "Enqueues one sweep on task-manager-cog's queue, the message its "
         "hourly schedule sends, and acknowledges. The sweep runs afterwards, "
         "in line with the queue's other jobs. Each request is its own sweep: "
-        "asking twice runs two, one after the other."
+        "asking twice runs two, one after the other. The body is optional: "
+        "`groom` makes the sweep send tasks for grooming and `agents` makes "
+        "it dispatch agents, whatever the time of day. Every on/off setting "
+        "and spending cap still applies."
     ),
 )
 async def request_sweep(
     request: Request,
+    payload: TaskSweepRequest | None = Body(default=None),
     principal: Principal = Depends(require_scope("tasks.sweeps.create")),
 ) -> Envelope[TaskSweepAccepted]:
     """Put one sweep on the task manager's queue; a dropped one is a 502."""
     settings = get_settings()
+    flags = payload or TaskSweepRequest()
     try:
-        accepted = await task_dispatch.dispatch_sweep(settings=settings)
+        accepted = await task_dispatch.dispatch_sweep(
+            settings=settings, groom=flags.groom, agents=flags.agents
+        )
     except task_dispatch.DispatchError as exc:
         job_queue.record_drop(request, exc)
         raise api_error(

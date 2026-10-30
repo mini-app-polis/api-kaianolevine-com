@@ -55,6 +55,18 @@ async def _send(settings, channel: str) -> bool:
     )
 
 
+async def _held_for(url: str) -> float:
+    """Seconds the transport holds ``url``, as its send outcome reports them.
+
+    ``try_only`` answers at once while a cooldown runs, without posting.
+    """
+    outcome = await transport.post_webhook_outcome(
+        url, json={"content": "x"}, channel="probe", context="test", try_only=True
+    )
+    assert outcome.kind is transport.OutcomeKind.HELD
+    return outcome.retry_after or 0.0
+
+
 @respx.mock
 async def test_bucket_429_holds_only_that_webhook(settings) -> None:
     runs = respx.post(RUNS_URL).mock(
@@ -96,7 +108,7 @@ async def test_cloudflare_1015_holds_every_webhook_for_the_default(
 
     assert runs.call_count == 1
     assert activity.call_count == 0
-    remaining = transport._cooldown_remaining(ACTIVITY_URL)
+    remaining = await _held_for(ACTIVITY_URL)
     assert 50 < remaining <= transport._DEFAULT_COOLDOWN_SECS
 
 
@@ -108,7 +120,7 @@ async def test_retry_after_header_sets_the_cooldown(settings) -> None:
 
     await _send(settings, discord.CHANNEL_RUNS)
 
-    assert 40 < transport._cooldown_remaining(RUNS_URL) <= 45
+    assert 40 < await _held_for(RUNS_URL) <= 45
 
 
 @respx.mock
@@ -119,7 +131,7 @@ async def test_absurd_retry_after_is_capped(settings) -> None:
 
     await _send(settings, discord.CHANNEL_RUNS)
 
-    assert transport._cooldown_remaining(RUNS_URL) <= transport._MAX_COOLDOWN_SECS
+    assert await _held_for(RUNS_URL) <= transport._MAX_COOLDOWN_SECS
 
 
 @respx.mock
