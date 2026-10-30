@@ -87,9 +87,8 @@ async def _create_lesson(
 async def test_refresh_requires_the_embeddings_scope(client, async_engine) -> None:
     """A caller without wcs.embeddings.write gets 403.
 
-    Previously this cleared wcs_user_profiles.is_admin, because that flag was
-    the authority. It no longer is — revoking the role is what removes access,
-    and clearing the flag now changes nothing. That is the intended shift.
+    Revoking the role is what removes access; wcs_user_profiles.is_admin is
+    not the authority, and clearing it changes nothing.
     """
     async with async_engine.begin() as conn:
         await conn.execute(

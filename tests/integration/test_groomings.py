@@ -20,7 +20,7 @@ pytestmark = pytest.mark.asyncio
 
 RECORD = {
     "task_gid": "1219755103049631",
-    "task_id": "MINI-151",
+    "task_id": "TASK-151",
     "fingerprint": "a" * 64,
     "outcome": "not_ready",
     "problems": ["Effort is blank, not S, M or L"],
@@ -89,7 +89,7 @@ async def test_a_record_keeps_a_send_until_a_grooming_clears_it(client) -> None:
     [
         {"fingerprint": "not-a-sha"},
         {"outcome": "maybe"},
-        {"task_gid": "MINI-151"},
+        {"task_gid": "TASK-151"},
         {"returned_count": -1},
         {"groom_attempts": -1},
         {"extra": True},
@@ -150,15 +150,15 @@ ACCOUNT_QUEUES = "https://sqs.us-east-1.amazonaws.com/400200465748"
 JOB = {
     "task": {
         "task_gid": "1219755103049631",
-        "task_id": "MINI-38",
-        "name": "MINI-38 · idea - dashboard for TV shows and movies",
+        "task_id": "TASK-38",
+        "name": "TASK-38 · idea - dashboard for TV shows and movies",
         "notes": "Done when:\nWhere:\n",
         "tags": [],
         "section": "Ideas",
         "fingerprint": "c" * 64,
         "problems": ["Done when is blank"],
     },
-    "board": ["MINI-9 · Discord commands and actions"],
+    "board": ["TASK-9 · Discord commands and actions"],
 }
 
 PROPOSAL = {
@@ -347,7 +347,7 @@ async def test_new_content_for_the_same_task_is_a_new_claim(client) -> None:
 
 @pytest.mark.parametrize(
     "change",
-    [{"fingerprint": "not-a-sha"}, {"task_gid": "MINI-292"}, {"extra": True}],
+    [{"fingerprint": "not-a-sha"}, {"task_gid": "TASK-292"}, {"extra": True}],
 )
 async def test_a_malformed_claim_is_rejected(client, change) -> None:
     for path in ("/v1/tasks/groomings/claims", "/v1/tasks/groomings/claims/release"):
@@ -469,7 +469,7 @@ async def test_a_record_write_leaves_the_stop_and_groomed_fingerprint(
 
 @pytest.mark.parametrize(
     "change",
-    [{"fingerprint": "not-a-sha"}, {"task_gid": "MINI-151"}, {"extra": True}],
+    [{"fingerprint": "not-a-sha"}, {"task_gid": "TASK-151"}, {"extra": True}],
 )
 async def test_a_malformed_stop_is_rejected(client, change) -> None:
     response = await client.post(
@@ -504,7 +504,7 @@ async def test_the_return_rate_of_an_empty_window_is_none(client) -> None:
 
 async def test_moves_and_returns_are_counted_from_the_records(client) -> None:
     moved_at = "2099-01-01T00:00:00Z"  # in the window, whatever now is
-    other = {**RECORD, "task_gid": "1219755103049632", "task_id": "MINI-152"}
+    other = {**RECORD, "task_gid": "1219755103049632", "task_id": "TASK-152"}
     for record in (RECORD, other):
         await client.post(
             "/v1/tasks/groomings",

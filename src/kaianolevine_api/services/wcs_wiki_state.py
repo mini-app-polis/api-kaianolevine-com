@@ -10,7 +10,7 @@ re-sent, and a chunked one resumed.
 
 The thin-entity list is kept here too, though it is no pass's
 memory: one document per entity, replaced whole, and the slugs the curator
-names as no longer thin removed.
+reports as filled out removed.
 
 The store keeps the keys it is given. It does not check them against the
 corpus: the curator decides what a key means, and keys that no longer match

@@ -77,8 +77,7 @@ def test_schema_accepts_long_skill_description_that_previously_failed() -> None:
             )
         ],
     )
-    # Must not raise. The skill description is 161 chars; previously
-    # capped at 120.
+    # Must not raise. The skill description is 161 chars, over 120.
     assert len(payload.drill_purposes[0].skill_description) > 120
 
 

@@ -108,8 +108,7 @@ async def test_export_wiki_corpus_returns_full_database(
 async def test_export_requires_the_corpus_scope_not_merely_read(client) -> None:
     """A reader's scope must not open the unfiltered corpus.
 
-    The gate used to be "machine callers only", which excluded every human.
-    It is now `wcs.corpus.read`, held by wiki-curator-cog and admins. Mapping
+    The gate is `wcs.corpus.read`, held by wiki-curator-cog and admins. Mapping
     this endpoint to `wcs.notes.read` would have handed the full corpus —
     private sources included — to every signed-in reader, so this asserts the
     narrower scope is what is actually checked.

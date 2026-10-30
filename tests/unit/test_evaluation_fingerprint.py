@@ -70,7 +70,7 @@ def test_a_null_and_an_empty_string_are_the_same_finding() -> None:
 
     A finding with no suggestion and one with an empty suggestion are the
     same finding. Treating them differently would let a client store the
-    same thing twice by sending "" where it previously sent nothing.
+    same thing twice by sending "" one time and nothing the next.
     """
     common = {
         "violation_id": "SEC-002",

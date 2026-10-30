@@ -2,9 +2,9 @@
 
 ``ecosystem-standards`` compiles its rule files into one normalized document
 and posts it here when semantic-release cuts a version. Consumers fetch that
-document instead of walking the repo: a conformance run used to request the
-index and every domain file, once per repo under evaluation, and rebuild the
-same structure from them each time.
+document instead of walking the repo, so a conformance run does not request
+the index and every domain file, once per repo under evaluation, and rebuild
+the same structure from them each time.
 
 **Reads are unauthenticated.** The catalog is rule text that is already public
 in a public repo, so a credential here would protect nothing — and it would

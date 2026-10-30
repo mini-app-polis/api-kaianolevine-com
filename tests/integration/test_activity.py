@@ -194,7 +194,7 @@ async def test_denied_human_is_not_reported(client, monkeypatch):
 
 @respx.mock
 async def test_machine_4xx_is_reported(client, monkeypatch):
-    """The wiring test for the one thing auth.py was changed for.
+    """The wiring test for auth.py stamping the caller kind on a 4xx.
 
     ``GET /v1/flags`` is not scope-guarded, so this hits a write that is —
     the path that actually stamps ``request.state.caller_kind`` and returns

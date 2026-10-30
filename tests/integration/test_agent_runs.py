@@ -24,7 +24,7 @@ RUN_URL = "https://github.com/mini-app-polis/watcher-cog/actions/runs/1"
 
 RUN = {
     "task_gid": "1219802464275212",
-    "task_id": "MINI-158",
+    "task_id": "TASK-158",
     "repository": "watcher-cog",
     "model": "claude-sonnet-5-5",
 }
@@ -247,7 +247,7 @@ async def test_other_outcomes_are_recorded_with_no_questions(
         {"outcome": "succeeded"},  # no pull request
         {"outcome": "failed", "pr_url": PR},
         {"cost_usd": -1},
-        {"run_id": "MINI-12"},
+        {"run_id": "TASK-12"},
         {"extra": True},
     ],
 )

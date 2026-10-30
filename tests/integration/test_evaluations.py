@@ -403,9 +403,9 @@ async def test_list_evaluations_orders_most_recent_first_with_non_null_timestamp
     """Regression: GET /v1/evaluations must order most-recent-first and surface a
     non-null timestamp on every row.
 
-    Previously, the route ordered by evaluated_at DESC with no secondary tie-
-    breaker, so rows that shared a timestamp could come back in an unspecified
-    order; the homepage badge consumer saw a stale flow_inline row at index 0.
+    Ordering by evaluated_at DESC with no secondary tie-breaker would return
+    rows that share a timestamp in an unspecified order, and the homepage
+    badge consumer would see a stale row at index 0.
     """
     # Use distinct sources so the latest-run-per-(repo, source) filter doesn't
     # collapse both rows down to one — we want both rows visible in the response

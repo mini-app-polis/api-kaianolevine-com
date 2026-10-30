@@ -123,7 +123,7 @@ async def register_entries(
     """Register the incident's entries, replacing an earlier registration.
 
     An entry registered again keeps what is recorded for it (its task flag);
-    an entry no longer in the list is dropped. Raises IncidentNotFound.
+    an entry missing from the new list is dropped. Raises IncidentNotFound.
     """
     await started_at(session, incident_id)
     keys = [(entry.name, entry.config) for entry in registration.entries]

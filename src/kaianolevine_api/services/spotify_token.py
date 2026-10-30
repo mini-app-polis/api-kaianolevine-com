@@ -383,7 +383,7 @@ async def renew(
     written.
 
     The token is proved before it is kept: refreshed once (the thing
-    deejay-cog will do with it) and used to read ``/v1/me``, whose user ID
+    deejay-cog will do with it) and used for reading ``/v1/me``, whose user ID
     must be ``SPOTIFY_OWNER_USER_ID``.
     """
     timeout = settings.HTTP_CLIENT_TIMEOUT_SECS or 10.0

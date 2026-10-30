@@ -68,8 +68,8 @@ __all__ = [
 COG = "wiki-curator"
 
 #: Message groups materialise jobs spread over. How many actually run at
-#: once is the smaller of this and the curator's concurrency ceiling (infra
-#: cogs.tf); groups beyond it just wait their turn.
+#: once is the smaller of this and the curator's concurrency ceiling (the
+#: infra repo's cog definitions); groups beyond it just wait their turn.
 PAGE_GROUPS = 5
 
 #: Whether a composed source is sent to the curator. Seeded off.
