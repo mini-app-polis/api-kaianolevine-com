@@ -1340,7 +1340,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44.0.1,<51.0" },
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
-    { name = "miniapppolis-common-utils", specifier = ">=7.1.0,<8" },
+    { name = "miniapppolis-common-utils", specifier = ">=7.3.0,<8" },
     { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.2.0,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.2" },
     { name = "openai", specifier = ">=1.40,<4.0" },
@@ -1482,7 +1482,7 @@ wheels = [
 
 [[package]]
 name = "miniapppolis-common-utils"
-version = "7.1.1"
+version = "7.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1499,9 +1499,9 @@ dependencies = [
     { name = "spotipy" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/ab/7a69b7b1b4031816094d8ddb36ba18c4266f6cad5dbb8f5f998364c7e26a/miniapppolis_common_utils-7.1.1.tar.gz", hash = "sha256:a1656dcf3fdda51bd30e940986acde53e818843502510afb9590562b95c5b16a", size = 472261, upload-time = "2026-10-29T22:51:11.053Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/95/0a94a7eacbec90f3a6bcacb9d08c3dcd0f3064c5aabdd5a727ba5679624d/miniapppolis_common_utils-7.3.0.tar.gz", hash = "sha256:b4b82f31c336861f77e6e50126a6d4a622ff00596eeea5bcadf9b711d11a4328", size = 473858, upload-time = "2026-10-30T16:43:21.703Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/56/e69da43063de2a359c6eb9ad9c52d1a541fc0cb253f6959ef3e1875acf04/miniapppolis_common_utils-7.1.1-py3-none-any.whl", hash = "sha256:4acba061070781ad1a80b59ebfb4995e0d2b938c1d3586435bb0382a043b0976", size = 213547, upload-time = "2026-10-29T22:51:09.644Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/5d/9ddf2b113bbbc9d444b65a6f2bc814eae8355458cd392b6f56d52d85a2f6/miniapppolis_common_utils-7.3.0-py3-none-any.whl", hash = "sha256:ea7868a7c30d9ea9b25b5ee84db734084f069c6c4fb39510469cd6f7107e020d", size = 214114, upload-time = "2026-10-30T16:43:19.997Z" },
 ]
 
 [[package]]

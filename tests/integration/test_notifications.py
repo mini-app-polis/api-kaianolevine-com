@@ -3,10 +3,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 import respx
 from httpx import AsyncClient, Response
+from identity.apikey import API_KEY_ISSUER
+from identity.types import VerifiedSubject
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from kaianolevine_api import auth as auth_mod
+from kaianolevine_api import identity_registry
 
 SECRET = "test-github-secret"
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
@@ -603,3 +610,103 @@ async def test_notify_reports_delivery_failure(client: AsyncClient) -> None:
 
     assert resp.status_code == 502
     assert resp.json()["error"]["code"] == "notify_failed"
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/notify outside production
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def contract_suite(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> AsyncClient:
+    """The client, authenticated as the declared contract-suite machine."""
+    await identity_registry.reconcile(db_session)
+    await db_session.commit()
+    monkeypatch.setattr(
+        auth_mod,
+        "verify_bearer",
+        AsyncMock(
+            return_value=VerifiedSubject(
+                issuer=API_KEY_ISSUER, subject="contract-suite", kind="machine"
+            )
+        ),
+    )
+    return client
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_development_notify_is_not_forwarded(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Development reports nothing, even a message marked as a result."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    route = respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+
+    resp = await client.post(
+        "/v1/notify", json={"content": "dev run", "contract_suite_result": True}
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "development_not_reported"
+    assert not route.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_development_forwards_the_contract_suite_result(
+    contract_suite: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The suite's marked result reaches runs, without the mark."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    route = respx.post(DISCORD_URL).mock(return_value=Response(204))
+
+    resp = await contract_suite.post(
+        "/v1/notify",
+        json={"content": "contract suite passed", "contract_suite_result": True},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is True
+    assert data["reason"] == "forwarded"
+    assert json.loads(route.calls.last.request.content) == {
+        "content": "contract suite passed"
+    }
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_development_drops_the_contract_suites_unmarked_message(
+    contract_suite: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The suite's check of the route is a development message like any other."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    route = respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+
+    resp = await contract_suite.post("/v1/notify", json={"content": "notify check"})
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "development_not_reported"
+    assert not route.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_production_forwards_every_notify(client: AsyncClient) -> None:
+    """Production is ungated: an unmarked message from any caller is posted."""
+    route = respx.post(DISCORD_URL).mock(return_value=Response(204))
+
+    resp = await client.post("/v1/notify", json={"content": "nightly done"})
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is True
+    assert data["reason"] == "forwarded"
+    assert route.called

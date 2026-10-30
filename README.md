@@ -297,7 +297,7 @@ because that is the last place that knows what a message means:
 |---|---|
 | `errors` | failed CI on the default branch, `/v1/notify` run reports declaring WARN or worse (copied from `runs`), jobs dropped before reaching a queue, the last Spotify token-expiry reminder, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
 | `activity` | the running list of committed data changes, from the request middleware |
-| `runs` | cog run reports through `/v1/notify`, every severity |
+| `runs` | cog run reports through `/v1/notify`, every severity (outside production, only the contract suite's result) |
 | `default` | everything else — pushes, pull requests, issues, releases, green CI |
 
 Each channel has its own webhook variable — `DISCORD_WEBHOOK_URL_DEFAULT`,
@@ -359,6 +359,14 @@ nothing else, and a cog that cannot report its own failure reports it
 later than it should. `ops-notifier` exists for notifications that belong
 to no cog — scripts, one-offs, GitHub Actions — so those never have to
 borrow a cog's key.
+
+Outside production `/v1/notify` posts nothing: it answers
+`forwarded: false` with the reason `development_not_reported`. The one
+exception is the contract suite's end-of-run result — a message from the
+`contract-suite` machine with `contract_suite_result: true` — so the
+suite's pass/fail still reaches `runs`. The suite's unmarked check of the
+route is dropped like any other development message. Production forwards
+every message and ignores the field, which is never sent on to Discord.
 
 `GITHUB_NOTIFY_EVENTS` is the outer gate — the event types this service
 has a policy for at all — and defaults to the five in the table.

@@ -17,7 +17,10 @@ after the payload arrives, and this is where they are made.
 
 ``POST /v1/notify`` is the fleet's own path for ad-hoc messages, and takes the
 ordinary machine credential every other first-party route takes
-(``notify.messages.send``). Nothing about it is GitHub-shaped.
+(``notify.messages.send``). Nothing about it is GitHub-shaped. Outside
+production it forwards one message only: the contract suite's end-of-run
+result, so the suite's pass/fail reaches ``runs`` while the rest of
+development stays out of the channels production reports to.
 
 Two delivery shapes, because Discord's GitHub endpoint is not universal.
 ``push``, ``pull_request``, ``issues`` and ``release`` are rendered by Discord
@@ -549,6 +552,24 @@ def report_severity(payload: NotifyRequest) -> str | None:
     return None
 
 
+#: The machine whose result is the one message development reports. Declared
+#: in ``identity_registry``; its key exists in development only.
+CONTRACT_SUITE = "contract-suite"
+
+
+def is_contract_suite_result(payload: NotifyRequest, principal: Principal) -> bool:
+    """Whether ``payload`` is the contract suite's end-of-run result.
+
+    Both halves are needed. The mark alone is a field any caller can set, and
+    the caller alone also sends the suite's unmarked check of this route.
+    """
+    return (
+        principal.kind == "machine"
+        and principal.subject == CONTRACT_SUITE
+        and payload.contract_suite_result
+    )
+
+
 @router.post(
     "/notify",
     response_model=Envelope[NotificationResult],
@@ -564,7 +585,10 @@ def report_severity(payload: NotifyRequest) -> str | None:
         "cog's dead-letter-queue and queue-stalled alarms, or watcher-cog's "
         "failing-ticks alarm and Healthchecks check. In production, a run "
         "report is also a cog-run signal: consecutive ERROR or CRITICAL "
-        "runs of one flow become a task. Requires notify.messages.send."
+        "runs of one flow become a task. Outside production nothing is "
+        "posted (forwarded=false, reason development_not_reported) except "
+        "the contract-suite machine's result, marked contract_suite_result. "
+        "Requires notify.messages.send."
     ),
 )
 async def notify(
@@ -586,6 +610,11 @@ async def notify(
             f"notify requested principal={principal.display_name or principal.subject}",
         )
     )
+
+    if not is_production() and not is_contract_suite_result(payload, principal):
+        return _result(
+            settings, event="notify", outcome=None, reason="development_not_reported"
+        )
 
     # Before delivery, so a Discord outage does not hide a failing run.
     await _observe(
