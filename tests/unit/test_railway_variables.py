@@ -47,6 +47,14 @@ NOT_DECLARED: dict[str, str] = {
     "WCS_QA_MAX_OUTPUT_TOKENS_DEFAULT": "agent budget, reviewed in config.py",
     "WCS_QA_MAX_OUTPUT_TOKENS_LIMIT": "agent budget, reviewed in config.py",
     "WCS_SITE_URL": "the one public site, reviewed in config.py",
+    "DISCORD_SEND_WAIT_SECS": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_WEBHOOK_RATE_PER_SEC": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_WEBHOOK_BURST": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_GLOBAL_RATE_PER_SEC": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_GLOBAL_BURST": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_OUTBOX_EXPIRE_HOURS": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_LATE_AFTER_SECS": "Discord delivery tuning, reviewed in config.py",
+    "DISCORD_OUTBOX_POLL_SECS": "Discord delivery tuning, reviewed in config.py",
     "GH_TOKEN": (
         "a local-run fallback for GITHUB_DASHBOARD_TOKEN, which production sets"
     ),

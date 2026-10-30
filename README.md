@@ -344,9 +344,10 @@ URL instead.
 
 Everything dropped still answers 200 with the reason in the body — a drop
 is a decision, not an error GitHub should retry, and the delivery log
-reads better when the only red entries are real ones. A delivery Discord
-rejected also answers 200: GitHub disables a webhook that collects enough
-5xx, so failures go to Sentry instead of onto the wire.
+reads better when the only red entries are real ones. A forwarded event
+answers 200 whatever Discord does — `forwarded`, `queued` (kept in the
+outbox, below) or `delivery_failed`: GitHub disables a webhook that collects
+enough 5xx, so failures go to Sentry instead of onto the wire.
 
 Two known gaps, both deliberate. Workflow runs off the default branch are
 dropped, so a pull request whose CI fails is silent until it merges. And
@@ -367,6 +368,61 @@ exception is the contract suite's end-of-run result — a message from the
 suite's pass/fail still reaches `runs`. The suite's unmarked check of the
 route is dropped like any other development message. Production forwards
 every message and ignores the field, which is never sent on to Discord.
+
+Every Discord outcome of `/v1/notify` answers 200, in the same
+`NotificationResult` shape:
+
+| `forwarded` | `reason` | Meaning |
+|---|---|---|
+| `true` | `forwarded` | posted to Discord |
+| `false` | `queued` | not posted yet: kept in the outbox and sent later |
+| `false` | `delivery_failed` | nothing can deliver it (no webhook for the channel) |
+
+Callers read the answer, not the channel, and treat `queued` as accepted.
+
+#### Delivery: the send budget and the outbox
+
+Decided in [ADR-0009](docs/decisions/ADR-0009-discord-delivery-outbox.md).
+Every send takes a token from a send budget held below Discord's limits:
+one token bucket per webhook, under its bucket, and one across all
+webhooks, under the rate at which Cloudflare starts refusing this service's
+address (error 1015). The shared transport's bucket headers and cooldowns
+still apply on top.
+
+Both routes try a send once, with a short wait. A message that cannot go
+out straight away — no token free, a rate limit holding the webhook, older
+messages for the channel still waiting, or a send Discord did not confirm —
+is written to the `discord_outbox` table and the route answers `queued`.
+The `errors` copy of a WARN-or-worse report goes the same way. A drainer
+started with the app sends what is kept, one channel's messages in order,
+leasing rows with `FOR UPDATE SKIP LOCKED`, so a restart loses nothing:
+
+- Embed-only messages waiting for one channel are packed, up to ten embeds
+  and 6000 characters, into one message under the webhook's own name; each
+  embed keeps its title and footer. A message with text content goes alone.
+- A message sent more than `DISCORD_LATE_AFTER_SECS` after it arrived
+  carries the time it arrived (an embed timestamp, or a line under the
+  text).
+- Messages at WARN, ERROR or CRITICAL, and anything for `errors`, never
+  expire. Anything else older than `DISCORD_OUTBOX_EXPIRE_HOURS` is deleted
+  unsent and counted: one message to `runs` says how many were not
+  delivered and the time range they covered, and the episode is reported to
+  Sentry once.
+- A send the transport did not confirm with no sign of a rate limit
+  (Discord refused it, or the post failed) is retried a few times, then
+  given up and logged; the transport reports each failure to Sentry.
+
+| Setting | Default | |
+|---|---|---|
+| `DISCORD_SEND_WAIT_SECS` | `1.0` | a route's (and the drainer's) wait on rate limits before keeping a message; GitHub deliveries wait `GITHUB_MAX_WAIT_SECS` |
+| `DISCORD_WEBHOOK_RATE_PER_SEC` / `DISCORD_WEBHOOK_BURST` | `2.0` / `4` | the per-webhook budget |
+| `DISCORD_GLOBAL_RATE_PER_SEC` / `DISCORD_GLOBAL_BURST` | `4.0` / `8` | the budget across every webhook |
+| `DISCORD_OUTBOX_EXPIRE_HOURS` | `6.0` | when an expiring message is counted instead of sent |
+| `DISCORD_LATE_AFTER_SECS` | `60.0` | when a sent message carries its original time |
+| `DISCORD_OUTBOX_POLL_SECS` | `2.0` | how often the drainer looks |
+
+The budget is process state: correct while one process sends. Webhook URLs
+are never logged.
 
 `GITHUB_NOTIFY_EVENTS` is the outer gate — the event types this service
 has a policy for at all — and defaults to the five in the table.

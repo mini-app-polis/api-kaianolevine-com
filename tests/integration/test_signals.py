@@ -665,7 +665,7 @@ async def test_a_failing_run_is_seen_even_when_discord_is_down(
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(500))
     resp = await client.post("/v1/notify", json=_report("ERROR"))
 
-    assert resp.status_code == 502
+    assert resp.json()["data"]["reason"] == "queued"
     assert await _streaks(db_session) == [(1, 0, False, False)]
 
 

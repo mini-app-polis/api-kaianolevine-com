@@ -546,14 +546,17 @@ async def test_github_deliveries_wait_less_than_githubs_timeout(
 @respx.mock
 @pytest.mark.asyncio
 async def test_answers_200_when_discord_is_down(client: AsyncClient) -> None:
-    """A Discord outage must not become a 5xx GitHub disables the webhook over."""
+    """A Discord outage must not become a 5xx GitHub disables the webhook over.
+
+    The send was not confirmed, so the event is kept and retried.
+    """
     respx.post(DISCORD_GITHUB_URL).mock(return_value=Response(500, text="nope"))
     resp = await _post(client, _push(), "push")
 
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["forwarded"] is False
-    assert data["reason"] == "delivery_failed"
+    assert data["reason"] == "queued"
 
 
 # ---------------------------------------------------------------------------
@@ -602,14 +605,36 @@ async def test_notify_rejects_empty_message(client: AsyncClient) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_notify_reports_delivery_failure(client: AsyncClient) -> None:
-    """First-party callers get the truth: a rejected send is a 502, not a 200."""
+async def test_notify_keeps_an_unconfirmed_send(client: AsyncClient) -> None:
+    """A send Discord did not confirm is a 200, kept to be retried, never a 502."""
     respx.post(DISCORD_URL).mock(return_value=Response(400, text="bad embed"))
 
     resp = await client.post("/v1/notify", json={"content": "x"})
 
-    assert resp.status_code == 502
-    assert resp.json()["error"]["code"] == "notify_failed"
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_notify_with_no_webhook_answers_delivery_failed(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing can deliver it: a 200 saying so, and nothing kept."""
+    for name in (
+        "DISCORD_WEBHOOK_URL",
+        "DISCORD_WEBHOOK_URL_RUNS",
+        "DISCORD_WEBHOOK_URL_ERRORS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    resp = await client.post("/v1/notify", json={"content": "x"})
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["forwarded"] is False
+    assert data["reason"] == "delivery_failed"
 
 
 # ---------------------------------------------------------------------------
