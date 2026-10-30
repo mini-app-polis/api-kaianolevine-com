@@ -150,6 +150,27 @@ class KeyUse(BaseModel):
     )
 
 
+class TaskSweepRequest(BaseModel):
+    """What a sweep asked for on demand should do beyond its schedule.
+
+    No body, or an empty one, is the sweep the hourly schedule sends.
+    ``groom`` makes this sweep the one for task-manager-cog's
+    ``GROOM_TIMES``, ``agents`` the one for its ``AGENT_TIMES``, whatever the
+    time of day. Neither turns on what is off or raises a cap.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    groom: bool = Field(
+        default=False,
+        description="Send tasks for grooming in this sweep, whatever the time.",
+    )
+    agents: bool = Field(
+        default=False,
+        description="Dispatch agents in this sweep, whatever the time.",
+    )
+
+
 class TaskSweepAccepted(BaseModel):
     """The sweep is on the task manager's queue. Nothing has run yet."""
 

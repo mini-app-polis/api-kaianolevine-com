@@ -193,6 +193,18 @@ MACHINES: tuple[Machine, ...] = (
         roles=("wiki-operator", "notifier"),
         notes="POST /v1/wcs/wiki/admin/jobs (rebuild_every_page) from the deploy job.",
     ),
+    # task-manager-cog's sweep-now workflow, run by hand from the Actions
+    # tab, asks for a sweep of the board now. Its key is a repository-level
+    # GitHub secret on task-manager-cog (TASK_MANAGER_SWEEP_API_KEY), like
+    # wiki-curator-deploy's, and it holds sweep-requester and nothing else of
+    # the board's: it cannot ask for, comment on, move or read a task. A
+    # sweep asked for this way is held to every switch and spending cap the
+    # scheduled one is.
+    Machine(
+        name="task-manager-sweep",
+        roles=("sweep-requester", "notifier"),
+        notes="POST /v1/tasks/sweeps from task-manager-cog's sweep-now workflow.",
+    ),
     # task-manager-cog is the one writer to the task board, which is Asana,
     # reached with its own token. Through this API it writes run reports,
     # keeps its grooming records between sweeps, and records the agent runs
@@ -292,12 +304,18 @@ MACHINES: tuple[Machine, ...] = (
     # (MINI-) here rather than in Asana, so task-manager-cog mints their ids
     # like any other source's. It owns the manual source and no other, and
     # holds task-filer, which can ask for a task and do nothing else: it
-    # cannot comment on, move or read one. Like owner-console it holds no
-    # notifier; a session has no run report to post.
+    # cannot comment on, move or read one. It also holds sweep-requester, so
+    # the owner can ask for a sweep of the board now (request-sweep); a sweep
+    # is held to every switch and spending cap the scheduled one is. Like
+    # owner-console it holds no notifier; a session has no run report to
+    # post.
     Machine(
         name="claude-session",
-        roles=("task-filer",),
-        notes="POST /v1/tasks (a manual task, from a Claude session).",
+        roles=("task-filer", "sweep-requester"),
+        notes=(
+            "POST /v1/tasks (a manual task, from a Claude session); POST "
+            "/v1/tasks/sweeps (a sweep of the board now)."
+        ),
         task_sources=("manual",),
     ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the

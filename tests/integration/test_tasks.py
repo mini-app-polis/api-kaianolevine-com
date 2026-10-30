@@ -200,6 +200,43 @@ async def test_a_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None
     assert response.status_code == 202, response.text
     assert response.json()["data"] == {"accepted": True, "message_id": "m-7"}
     dispatched.assert_awaited_once()
+    # No body is the schedule's sweep: no flags.
+    assert dispatched.await_args.kwargs["groom"] is False
+    assert dispatched.await_args.kwargs["agents"] is False
+
+
+@pytest.mark.parametrize(
+    ("body", "groom", "agents"),
+    [
+        ({}, False, False),
+        ({"groom": True}, True, False),
+        ({"agents": True}, False, True),
+        ({"groom": True, "agents": True}, True, True),
+    ],
+)
+async def test_a_sweeps_flags_reach_the_dispatcher(
+    client, monkeypatch, body, groom, agents
+) -> None:
+    _settings(monkeypatch)
+    with patch.object(
+        dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-8"})
+    ) as dispatched:
+        response = await client.post("/v1/tasks/sweeps", json=body)
+
+    assert response.status_code == 202, response.text
+    assert dispatched.await_args.kwargs["groom"] is groom
+    assert dispatched.await_args.kwargs["agents"] is agents
+
+
+async def test_a_sweep_body_with_an_unknown_field_is_refused(
+    client, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    with patch.object(dispatch, "dispatch_sweep", AsyncMock()) as dispatched:
+        response = await client.post("/v1/tasks/sweeps", json={"limit": 50})
+
+    assert response.status_code == 422
+    dispatched.assert_not_awaited()
 
 
 async def test_a_dropped_sweep_is_a_502_not_a_202(client, monkeypatch) -> None:
@@ -289,6 +326,30 @@ async def test_a_sweep_goes_to_the_task_managers_queue(monkeypatch) -> None:
     assert sent["MessageBody"] == '{"type": "task.sweep", "version": 1}'
     assert json.loads(sent["MessageBody"]) == {"type": "task.sweep", "version": 1}
     # What task-manager-cog's worker reads it as.
+    assert isinstance(
+        parse_message(sent["MessageBody"], TaskSweepMessage), TaskSweepMessage
+    )
+
+
+@pytest.mark.parametrize(
+    ("groom", "agents"), [(True, False), (False, True), (True, True)]
+)
+async def test_a_flagged_sweep_carries_both_flags(monkeypatch, groom, agents) -> None:
+    """Either flag adds a payload with both; the worker reads it as a sweep."""
+    settings = _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_sweep(settings=settings, groom=groom, agents=agents)
+
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["MessageGroupId"] == "task-manager"
+    assert json.loads(sent["MessageBody"]) == {
+        "type": "task.sweep",
+        "version": 1,
+        "payload": {"groom": groom, "agents": agents},
+    }
     assert isinstance(
         parse_message(sent["MessageBody"], TaskSweepMessage), TaskSweepMessage
     )
@@ -484,7 +545,7 @@ async def declared_machine(client, db_session: AsyncSession, monkeypatch):
 async def test_the_claude_session_owns_manual_and_can_only_file() -> None:
     session = identity_registry.declared("claude-session")
     assert session is not None
-    assert session.roles == ("task-filer",)
+    assert session.roles == ("task-filer", "sweep-requester")
     assert session.task_sources == ("manual",)
     assert session.key_env_var == "CLAUDE_SESSION_API_KEY"
     assert not session.development_only
@@ -516,11 +577,28 @@ async def test_the_claude_session_may_file_under_no_other_source(
     dispatched.assert_not_awaited()
 
 
-async def test_the_claude_session_can_do_nothing_but_file(declared_machine) -> None:
+async def test_the_claude_session_asks_for_a_sweep(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    session = declared_machine("claude-session")
+    with patch.object(
+        dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-2"})
+    ) as dispatched:
+        response = await session.post(
+            "/v1/tasks/sweeps", json={"groom": True, "agents": True}
+        )
+    assert response.status_code == 202, response.text
+    assert dispatched.await_args.kwargs["groom"] is True
+    assert dispatched.await_args.kwargs["agents"] is True
+
+
+async def test_the_claude_session_can_do_nothing_but_file_and_sweep(
+    declared_machine,
+) -> None:
     session = declared_machine("claude-session")
     update = {"external_id": MANUAL["external_id"], "comment": "done"}
     assert (await session.post("/v1/tasks/updates", json=update)).status_code == 403
-    assert (await session.post("/v1/tasks/sweeps")).status_code == 403
     assert (await session.get("/v1/tasks/groomings")).status_code == 403
     assert (
         await session.post("/v1/notify", json={"content": "hello"})
