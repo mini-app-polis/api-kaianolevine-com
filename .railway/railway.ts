@@ -152,6 +152,9 @@ export default defineRailway((ctx) => {
       DOPPLER_CONFIG: preserve(),
       DOPPLER_ENVIRONMENT: preserve(),
       DOPPLER_PROJECT: preserve(),
+      // The names whose values the startup settings log may show; Doppler
+      // writes it from mini-app-polis/infra, and mini_app_polis reads it.
+      SETTINGS_ALLOWLIST: preserve(),
       DATABASE_URL: preserve(),
       // OPS-002: the schema-owning role's connection, read by
       // scripts/apply_migrations.py. Like DATABASE_URL, a database URL.
