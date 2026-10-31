@@ -1,3 +1,15 @@
+# [2.51.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.50.1...v2.51.0) (2026-10-31)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.8.0 ([e6eebfc](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e6eebfcb721a1abf01324c5ad3bd40df42aa48f4))
+
+
+### Features
+
+* **startup:** log effective settings once at startup, with values only for allowlisted names ([928a77f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/928a77f825eb52608aafd3ce9f9e9be6ce4e4d04))
+
 ## [2.50.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.50.0...v2.50.1) (2026-10-31)
 
 
