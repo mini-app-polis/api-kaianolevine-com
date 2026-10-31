@@ -240,6 +240,27 @@ async def settle_deliveries() -> AsyncIterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def post_changes_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each request's change summary is posted on its own, straight away.
+
+    The shared feed gathers one caller's writes to one route for
+    ``ActivityConfig.group_seconds`` (a minute by default) before posting.
+    Its timer is an in-flight delivery, so every test that drains its
+    deliveries after a write would wait out the whole window.
+    """
+    import dataclasses
+
+    from kaianolevine_api.services import activity
+
+    build = activity._config
+    monkeypatch.setattr(
+        activity,
+        "_config",
+        lambda settings: dataclasses.replace(build(settings), group_seconds=0),
+    )
+
+
+@pytest.fixture(autouse=True)
 def clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield
