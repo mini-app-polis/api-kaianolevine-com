@@ -8,6 +8,11 @@ migration that drifts from the models fails here instead of in deploy.
 TEST_DATABASE_URL names the database. It must be local and end in _test
 (TEST-009): the session fixture drops its public schema, and every test
 empties its tables.
+
+Every route the app registers is called by some test here (TEST-018): a
+run of the whole suite fails on a route no test calls, and the route
+ledger checks nothing under pytest-xdist, so run the suite in one process
+for that check.
 """
 
 from __future__ import annotations
@@ -110,6 +115,7 @@ from identity.store import (  # noqa: E402
     RoleScope,
 )
 from identity.types import VerifiedSubject  # noqa: E402
+from mini_app_polis.testing import RouteLedger  # noqa: E402
 
 from kaianolevine_api import auth as auth_mod  # noqa: E402
 from kaianolevine_api.config import get_settings  # noqa: E402
@@ -566,3 +572,12 @@ def role_client(
             auth_mod.verify_bearer = original
 
     return make
+
+
+# --- the route ledger (TEST-018) ---------------------------------------------
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Every route the app registers is called by some test here; a run of
+    the whole integration suite fails otherwise (mini_app_polis.testing)."""
+    RouteLedger(app, suite_dir=Path(__file__).parent).register(config)

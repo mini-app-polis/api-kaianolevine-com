@@ -107,16 +107,17 @@ uv run pytest tests/unit
 
 # All tests — integration tests need a local Postgres (with pgvector)
 # and a database whose name ends in _test; its schema is rebuilt from
-# migrations/ on every run.
+# migrations/ on every run. A run of the whole integration suite also
+# fails on any route no test calls (TEST-018, the route ledger).
 createdb kaianolevine_test
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kaianolevine_test uv run pytest
 
 # With coverage detail
 uv run pytest --cov=src --cov-report=term-missing
 
-# In parallel, as CI runs it: each pytest-xdist worker builds its own
-# database beside TEST_DATABASE_URL's (kaianolevine_gw0_test, ...), so the
-# role needs CREATEDB
+# In parallel: each pytest-xdist worker builds its own database beside
+# TEST_DATABASE_URL's (kaianolevine_gw0_test, ...), so the role needs
+# CREATEDB. The route ledger checks nothing in a parallel run.
 uv run pytest -n auto
 ```
 

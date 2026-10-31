@@ -1305,7 +1305,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "miniapppolis-common-utils" },
+    { name = "miniapppolis-common-utils", extra = ["testing"] },
     { name = "miniapppolis-identity", extra = ["store"] },
     { name = "openai" },
     { name = "pgvector" },
@@ -1340,7 +1340,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44.0.1,<51.0" },
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
-    { name = "miniapppolis-common-utils", specifier = ">=7.6.0,<8" },
+    { name = "miniapppolis-common-utils", extras = ["testing"], specifier = ">=7.8.0,<8" },
     { name = "miniapppolis-identity", extras = ["store"], specifier = ">=2.2.0,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.2" },
     { name = "openai", specifier = ">=1.40,<4.0" },
@@ -1502,6 +1502,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d2/ae/fd923c3d1c37ce249714f17ec79d2c71b7a3f4a6fd983b5c87fa94150cfd/miniapppolis_common_utils-7.8.0.tar.gz", hash = "sha256:bc9447766fd9c1487263a1dc76fc0bcbb2017423e11ab76963195bbc8190b0d0", size = 490701, upload-time = "2026-10-31T17:12:03.403Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/5b/20799fbe0bfd00a054ed030588807a4fc5dbfdcc2685a591aa013df20275/miniapppolis_common_utils-7.8.0-py3-none-any.whl", hash = "sha256:93134c1c1b7092bc4aa44a6992d8fc6356b11bf845751b5365b309b54e23d70b", size = 223633, upload-time = "2026-10-31T17:12:01.588Z" },
+]
+
+[package.optional-dependencies]
+testing = [
+    { name = "fastapi" },
 ]
 
 [[package]]
