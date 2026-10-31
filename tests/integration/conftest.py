@@ -214,11 +214,6 @@ def reset_discord_limits() -> Iterator[None]:
     transport.reset_cooldowns()
 
 
-#: How long a test's leftover deliveries get to finish before they are
-#: cancelled.
-_SETTLE_SECS = 2.0
-
-
 @pytest.fixture(autouse=True)
 async def settle_deliveries() -> AsyncIterator[None]:
     """A test's background deliveries end before the next test starts.
@@ -227,23 +222,21 @@ async def settle_deliveries() -> AsyncIterator[None]:
     fire-and-forget. Left in flight, they land in whichever test runs next:
     inside its respx routes and after its database reset.
 
-    Bounded: a post no respx route catches goes to the dummy webhook over
-    the real network, one at a time behind the transport's per-webhook
-    lock, each up to HTTP_CLIENT_TIMEOUT_SECS. Waiting those out holds
-    every test that writes. Past _SETTLE_SECS whatever is left is
-    cancelled, which keeps it out of the next test just the same.
+    Cancelled, not awaited: a test that asserts on a delivery drains it
+    itself, so whatever is still in flight here is something no test reads.
+    Waiting it out costs time and nothing else: a post no respx route
+    catches goes to the dummy webhook over the real network, one at a time
+    behind the transport's per-webhook lock, each up to
+    HTTP_CLIENT_TIMEOUT_SECS.
     """
-    from mini_app_polis.activity import _in_flight, wait_for_deliveries
+    from mini_app_polis.activity import _in_flight
 
     yield
-    try:
-        await asyncio.wait_for(wait_for_deliveries(), _SETTLE_SECS)
-    except TimeoutError:
-        while _in_flight:
-            pending = list(_in_flight)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+    while _in_flight:
+        pending = list(_in_flight)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 @pytest.fixture(autouse=True)
