@@ -214,6 +214,20 @@ def reset_discord_limits() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+async def settle_deliveries() -> AsyncIterator[None]:
+    """A test's background deliveries finish before the next test starts.
+
+    Discord posts, change bursts and fault-signal writes are dispatched
+    fire-and-forget. Left in flight, they land in whichever test runs next:
+    inside its respx routes and after its database reset.
+    """
+    from mini_app_polis.activity import wait_for_deliveries
+
+    yield
+    await wait_for_deliveries()
+
+
+@pytest.fixture(autouse=True)
 def clear_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield
