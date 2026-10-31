@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from mini_app_polis.environment import log_settings
 from mini_app_polis.logger import (
     LOG_FAILURE,
     LOG_START,
@@ -94,6 +95,8 @@ async def lifespan(_app: FastAPI):
             f"sentry={'on' if sentry_on else 'off'})",
         )
     )
+    # One line per setting; a value only for names on SETTINGS_ALLOWLIST.
+    log_settings(settings)
     await _reconcile_identity_registry()
     # Before /health answers, so no visitor meets an empty status snapshot.
     await github_dashboard.warm(settings)
