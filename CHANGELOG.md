@@ -1,3 +1,11 @@
+## [2.50.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.50.0...v2.50.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.7.0 ([b8aa1b8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b8aa1b86dca5a301237ed4df2faf5ea54d32f8e6))
+* **deps:** patch vulnerable dependencies (pyasn1) ([ddccf29](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ddccf291264678517ffef03e0f02601d3fa1820d))
+
 # [2.50.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.49.1...v2.50.0) (2026-10-30)
 
 
