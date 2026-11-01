@@ -1,3 +1,10 @@
+## [2.51.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.51.0...v2.51.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.8.1 ([d9519d0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d9519d06d7f924d3621e60981eb4f8afc439dc91))
+
 # [2.51.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.50.1...v2.51.0) (2026-10-31)
 
 
