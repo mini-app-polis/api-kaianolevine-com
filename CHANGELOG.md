@@ -1,3 +1,12 @@
+## [2.51.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.51.1...v2.51.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deps:** bump anthropic from 1.15.0 to 2.3.0 in the majors group ([b86a25f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b86a25f4cd1dcb9cdde76544f8c15bd07696af71))
+* **deps:** bump miniapppolis-identity to 2.3.1 ([eb58cf6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/eb58cf62edf1e3c7c837323d3614009328e121a6))
+* **deps:** bump the minor-and-patch group with 5 updates ([37bdd8c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/37bdd8c4b1bcf1f545bffd1495f3e6793c762677))
+
 ## [2.51.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.51.0...v2.51.1) (2026-11-01)
 
 
