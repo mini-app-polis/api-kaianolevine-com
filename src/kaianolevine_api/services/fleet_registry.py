@@ -16,7 +16,7 @@ name, loses ``monorepo_root`` and the workspace ``package.json``, and
 posts the same finding once per app. That failure looks like a clean run
 from the outside, which is the shape this fleet has been bitten by most.
 
-**Ported from evaluator-cog's ``_fleet_events``, deliberately.** Both
+**Mirrors evaluator-cog's ``_fleet_events``, deliberately.** Both
 exist while the sweep is still the proven path, and two implementations
 of the same grouping that drift apart would produce two different
 answers to "what is the fleet" with nothing to say which is right. When
