@@ -14,3 +14,25 @@ exemptions:
 
   - rule: API-006
     reason: "WcsQaEvalRun is an append-only operator-internal table: it captures one row per (run_id, question_id) from the WCS Q&A agent's eval harness — agent answer, cited sources, judge score, judge reasoning, tool trace. Rows are produced by the operator-run eval suite (not by end users), and an eval run is evidence about agent behaviour rather than per-tenant content. The owner_id of the data the agent retrieved during the eval is preserved inside the tool_trace JSON, not on the row identity; adding an owner_id column would imply per-user partitioning that the harness does not model. Documented exemption per the API-006 remediation's operator-internal-table path. Revisit when/if the eval harness gains a per-tenant mode and rows become scoped to a single owner's content set."
+    paths: [src/kaianolevine_api/models.py]
+    models: [WcsQaEvalRun]
+
+  - rule: API-006
+    reason: "Operator bookkeeping, not anyone's content: dispatch claims that stop a watcher queuing the same Drive file twice, sent-once Spotify token reminders, detected-problem streaks, and published standards catalog versions. The fleet writes and reads these for itself; no user owns a row."
+    paths: [src/kaianolevine_api/models.py]
+    models: [DispatchClaim, SpotifyTokenReminder, SignalStreak, StandardsCatalog]
+
+  - rule: API-006
+    reason: "The shared WCS knowledge graph built from lesson sources: canonical people, entities, their aliases, definitions and relations, and the per-source extractions, attributions and references they come from. It is shared vocabulary rather than per-user content; access to what a source says is scoped through the source (wcs_sources.owner_id and its grants), not by a column on each derived row."
+    paths: [src/kaianolevine_api/models.py]
+    models: [WcsInstructor, WcsInstructorAlias, WcsSourceExtraction, WcsEntity, WcsEntityAlias, WcsEntityDefinition, WcsEntityRelation, WcsSourceAttribution, WcsSourceReference, WcsDrillPurpose, WcsTechniqueRequirement]
+
+  - rule: API-006
+    reason: "Operator curation of the knowledge graph: global or per-source name, attribution and metadata corrections, and manual additions that no extraction produced. created_by records who made the fix for audit; the fix applies to everyone, so no user owns the row."
+    paths: [src/kaianolevine_api/models.py]
+    models: [WcsNameCorrection, WcsAttributionCorrection, WcsSourceMetadataCorrection, WcsAttributionAddition, WcsDrillPurposeAddition, WcsTechniqueRequirementAddition, WcsEntityRelationAddition]
+
+  - rule: API-006
+    reason: "The WCS wiki's build state, written by the curator cog: linker statements and references, facets, prose and its revisions, the materialized pages, their revisions and embeddings, and thin-entity notes. The wiki is one public site built from the shared knowledge graph; no user owns a page."
+    paths: [src/kaianolevine_api/models.py]
+    models: [WcsWikiStateMeta, WcsWikiStatement, WcsWikiReference, WcsWikiFacet, WcsWikiProse, WcsWikiProseRevision, WcsWikiPageRow, WcsWikiPageEmbedding, WcsWikiPageRevisionRow, WcsWikiThinRow]
