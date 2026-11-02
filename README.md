@@ -225,6 +225,9 @@ Required environment variables:
   under the `manual` source) and to ask for a sweep of the board now
   (`POST /v1/tasks/sweeps`). It holds only the `task-filer` and
   `sweep-requester` roles.
+- `INFRA_APPLY_API_KEY` — optional; the `infra-apply` machine's key, used
+  by the infra apply job to file a task (`POST /v1/tasks` under the
+  `infra-apply` source). It holds only the `task-filer` role.
 
 Every variable the service reads, auth's included, is listed with whether it
 is required in [`.env.example`](.env.example); defaults are in

@@ -318,6 +318,15 @@ MACHINES: tuple[Machine, ...] = (
         ),
         task_sources=("manual",),
     ),
+    # The infra apply job files a task when an apply fails or drifts. It owns
+    # the infra-apply source and no other, and holds task-filer, which can ask
+    # for a task and do nothing else. No notifier: a task is its only report.
+    Machine(
+        name="infra-apply",
+        roles=("task-filer",),
+        notes="POST /v1/tasks (a task for a failed or drifted apply).",
+        task_sources=("infra-apply",),
+    ),
     # The contract suite in common-python-utils (ecosystem-standards ADR-0012, TEST-016) calls the
     # endpoints the fleet calls, as the fleet does, against the development
     # API. Its key is set in development configuration only (CD-033), so in
