@@ -1,3 +1,17 @@
+# [2.52.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.51.2...v2.52.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* API-006 ([667e9a1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/667e9a1c900c6d46266868724e311baf87e06018))
+* **deps:** bump miniapppolis-common-utils to 7.8.3 ([60d48b8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/60d48b85d18cf9e420a2cc446ab795a8e148a15a))
+* **deps:** bump miniapppolis-common-utils to 7.9.0 ([fca214d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fca214d20488b39c973b2813a06ce7c8800ec82e))
+
+
+### Features
+
+* **identity:** register infra-apply machine that may only create tasks ([403539b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/403539b66646da1cf0bcd1d8cafed97ab0a46630))
+
 ## [2.51.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.51.1...v2.51.2) (2026-11-01)
 
 
