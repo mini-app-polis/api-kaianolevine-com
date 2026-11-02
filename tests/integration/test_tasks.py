@@ -605,6 +605,61 @@ async def test_the_claude_session_can_do_nothing_but_file_and_sweep(
     ).status_code == 403
 
 
+# ── the infra apply job files tasks and does nothing else ────────────────
+
+INFRA_APPLY = {
+    "source": "infra-apply",
+    "external_id": "infra-apply.2026-11-02-drift-1",
+    "draft": {"title": "An apply drifted"},
+}
+
+
+async def test_infra_apply_owns_its_source_and_holds_only_task_filer() -> None:
+    machine = identity_registry.declared("infra-apply")
+    assert machine is not None
+    assert machine.roles == ("task-filer",)
+    assert machine.task_sources == ("infra-apply",)
+    assert machine.key_env_var == "INFRA_APPLY_API_KEY"
+    assert not machine.development_only
+
+
+async def test_infra_apply_files_a_task_for_its_source(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    apply_job = declared_machine("infra-apply")
+    with patch.object(
+        dispatch, "dispatch_task", AsyncMock(return_value={"message_id": "m-3"})
+    ) as dispatched:
+        response = await apply_job.post("/v1/tasks", json=INFRA_APPLY)
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["source"] == "infra-apply"
+    dispatched.assert_awaited_once()
+
+
+async def test_infra_apply_may_not_file_for_another_source(
+    declared_machine, monkeypatch
+) -> None:
+    _settings(monkeypatch)
+    apply_job = declared_machine("infra-apply")
+    with patch.object(dispatch, "dispatch_task", AsyncMock()) as dispatched:
+        response = await apply_job.post("/v1/tasks", json=MANUAL)
+    assert response.status_code == 403
+    assert "own sources (infra-apply)" in response.json()["error"]["message"]
+    dispatched.assert_not_awaited()
+
+
+async def test_infra_apply_can_reach_no_other_route(declared_machine) -> None:
+    apply_job = declared_machine("infra-apply")
+    update = {"external_id": INFRA_APPLY["external_id"], "comment": "done"}
+    assert (await apply_job.post("/v1/tasks/updates", json=update)).status_code == 403
+    assert (await apply_job.post("/v1/tasks/sweeps")).status_code == 403
+    assert (await apply_job.get("/v1/tasks/groomings")).status_code == 403
+    assert (
+        await apply_job.post("/v1/notify", json={"content": "hello"})
+    ).status_code == 403
+
+
 async def test_no_other_machine_may_file_a_manual_task(
     declared_machine, monkeypatch
 ) -> None:
