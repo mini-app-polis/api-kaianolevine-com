@@ -3,6 +3,7 @@
   "private": true,
   "description": "The Railway IaC SDK that the Railway CLI evaluates railway.ts with. Not part of the Python package.",
   "type": "module",
+  "packageManager": "pnpm@9.0.0",
   "dependencies": {
     "railway": "3.16.0"
   }
