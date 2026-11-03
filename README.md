@@ -301,7 +301,7 @@ because that is the last place that knows what a message means:
 
 | Channel | What lands there |
 |---|---|
-| `errors` | failed CI on the default branch, `/v1/notify` run reports declaring WARN or worse (copied from `runs`), jobs dropped before reaching a queue, the last Spotify token-expiry reminder, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
+| `errors` | failed CI on the default branch, `/v1/notify` run reports declaring ERROR or worse (copied from `runs`; a WARN stays in `runs`), jobs dropped before reaching a queue, the last Spotify token-expiry reminder, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
 | `activity` | the running list of committed data changes, from the request middleware |
 | `runs` | cog run reports through `/v1/notify`, every severity (outside production, only the contract suite's result) |
 | `default` | everything else — pushes, pull requests, issues, releases, green CI |
@@ -399,7 +399,7 @@ Both routes try a send once, with a short wait. A message that cannot go
 out straight away — no token free, a rate limit holding the webhook, older
 messages for the channel still waiting, or a post that failed (it raised, or
 Discord answered 5xx) — is written to the `discord_outbox` table and the
-route answers `queued`. The `errors` copy of a WARN-or-worse report goes the
+route answers `queued`. The `errors` copy of an ERROR-or-worse report goes the
 same way. A drainer started with the app sends what is kept, one channel's
 messages in order, leasing rows with `FOR UPDATE SKIP LOCKED`, so a restart
 loses nothing:
