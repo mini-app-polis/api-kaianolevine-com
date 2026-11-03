@@ -219,7 +219,8 @@ async def test_errors_and_run_failures_are_never_expired(
         assert resp.json()["data"]["reason"] == "queued"
     await client.post("/v1/notify", json={"content": "plain"})
     assert len(await _rows(maker, "runs")) == 5
-    assert len(await _rows(maker, "errors")) == 3
+    # ERROR and CRITICAL are copied to errors; a WARN stays in runs.
+    assert len(await _rows(maker, "errors")) == 2
 
     # A week later, still held.
     clocks.wall += dt.timedelta(days=7)
@@ -233,7 +234,7 @@ async def test_errors_and_run_failures_are_never_expired(
     ]
     summary = [r for r in kept if r["kind"] == "expired"]
     assert len(summary) == 1 and summary[0]["payload"]["count"] == 2
-    assert len(await _rows(maker, "errors")) == 3
+    assert len(await _rows(maker, "errors")) == 2
     assert len([m for m in sentry if "outbox" in m]) == 1
 
     # More expiring while the summary waits joins it; Sentry hears once.
@@ -250,7 +251,7 @@ async def test_errors_and_run_failures_are_never_expired(
     assert await _rows(maker) == []
     # The global hold kept the errors copies off the wire; they go packed.
     assert errors.call_count == 1
-    assert len(_body(errors.calls.last)["embeds"]) == 3
+    assert len(_body(errors.calls.last)["embeds"]) == 2
     titles = [e["title"] for c in runs.calls[1:] for e in _body(c).get("embeds", [])]
     assert "3 messages not delivered" in titles
     assert {"db-ops · WARN", "db-ops · ERROR", "db-ops · CRITICAL"} <= set(titles)
