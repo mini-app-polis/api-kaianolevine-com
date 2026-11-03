@@ -1,3 +1,11 @@
+## [2.52.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.52.1...v2.52.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **notify:** copy only ERROR and CRITICAL run reports to the errors channel, not WARN ([ced6053](https://github.com/mini-app-polis/api-kaianolevine-com/commit/ced6053aec14ef0f22d889ee437ef710b5ed7fdd))
+* **notify:** copy only ERROR and CRITICAL run reports to the errors channel, not WARN ([8d5193c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8d5193c3dd64bcaafea91f926a6c39e0c821c2b9))
+
 ## [2.52.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.52.0...v2.52.1) (2026-11-03)
 
 
