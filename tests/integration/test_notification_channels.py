@@ -281,7 +281,7 @@ def _report(severity: str) -> dict:
 
 @respx.mock
 @pytest.mark.asyncio
-@pytest.mark.parametrize("severity", ["WARN", "ERROR", "CRITICAL"])
+@pytest.mark.parametrize("severity", ["ERROR", "CRITICAL"])
 async def test_failing_run_reports_are_copied_to_errors(
     client: AsyncClient, channels, severity: str
 ) -> None:
@@ -298,13 +298,15 @@ async def test_failing_run_reports_are_copied_to_errors(
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_successful_run_reports_stay_in_runs(
-    client: AsyncClient, channels
+@pytest.mark.parametrize("severity", ["SUCCESS", "INFO", "WARN"])
+async def test_runs_that_did_not_fail_stay_in_runs(
+    client: AsyncClient, channels, severity: str
 ) -> None:
+    """A warning is worth reading in runs, not worth interrupting errors for."""
     runs = respx.post(RUNS_URL).mock(return_value=Response(204))
     errors = respx.post(ERRORS_URL).mock(return_value=Response(204))
 
-    resp = await client.post("/v1/notify", json=_report("SUCCESS"))
+    resp = await client.post("/v1/notify", json=_report(severity))
 
     assert resp.status_code == 200
     assert runs.called
@@ -320,7 +322,7 @@ async def test_a_failed_errors_copy_does_not_fail_the_report(
     respx.post(RUNS_URL).mock(return_value=Response(204))
     respx.post(ERRORS_URL).mock(return_value=Response(500))
 
-    resp = await client.post("/v1/notify", json=_report("WARN"))
+    resp = await client.post("/v1/notify", json=_report("ERROR"))
 
     assert resp.status_code == 200
 

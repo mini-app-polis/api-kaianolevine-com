@@ -2,9 +2,10 @@
 
 Two callers, two admission rules, and three channels between them: failed CI
 goes to ``errors``, cog run reports to ``runs``, everything else to
-``default``. A run report that says something went wrong (WARN or worse) is
+``default``. A run report that says something failed (ERROR or worse) is
 also copied to ``errors``, so ``runs`` stays the complete record and
-``errors`` is still the one channel to watch. ``services.discord`` resolves a
+``errors`` is still the one channel to watch. A WARN stays in ``runs``: it
+is worth reading, not worth being interrupted for. ``services.discord`` resolves a
 channel name to a webhook.
 
 ``POST /v1/webhooks/github`` is the org-level webhook for both GitHub orgs. It
@@ -532,10 +533,10 @@ async def _observe_ci(
 
 
 #: Run-report severities that are copied to the errors channel as well as
-#: posted to runs. SUCCESS and INFO stay in runs only.
-COPY_TO_ERRORS: frozenset[str] = frozenset({"WARN", "ERROR", "CRITICAL"})
+#: posted to runs. SUCCESS, INFO and WARN stay in runs only.
+COPY_TO_ERRORS: frozenset[str] = frozenset({"ERROR", "CRITICAL"})
 
-_REPORT_SEVERITIES: frozenset[str] = COPY_TO_ERRORS | {"SUCCESS", "INFO"}
+_REPORT_SEVERITIES: frozenset[str] = COPY_TO_ERRORS | {"SUCCESS", "INFO", "WARN"}
 
 
 def report_severity(payload: NotifyRequest) -> str | None:
@@ -586,7 +587,7 @@ def is_contract_suite_result(payload: NotifyRequest, principal: Principal) -> bo
         "message body (content and/or embeds) and posts it to the runs "
         "channel, whatever the severity — a cog's reports stay together so "
         "that channel is a complete record of the fleet's runs. A run report "
-        "whose footer declares WARN, ERROR or CRITICAL is also copied to the "
+        "whose footer declares ERROR or CRITICAL is also copied to the "
         "errors channel. A run that died too hard to report itself is caught "
         "by its own cog's backstop where it has one — a queue-fed Lambda "
         "cog's dead-letter-queue and queue-stalled alarms, or watcher-cog's "
