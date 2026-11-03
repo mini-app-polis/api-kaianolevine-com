@@ -90,3 +90,20 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci(deps)"
+
+  # The Railway config-as-code script's npm manifest (.railway/). Development
+  # tooling only, so chore(deps).
+  - package-ecosystem: "npm"
+    directory: "/.railway"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      railway:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
