@@ -1,0 +1,11 @@
+{
+  "repo": "api-kaianolevine-com",
+  "facts": {
+    "machine_principals": {
+      "value": 19,
+      "description": "Machine principals declared in the identity registry",
+      "source": "matches: src/kaianolevine_api/identity_registry.py /\\bMachine\\(/",
+      "as_of": "2026-11-04"
+    }
+  }
+}

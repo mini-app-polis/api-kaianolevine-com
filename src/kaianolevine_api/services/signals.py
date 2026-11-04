@@ -1,9 +1,9 @@
-"""Detected problems, held as streaks, escalated to tasks only when they stick.
+"""Detected problems, held as streaks, escalated to Issues only when they stick.
 
 The fleet sees its own failures: a CI run that failed, a cog run that
-crashed, a conformance finding, a burst of 5xx. Most heal on their own, so a
-task for each would bury the board. This module is the one place that decides
-which become tasks.
+crashed, a burst of 5xx. Most heal on their own, so an Issue for each would
+bury the repositories. This module is the one place that decides which are
+reported. None reaches the board: a person files a task from an Issue by hand.
 
 **A detector** turns an event this service already handles into a
 :class:`Signal`: its ``kind``, a stable ``key`` naming the problem, and
@@ -20,32 +20,33 @@ event of its own (a 5xx has no "and now it works") closes by a quiet window
 instead: a failure arriving after the window has passed with none closes the
 old streak and opens a new one. Nothing runs on a timer; the window is
 applied when the next failure arrives. A kind may have a
-remediation, tried before anything reaches the board: for CI, re-running the
+remediation, tried before anything is reported: for CI, re-running the
 failed jobs once. A remediation that cannot start escalates at once rather
 than leaving the streak to wait on a failure that may never come. A streak
 that recovers before escalating closes quietly and is only logged.
 
-**Escalating** is one task request to task-manager-cog, made once per streak:
-the external id is ``<kind>.<key>#<streak id>``, and the claim on the streak
-is atomic, so a delivery seen twice cannot ask twice. A request that does not
-land is reported, and the claim released for the next failure to retry.
+**Escalating** opens one GitHub Issue in the repository the problem is about
+(services.github_issues), once per streak: the claim on the streak is atomic,
+so a delivery seen twice cannot open twice, and the writer keeps one open
+Issue per kind and key. An Issue that cannot be opened is reported, and the
+claim released for the next failure to retry. Each further failure of an
+escalated streak comments on its Issue.
 
-**Recovering** an escalated streak asks task-manager-cog, through the same
-queue, to comment on the streak's task and move it to Review: the problem is
-gone, and a person confirms that and closes the task. A streak that closes by
-its kind's recovery event names that event and links it; one that closes by
-its quiet window says the window passed without a failure. The comment is
-built only from the streak and the event that closed it, so a redelivered copy
-is the same text and the task manager can skip it. A streak that never
-escalated has no task, and sends nothing. A request that does not land is
-reported, and the recovery stands: the task stays where it is for a person.
+**Recovering** an escalated streak comments on its Issue and closes it. A
+streak that closes by its kind's recovery event names that event and links
+it; one that closes by its quiet window says the window passed without a
+failure. A streak that never escalated has no Issue, and sends nothing. A
+close that does not land is reported, and the recovery stands: the Issue
+stays open for a person.
 
-**The task arrives ready.** A detector knows what the board's template asks
-for: where the problem is, the outcome that ends it (the check passing
-again), and what a fix must not do (silence it). So it says so, and the
-task passes the definition of ready as it lands rather than waiting on a
-paid grooming run that could add nothing the detector does not know. Every
-escalated task is sized ``S``: one thing that worked has stopped working.
+Streaks escalated before Issues were board tasks. Their recovery still asks
+task-manager-cog, through its queue, to comment on the task and move it to
+Review, where a person confirms the fix and closes it.
+
+**The Issue says what ends it.** A detector knows where the problem is, the
+outcome that ends it (the check passing again), and what a fix must not do
+(silence it), so the Issue says so, and a task filed from it needs nothing
+the detector already knew.
 """
 
 from __future__ import annotations
@@ -55,20 +56,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from mini_app_polis.api.contract import (
-    TaskCreateRequest,
-    TaskDraft,
-    TaskEffort,
-    TaskLink,
-    TaskSection,
-    TaskUpdateRequest,
-)
+from mini_app_polis.api.contract import TaskUpdateRequest
 from mini_app_polis.logger import get_logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from . import job_queue, task_dispatch
+from . import github_issues, job_queue, task_dispatch
 
 logger = get_logger()
 
@@ -79,22 +73,17 @@ State = Literal["failing", "recovered"]
 Outcome = Literal[
     "opened",  # a first failure, waiting under its kind's rule
     "bumped",  # a further failure of a streak already escalated or remediating
-    "remediating",  # a remediation was started instead of a task
-    "escalated",  # a task was requested
-    "dropped",  # a task request did not land; the next failure retries
+    "remediating",  # a remediation was started instead of an Issue
+    "escalated",  # an Issue was opened
+    "dropped",  # the Issue could not be opened; the next failure retries
     "recovered",  # an escalated streak closed
     "healed",  # a streak closed before it escalated
     "quiet",  # a recovery with no open streak
 ]
 
-# The contract's limits; detector text is cut to fit rather than refused.
-_TITLE_MAX = 500
+# GitHub's and the board's limits; detector text is cut to fit, not refused.
+_TITLE_MAX = 250
 _TEXT_MAX = 20_000
-_EXTERNAL_ID_MAX = 256
-_FIELD_MAX = 1000
-
-#: Every escalated task's size: one thing that worked has stopped working.
-EFFORT: TaskEffort = "S"
 
 #: The column a recovered streak's task moves to, for a person to confirm.
 REVIEW_SECTION = "Review"
@@ -108,12 +97,13 @@ class Signal:
     key: str
     state: State
     title: str
+    #: The repository the problem is about, by name; its Issue opens there.
     where: str | None = None
     link: str | None = None
     details: str | None = None
-    #: The template's ``Done when``: the observable outcome that ends it.
+    #: The observable outcome that ends it.
     done_when: str | None = None
-    #: The template's ``Constraints``: what a fix must not do.
+    #: What a fix must not do.
     constraints: str | None = None
     sections: tuple[tuple[str, str], ...] = ()
     #: Whether this event may be remediated (a re-run is pointless on a run
@@ -129,7 +119,7 @@ Remediation = Callable[[Signal, Settings], Awaitable[bool]]
 
 @dataclass(frozen=True)
 class Rule:
-    """When a kind's streak becomes a task."""
+    """When a kind's streak becomes an Issue."""
 
     #: Failures in one streak before it escalates.
     escalate_after: int = 1
@@ -145,75 +135,98 @@ def _cut(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
 
 
-def external_id_for(kind: str, key: str, streak_id: Any) -> str:
-    """The task's key: one task per streak, never two."""
-    suffix = f"#{streak_id}"
-    return _cut(f"{kind}.{key}", _EXTERNAL_ID_MAX - len(suffix)) + suffix
+def issue_repo_for(signal: Signal, settings: Settings) -> str | None:
+    """The repository, ``owner/name``, a signal's Issue opens in, or None.
+
+    A detector that knows the full name puts it in ``context`` (CI does);
+    one that names the repository alone is in ``SIGNAL_ISSUE_OWNER``.
+    """
+    full = signal.context.get("repo")
+    if isinstance(full, str) and "/" in full:
+        return full
+    if signal.where:
+        return f"{settings.SIGNAL_ISSUE_OWNER}/{signal.where}"
+    return None
 
 
-def request_for(
-    signal: Signal, *, external_id: str, failures: int, opened_at: dt.datetime
-) -> TaskCreateRequest:
-    """The task an escalated streak asks for."""
-    sections = [
-        TaskSection(label=label, text=_cut(text_, _TEXT_MAX))
-        for label, text_ in signal.sections
-        if text_
-    ]
-    sections.append(
-        TaskSection(
-            label="Streak",
-            text=f"{failures} failure(s) since {opened_at:%Y-%m-%d %H:%M} UTC",
-        )
+def issue_marker(signal: Signal) -> str:
+    """What names a streak's Issue: one open Issue per kind and key."""
+    return f"{signal.kind}/{signal.key}"
+
+
+def _https(link: str | None) -> str | None:
+    return link if link and link.startswith("https://") else None
+
+
+def issue_body(signal: Signal, *, failures: int, opened_at: dt.datetime) -> str:
+    """The body of the Issue an escalated streak opens."""
+    lines: list[str] = []
+    if signal.details:
+        lines += [signal.details, ""]
+    if signal.done_when:
+        lines.append(f"**Done when:** {signal.done_when}")
+    if signal.constraints:
+        lines.append(f"**Constraints:** {signal.constraints}")
+    lines += [f"**{label}:** {text_}" for label, text_ in signal.sections if text_]
+    lines.append(
+        f"**Streak:** {failures} failure(s) since {opened_at:%Y-%m-%d %H:%M} UTC"
     )
-    links = []
-    if signal.link and signal.link.startswith("https://"):
-        links.append(TaskLink(text="Latest failure", url=signal.link))
-    return TaskCreateRequest.model_validate(
-        {
-            "source": signal.kind,
-            "external_id": external_id,
-            "id": None,
-            "draft": TaskDraft(
-                title=_cut(signal.title, _TITLE_MAX),
-                where=_cut(signal.where, 200) if signal.where else None,
-                body=_cut(signal.details, _TEXT_MAX) if signal.details else None,
-                done_when=(
-                    _cut(signal.done_when, _FIELD_MAX) if signal.done_when else None
-                ),
-                constraints=(
-                    _cut(signal.constraints, _FIELD_MAX) if signal.constraints else None
-                ),
-                effort=EFFORT,
-                sections=sections,
-                links=links,
-                labels=[],
-                needs_review=False,
-                due_on=None,
-            ),
-        }
-    )
+    link = _https(signal.link)
+    if link:
+        lines.append(f"**Latest failure:** {link}")
+    return _cut("\n".join(lines), _TEXT_MAX)
+
+
+def failure_comment(signal: Signal, *, failures: int) -> str:
+    """The comment a further failure of an escalated streak posts."""
+    lines = [f"Failed again: {failures} failure(s) in this streak."]
+    if signal.details:
+        lines.append(signal.details)
+    link = _https(signal.link)
+    if link:
+        lines.append(link)
+    return _cut("\n".join(lines), _TEXT_MAX)
+
+
+def _recovered_lines(signal: Signal) -> list[str]:
+    lines = [f"Recovered: {signal.title}."]
+    if signal.details:
+        lines.append(signal.details)
+    link = _https(signal.link)
+    if link:
+        lines.append(link)
+    return lines
 
 
 def recovery_comment(signal: Signal) -> str:
     """The comment for a task whose streak the event ``signal`` closed."""
-    lines = [f"Recovered: {signal.title}."]
-    if signal.details:
-        lines.append(signal.details)
-    if signal.link and signal.link.startswith("https://"):
-        lines.append(signal.link)
+    lines = _recovered_lines(signal)
     lines.append("Moved to Review for a person to confirm the fix and close the task.")
     return _cut("\n".join(lines), _TEXT_MAX)
 
 
+def issue_recovery_comment(signal: Signal) -> str:
+    """The comment that closes an Issue whose streak ``signal`` closed."""
+    return _cut("\n".join(_recovered_lines(signal)), _TEXT_MAX)
+
+
+def _quiet_line(signal: Signal, window: dt.timedelta) -> str:
+    minutes = int(window.total_seconds() // 60)
+    return f"Recovered: {minutes} minutes passed without another {signal.key}."
+
+
 def quiet_comment(signal: Signal, window: dt.timedelta) -> str:
     """The comment for a task whose streak closed by its quiet window."""
-    minutes = int(window.total_seconds() // 60)
     return _cut(
-        f"Recovered: {minutes} minutes passed without another {signal.key}.\n"
+        f"{_quiet_line(signal, window)}\n"
         "Moved to Review for a person to confirm the fix and close the task.",
         _TEXT_MAX,
     )
+
+
+def issue_quiet_comment(signal: Signal, window: dt.timedelta) -> str:
+    """The comment that closes an Issue whose streak went quiet."""
+    return _quiet_line(signal, window)
 
 
 async def _request_review(
@@ -242,6 +255,67 @@ async def _request_review(
     return True
 
 
+async def _close_issue(
+    signal: Signal, repo: str, number: int, *, comment: str, settings: Settings
+) -> bool:
+    """Comment on the streak's Issue and close it. Never raises.
+
+    Returns whether it closed; one that did not is reported, and stays open
+    for a person.
+    """
+    try:
+        await github_issues.close(repo, number, body=comment, settings=settings)
+    except github_issues.IssueError as exc:
+        await job_queue.report_dropped(
+            f"could not close {repo}#{number}: {exc}",
+            label="signals",
+            heading="Recovery not sent",
+            settings=settings,
+        )
+        return False
+    logger.info("signals: %s %s closed %s#%d", signal.kind, signal.key, repo, number)
+    return True
+
+
+async def _comment_failure(
+    signal: Signal, repo: str, number: int, *, failures: int, settings: Settings
+) -> None:
+    """Tell the streak's Issue it failed again. Never raises; only logged."""
+    try:
+        await github_issues.comment(
+            repo,
+            number,
+            failure_comment(signal, failures=failures),
+            settings=settings,
+        )
+    except github_issues.IssueError as exc:
+        logger.warning("signals: no comment on %s#%d: %s", repo, number, exc)
+
+
+async def _closed(
+    signal: Signal,
+    *,
+    task_external_id: str | None,
+    issue_repo: str | None,
+    issue_number: int | None,
+    issue_comment: str,
+    task_comment: str,
+    settings: Settings,
+) -> None:
+    """Tell what an escalated streak made, an Issue or an older task, it closed."""
+    if issue_repo and issue_number is not None:
+        await _close_issue(
+            signal, issue_repo, issue_number, comment=issue_comment, settings=settings
+        )
+    elif task_external_id:
+        await _request_review(
+            signal,
+            external_id=task_external_id,
+            comment=task_comment,
+            settings=settings,
+        )
+
+
 async def _recover(
     session: AsyncSession, signal: Signal, *, settings: Settings
 ) -> Outcome:
@@ -251,7 +325,8 @@ async def _recover(
                 """
                 UPDATE signal_streaks SET closed_at = now()
                 WHERE kind = :kind AND key = :key AND closed_at IS NULL
-                RETURNING escalated_at, failures, task_external_id
+                RETURNING escalated_at, failures, task_external_id,
+                          issue_repo, issue_number
                 """
             ),
             {"kind": signal.kind, "key": signal.key},
@@ -260,23 +335,25 @@ async def _recover(
     await session.commit()
     if row is None:
         return "quiet"
-    escalated_at, failures, task_external_id = row
+    escalated_at, failures, task_external_id, issue_repo, issue_number = row
     if escalated_at is None:
         logger.info(
-            "signals: %s %s healed after %d failure(s); nothing reached the board",
+            "signals: %s %s healed after %d failure(s); nothing was reported",
             signal.kind,
             signal.key,
             failures,
         )
         return "healed"
     logger.info("signals: %s %s recovered", signal.kind, signal.key)
-    if task_external_id:
-        await _request_review(
-            signal,
-            external_id=task_external_id,
-            comment=recovery_comment(signal),
-            settings=settings,
-        )
+    await _closed(
+        signal,
+        task_external_id=task_external_id,
+        issue_repo=issue_repo,
+        issue_number=issue_number,
+        issue_comment=issue_recovery_comment(signal),
+        task_comment=recovery_comment(signal),
+        settings=settings,
+    )
     return "recovered"
 
 
@@ -299,7 +376,8 @@ async def _close_if_quiet(
                 SET closed_at = last_seen_at + make_interval(secs => :secs)
                 WHERE kind = :kind AND key = :key AND closed_at IS NULL
                   AND last_seen_at < now() - make_interval(secs => :secs)
-                RETURNING escalated_at, failures, task_external_id
+                RETURNING escalated_at, failures, task_external_id,
+                          issue_repo, issue_number
                 """
             ),
             {
@@ -312,19 +390,22 @@ async def _close_if_quiet(
     await session.commit()
     if row is None:
         return
-    escalated_at, failures, task_external_id = row
+    escalated_at, failures, task_external_id, issue_repo, issue_number = row
     logger.info(
         "signals: %s %s went quiet after %d failure(s)%s",
         signal.kind,
         signal.key,
         failures,
-        "" if escalated_at is not None else "; nothing reached the board",
+        "" if escalated_at is not None else "; nothing was reported",
     )
-    if escalated_at is not None and task_external_id:
-        await _request_review(
+    if escalated_at is not None:
+        await _closed(
             signal,
-            external_id=task_external_id,
-            comment=quiet_comment(signal, window),
+            task_external_id=task_external_id,
+            issue_repo=issue_repo,
+            issue_number=issue_number,
+            issue_comment=issue_quiet_comment(signal, window),
+            task_comment=quiet_comment(signal, window),
             settings=settings,
         )
 
@@ -338,47 +419,56 @@ async def _escalate(
     opened_at: dt.datetime,
     settings: Settings,
 ) -> Outcome:
-    external_id = external_id_for(signal.kind, signal.key, streak_id)
     claimed = (
         await session.execute(
             text(
                 """
-                UPDATE signal_streaks
-                SET escalated_at = now(), task_external_id = :external_id
+                UPDATE signal_streaks SET escalated_at = now()
                 WHERE id = :id AND escalated_at IS NULL
                 RETURNING id
                 """
             ),
-            {"id": streak_id, "external_id": external_id},
+            {"id": streak_id},
         )
     ).first()
     await session.commit()
     if claimed is None:
         return "bumped"
 
-    request = request_for(
-        signal, external_id=external_id, failures=failures, opened_at=opened_at
-    )
+    repo = issue_repo_for(signal, settings)
     try:
-        await task_dispatch.dispatch_task(request, settings=settings)
-    except task_dispatch.DispatchError as exc:
-        # Release the claim, so the next failure of this streak asks again.
+        if repo is None:
+            raise github_issues.IssueError("the signal names no repository")
+        issue = await github_issues.open_issue(
+            repo,
+            marker=issue_marker(signal),
+            title=_cut(signal.title, _TITLE_MAX),
+            body=issue_body(signal, failures=failures, opened_at=opened_at),
+            settings=settings,
+        )
+    except github_issues.IssueError as exc:
+        # Release the claim, so the next failure of this streak tries again.
         await session.execute(
-            text(
-                "UPDATE signal_streaks SET escalated_at = NULL, "
-                "task_external_id = NULL WHERE id = :id"
-            ),
+            text("UPDATE signal_streaks SET escalated_at = NULL WHERE id = :id"),
             {"id": streak_id},
         )
         await session.commit()
         await job_queue.report_dropped(
-            exc.detail or f"could not enqueue {external_id}",
+            f"could not open an Issue for {signal.kind} {signal.key}: {exc}",
             label="signals",
             heading="Signal not escalated",
             settings=settings,
         )
         return "dropped"
-    logger.info("signals: %s escalated as %s", signal.key, external_id)
+    await session.execute(
+        text(
+            "UPDATE signal_streaks SET issue_repo = :repo, issue_number = :number "
+            "WHERE id = :id"
+        ),
+        {"id": streak_id, "repo": issue.repo, "number": issue.number},
+    )
+    await session.commit()
+    logger.info("signals: %s escalated as %s#%d", signal.key, issue.repo, issue.number)
     return "escalated"
 
 
@@ -409,7 +499,8 @@ async def observe(
                               title = EXCLUDED.title,
                               link = EXCLUDED.link,
                               details = EXCLUDED.details
-                RETURNING id, failures, remediations, escalated_at, opened_at
+                RETURNING id, failures, remediations, escalated_at, opened_at,
+                          issue_repo, issue_number
                 """
             ),
             {
@@ -422,9 +513,21 @@ async def observe(
         )
     ).one()
     await session.commit()
-    streak_id, failures, remediations, escalated_at, opened_at = row
+    (
+        streak_id,
+        failures,
+        remediations,
+        escalated_at,
+        opened_at,
+        issue_repo,
+        issue_number,
+    ) = row
 
     if escalated_at is not None:
+        if issue_repo and issue_number is not None:
+            await _comment_failure(
+                signal, issue_repo, issue_number, failures=failures, settings=settings
+            )
         return "bumped"
 
     if (

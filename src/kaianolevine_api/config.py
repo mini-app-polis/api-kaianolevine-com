@@ -143,25 +143,25 @@ class Settings(BaseSettings):
     GITHUB_DEFAULT_BRANCH: str = "main"
 
     # ── Signals ───────────────────────────────────────────────────────────
-    # Detected problems that may become tasks (services.signals). Only
-    # production observes them: there is one board, and a re-run acts on the
-    # real repository.
+    # Detected problems that may become GitHub Issues (services.signals). Only
+    # production observes them: an Issue and a re-run act on the real
+    # repository.
     #
     # The orgs and branches whose CI runs are signals. Independent of what is
     # announced on Discord, which stays on the default branch. main only: dev
-    # is where work is expected to break, so a failure there is not a task.
+    # is where work is expected to break, so a failure there opens nothing.
     SIGNAL_ORGS: list[str] = ["mini-app-polis"]
     SIGNAL_CI_BRANCHES: list[str] = ["main"]
-    # Try one remedy before anything reaches the board (a failed dependency
+    # Try one remedy before anything is reported (a failed dependency
     # audit dispatches the org's dependency-fix workflow; anything else is
     # re-run), then escalate on the next failure of the same streak.
     SIGNAL_CI_RERUN: bool = True
     SIGNAL_CI_ESCALATE_AFTER: int = 2
     # Consecutive failing runs of one cog flow (run reports at ERROR or
-    # CRITICAL) before a task. There is no remedy: the next run is the retry.
+    # CRITICAL) before an Issue. There is no remedy: the next run is the retry.
     SIGNAL_RUN_ESCALATE_AFTER: int = 2
-    # 5xx answers from one route (method, route template, status) before a
-    # task, each within SIGNAL_FAULT_WINDOW_MINUTES of the last. A route quiet
+    # 5xx answers from one route (method, route template, status) before an
+    # Issue, each within SIGNAL_FAULT_WINDOW_MINUTES of the last. A route quiet
     # for the window has recovered; its next 5xx starts a new count.
     SIGNAL_FAULT_ESCALATE_AFTER: int = 3
     SIGNAL_FAULT_WINDOW_MINUTES: int = 30
@@ -169,6 +169,15 @@ class Settings(BaseSettings):
     # (actions: write) and nothing more. Unset, a failure escalates without a
     # remedy.
     GITHUB_ACTIONS_TOKEN: str | None = None
+    # An escalated streak opens a GitHub Issue in the repository it is about
+    # (services.github_issues), written as the signals GitHub App: its client
+    # id and private key, with Issues read and write and nothing more. Unset,
+    # an escalation is reported as dropped and retried by the next failure.
+    SIGNALS_APP_CLIENT_ID: str | None = None
+    SIGNALS_APP_PRIVATE_KEY: str | None = None
+    # The owner of a repository a detector names without one (a run report
+    # and this service's own faults name the repository alone).
+    SIGNAL_ISSUE_OWNER: str = "mini-app-polis"
 
     # ── The running list ──────────────────────────────────────────────────
     # Every committed data change and every server-side fault, in the same

@@ -85,6 +85,11 @@ jobs:
       - name: Test
         run: uv run pytest --cov=src --cov-report=term-missing
 
+      # facts.json holds the figures this repo owns (declared machine
+      # principals); `facts check` fails when it no longer matches facts.yaml.
+      - name: Facts are current
+        run: uvx --from miniapppolis-common-utils facts check
+
   release:
     needs: [test, security]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
