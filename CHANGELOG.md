@@ -1,3 +1,10 @@
+# [2.54.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.53.0...v2.54.0) (2026-11-04)
+
+
+### Features
+
+* open a GitHub Issue for a conformance finding, closed by a clean evaluation ([6145141](https://github.com/mini-app-polis/api-kaianolevine-com/commit/61451417778f668bd0cb212e6e48e2e88f5ad53e))
+
 # [2.53.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.52.5...v2.53.0) (2026-11-04)
 
 
