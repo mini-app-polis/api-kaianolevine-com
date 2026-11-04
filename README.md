@@ -460,8 +460,8 @@ channel's webhook is not a way to silence it — the channel falls back to
 
 ### Signals: detected problems that may become GitHub Issues
 
-The GitHub webhook, `POST /v1/notify` and this service's own 5xx answers
-feed `services/signals.py`, independently of what is announced on Discord. A
+The GitHub webhook, `POST /v1/notify`, `POST /v1/evaluations` and this
+service's own 5xx answers feed `services/signals.py`, independently of what is announced on Discord. A
 detector turns an event into a signal (a kind, a key naming the problem,
 failing or recovered); a streak holds one problem from its
 first failure until it recovers; and a streak opens a GitHub Issue in the
@@ -474,9 +474,16 @@ files a task from an Issue by hand. Production only.
 | `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` (`main` only: a dev failure opens nothing) | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
 | `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 | `api-fault` | `<method> <route template> <status>`, from the activity middleware | none. `SIGNAL_FAULT_ESCALATE_AFTER` (3) 5xx answers, each within `SIGNAL_FAULT_WINDOW_MINUTES` (30) of the last, escalate | a quiet window: the next 5xx after it starts a new streak. Paths in `NOTIFY_EXCLUDED_PATHS` are not watched |
+| `conformance` | `<repo>/<source>/<rule>`, from a finding at `WARN` or worse posted to `POST /v1/evaluations` by `conformance_deterministic` or `conformance_llm` | none: the first finding escalates; each later run that reports it comments | a `SUCCESS` row for the repo and source: the evaluator posts one only for a complete evaluation that found nothing, so a run with other findings, or one that did not finish, closes nothing |
+| `evaluator-status` | `<repo>/<source>/<not-evaluated\|not-assessed>`, from the evaluator's `STATUS` rows; the Issue opens in evaluator-cog | none | the same `SUCCESS` row |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
 escalates at once.
+
+Conformance findings come from `services/conformance_signals.py`, which sees
+only a row this request stored, so a redelivered finding is not counted
+twice. Deferred and downgraded findings arrive at `INFO` and exempted ones
+not at all, so neither opens anything.
 
 `services/github_issues.py` writes the Issues, as the signals GitHub App
 (`SIGNALS_APP_CLIENT_ID`, `SIGNALS_APP_PRIVATE_KEY`; Issues read and write).

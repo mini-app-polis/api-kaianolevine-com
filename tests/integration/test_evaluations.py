@@ -752,13 +752,19 @@ async def test_stored_findings_stay_out_of_the_change_feed(client, db_session) -
     """A pass posts findings a dozen a second; one "data changed" each ran
     the activity webhook into Discord's rate limit and lost the feed."""
     import asyncio
+    from unittest.mock import AsyncMock, patch
 
     import respx
     from httpx import Response
 
-    from kaianolevine_api.services import activity
+    from kaianolevine_api.services import activity, conformance_signals
 
-    with respx.mock:
+    # The conformance detector reports to Discord on its own when it cannot
+    # open an Issue; this is about the change feed, so it is held still.
+    with (
+        respx.mock,
+        patch.object(conformance_signals, "observe_row", AsyncMock(return_value=[])),
+    ):
         route = respx.post(url__startswith="https://discord").mock(
             return_value=Response(204)
         )
