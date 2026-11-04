@@ -1,0 +1,10 @@
+# The figures this repository owns, computed into facts.json by `facts
+# generate` (common-python-utils) and checked in CI by `facts check`.
+# Facts are generated, never edited by hand.
+repo: api-kaianolevine-com
+facts:
+  machine_principals:
+    description: Machine principals declared in the identity registry
+    matches:
+      file: src/kaianolevine_api/identity_registry.py
+      pattern: "\\bMachine\\("
