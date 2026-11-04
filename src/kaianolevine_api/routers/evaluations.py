@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
+from mini_app_polis.environment import is_production
 from mini_app_polis.logger import get_logger
 from sqlalchemy import case, func, select, union
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +32,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services import evaluation_dispatch, job_queue
+from ..services import conformance_signals, evaluation_dispatch, job_queue
 from ..services.evaluation_fingerprint import evaluation_fingerprint
 
 logger = get_logger()
@@ -398,7 +399,37 @@ async def create_evaluation(
         return _write_result(existing, deduplicated=True)
 
     await session.refresh(row)
+    await _observe_conformance(row, session=session)
     return _write_result(row, deduplicated=False)
+
+
+async def _observe_conformance(row: DbEval, *, session: AsyncSession) -> None:
+    """Hand a newly stored row to the conformance detector. Never raises.
+
+    Production only, like every signal: an Issue acts on the real
+    repository. Only a row this request stored is observed, so a redelivered
+    finding comments on its Issue once, not once per delivery. A failure is
+    logged and the write still answers as stored: the finding is kept
+    whatever the signal engine made of it.
+    """
+    if not is_production():
+        return
+    try:
+        outcomes = await conformance_signals.observe_row(
+            session,
+            repo=row.repo,
+            source=row.source,
+            severity=row.severity,
+            violation_id=row.violation_id,
+            finding=row.finding,
+            suggestion=row.suggestion,
+            settings=get_settings(),
+        )
+    except Exception:  # noqa: BLE001 — see docstring
+        logger.exception("signals: could not observe the finding for %s", row.repo)
+        return
+    if outcomes:
+        logger.info("signals: %s %s -> %s", row.repo, row.source, outcomes)
 
 
 @router.post(
