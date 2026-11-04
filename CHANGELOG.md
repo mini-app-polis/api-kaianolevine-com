@@ -1,3 +1,18 @@
+# [2.53.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.52.5...v2.53.0) (2026-11-04)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.12.0 ([d804cf1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d804cf11104e8d54f03aebeec5e634dd971dfb7e))
+* **deps:** bump miniapppolis-common-utils to 7.13.0 ([c9d271c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c9d271c536e23c076b96326cedbf0e1a81e2b3a4))
+* **deps:** bump miniapppolis-common-utils to 7.14.0 ([63d5f17](https://github.com/mini-app-polis/api-kaianolevine-com/commit/63d5f17a4515588a2545dd7fbfd6ed3b89945ca4))
+
+
+### Features
+
+* open a GitHub Issue for an escalated signal instead of a board task ([2f225d1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2f225d15038b463c440707359a03f774ade1988a))
+* publish the declared machine principal count in facts.json ([29a121c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/29a121c3b9c0a13420da6e81a7456b5f87b1561a))
+
 ## [2.52.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.52.4...v2.52.5) (2026-11-03)
 
 
