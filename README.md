@@ -458,38 +458,46 @@ top. It decides what reaches Discord only: run reports in `runs` and
 channel's webhook is not a way to silence it — the channel falls back to
 `DISCORD_WEBHOOK_URL`.
 
-### Signals: detected problems that may become tasks
+### Signals: detected problems that may become GitHub Issues
 
 The GitHub webhook, `POST /v1/notify` and this service's own 5xx answers
 feed `services/signals.py`, independently of what is announced on Discord. A
 detector turns an event into a signal (a kind, a key naming the problem,
 failing or recovered); a streak holds one problem from its
-first failure until it recovers; and a streak becomes a task request for
-task-manager-cog only when its kind's rule says so. A streak that heals first
-closes quietly and is only logged. Production only.
+first failure until it recovers; and a streak opens a GitHub Issue in the
+repository it is about only when its kind's rule says so. A streak that heals
+first closes quietly and is only logged. Nothing reaches the board: a person
+files a task from an Issue by hand. Production only.
 
-| Kind | Key | Before a task | Closes on |
-|------|-----|---------------|-----------|
-| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` (`main` only: a dev failure makes no task) | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
+| Kind | Key | Before an Issue | Closes on |
+|------|-----|-----------------|-----------|
+| `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` (`main` only: a dev failure opens nothing) | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
 | `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 | `api-fault` | `<method> <route template> <status>`, from the activity middleware | none. `SIGNAL_FAULT_ESCALATE_AFTER` (3) 5xx answers, each within `SIGNAL_FAULT_WINDOW_MINUTES` (30) of the last, escalate | a quiet window: the next 5xx after it starts a new streak. Paths in `NOTIFY_EXCLUDED_PATHS` are not watched |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
-escalates at once. The task's external id is `<kind>.<key>#<streak id>`, so a
-streak makes one task however many failures it sees.
+escalates at once.
 
-A recovered streak's task is commented and moved to Review: when an escalated
-streak closes, the API sends task-manager-cog a `task.update` for its task. A
-streak closed by its recovery event names that event and links it where the
-event has a link (a green run's page; a run report has none, so the run is
-named); one closed by its quiet window says the window passed without another
-fault. Nothing marks the task complete; a person confirms the fix and closes
-it. A streak that healed before escalating has no task and sends nothing. An
-update that does not land is reported, like an escalation, and the recovery
-stands.
+`services/github_issues.py` writes the Issues, as the signals GitHub App
+(`SIGNALS_APP_CLIENT_ID`, `SIGNALS_APP_PRIVATE_KEY`; Issues read and write).
+It knows nothing of signals and keeps at most one open Issue per marker in a
+repository, so a streak's escalation seen twice opens one Issue; the marker
+is `<kind>/<key>`. A CI signal names its repository in full; a run report and
+this service's own faults name it alone, under `SIGNAL_ISSUE_OWNER`. The
+Issue says what ends it (the check passing again, the flow finishing without
+an error, the route no longer answering the status), what a fix must not do
+(silence the check), and the streak so far. Each further failure of an
+escalated streak comments on the Issue. An Issue that cannot be opened (the
+App not configured, GitHub refuses) is reported and the claim released, so
+the next failure tries again.
 
-The task arrives ready. Each detector fills the template's `Done when` (the
-check passing again, the flow finishing without an error, the route no longer
-answering the status) and `Constraints` (fix the cause; do not silence the
-check), and every escalated task is sized `S`. So it passes task-manager-cog's
-definition of ready on arrival and needs no grooming run.
+When an escalated streak closes, its Issue is commented and closed: a streak
+closed by its recovery event names that event and links it where the event
+has a link (a green run's page; a run report has none, so the run is named);
+one closed by its quiet window says the window passed without another fault.
+A close that does not land is reported, and the recovery stands: the Issue
+stays open for a person.
+
+Streaks escalated before Issues asked task-manager-cog for a board task. When
+one of those closes, the API still sends a `task.update` that comments on the
+task and moves it to Review, where a person confirms the fix and closes it.

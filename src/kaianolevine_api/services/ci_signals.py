@@ -227,7 +227,7 @@ async def remediate(signal: Signal, settings: Settings) -> bool:
 
 
 def rule(settings: Settings) -> Rule:
-    """CI's rule: one remedy, then a task on the next failure."""
+    """CI's rule: one remedy, then an Issue on the next failure."""
     return Rule(
         escalate_after=settings.SIGNAL_CI_ESCALATE_AFTER,
         remediation=remediate,

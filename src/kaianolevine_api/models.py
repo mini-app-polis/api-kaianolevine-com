@@ -1821,6 +1821,8 @@ class SignalStreak(Base):
         DateTime(timezone=True), nullable=True
     )
     task_external_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    issue_repo: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    issue_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     closed_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -35,7 +35,7 @@ logger = get_logger()
 
 KIND = "api-fault"
 
-#: The service whose faults these are; the task's ``Where``.
+#: The service whose faults these are, and the repository their Issues open in.
 SERVICE = "api-kaianolevine-com"
 
 #: A request that matched no route has no template to key on.

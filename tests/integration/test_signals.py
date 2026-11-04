@@ -1,8 +1,8 @@
 """Signals: detected problems held as streaks, escalated only when they stick.
 
-The engine runs against the real ``signal_streaks`` table; the queue and
-GitHub are stubbed at ``task_dispatch.dispatch_task`` and
-``ci_signals.remediate``. The CI detector is exercised through the
+The engine runs against the real ``signal_streaks`` table; GitHub is stubbed
+at the Issue writer (``github_issues``) and ``ci_signals.remediate``, and the
+queue at ``task_dispatch``. The CI detector is exercised through the
 real webhook route, signature and all, the cog-run detector through
 ``POST /v1/notify``, and the api-fault detector through the app's own
 middleware.
@@ -15,6 +15,7 @@ import datetime as dt
 import hashlib
 import hmac
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -30,6 +31,7 @@ from kaianolevine_api.services import (
     activity,
     ci_signals,
     fault_signals,
+    github_issues,
     job_queue,
     run_signals,
     signals,
@@ -100,27 +102,50 @@ async def _streaks(session: AsyncSession) -> list[tuple]:
     return [tuple(r) for r in rows]
 
 
+def _opened(repo: str, **_: object) -> github_issues.Issue:
+    return github_issues.Issue(repo, 7, f"https://github.com/{repo}/issues/7")
+
+
 @pytest.fixture
-def dispatch():
+def issues():
+    """The Issue writer and the task queue, stubbed: what each was asked."""
     with (
+        patch.object(
+            github_issues, "open_issue", AsyncMock(side_effect=_opened)
+        ) as opened,
+        patch.object(github_issues, "comment", AsyncMock()) as commented,
+        patch.object(github_issues, "close", AsyncMock()) as closed,
         patch.object(
             task_dispatch,
             "dispatch_task",
             AsyncMock(return_value={"message_id": "m-1"}),
-        ) as dispatched,
+        ) as tasked,
         patch.object(
             task_dispatch,
             "dispatch_task_update",
             AsyncMock(return_value={"message_id": "u-1"}),
-        ),
+        ) as updated,
     ):
-        yield dispatched
+        yield SimpleNamespace(
+            open=opened,
+            comment=commented,
+            close=closed,
+            task=tasked,
+            update=updated,
+        )
 
 
-@pytest.fixture
-def updates(dispatch):
-    """The task updates sent while ``dispatch`` is stubbed."""
-    return task_dispatch.dispatch_task_update
+async def _escalated_task_streak(session: AsyncSession, external_id: str) -> None:
+    """A streak escalated as a board task, before Issues."""
+    await session.execute(
+        text(
+            "INSERT INTO signal_streaks (kind, key, title, escalated_at, "
+            "task_external_id) VALUES ('ci', 'mini-app-polis/infra/CI@dev', "
+            "'infra: CI failing on dev', now(), :external_id)"
+        ),
+        {"external_id": external_id},
+    )
+    await session.commit()
 
 
 # ── the detector ──────────────────────────────────────────────────────────
@@ -171,10 +196,12 @@ def test_a_rerun_and_an_approval_are_never_re_run() -> None:
 
 # ── the engine ────────────────────────────────────────────────────────────
 
+REPO = "mini-app-polis/infra"
+
 
 @pytest.mark.asyncio
-async def test_a_failure_that_heals_after_its_rerun_never_reaches_the_board(
-    db_session: AsyncSession, dispatch
+async def test_a_failure_that_heals_after_its_rerun_is_never_reported(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(
@@ -187,13 +214,13 @@ async def test_a_failure_that_heals_after_its_rerun_never_reaches_the_board(
 
     assert (first, healed) == ("remediating", "healed")
     rule.remediation.assert_awaited_once()
-    dispatch.assert_not_awaited()
+    issues.open.assert_not_awaited()
     assert await _streaks(db_session) == [(1, 1, False, True)]
 
 
 @pytest.mark.asyncio
-async def test_a_failure_that_survives_its_rerun_becomes_one_task(
-    db_session: AsyncSession, dispatch
+async def test_a_failure_that_survives_its_rerun_becomes_one_issue(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(
@@ -210,19 +237,53 @@ async def test_a_failure_that_survives_its_rerun_becomes_one_task(
     ]
 
     assert outcomes == ["remediating", "escalated", "bumped"]
-    dispatch.assert_awaited_once()
-    (request,) = dispatch.await_args.args
-    assert request.source == "ci"
-    assert request.external_id.startswith("ci.mini-app-polis/infra/CI@dev#")
-    assert request.draft.title == "infra: CI failing on dev"
-    assert any(s.label == "Streak" for s in request.draft.sections)
-    assert request.draft.effort == "S"
+    issues.open.assert_awaited_once()
+    (repo,) = issues.open.await_args.args
+    opened = issues.open.await_args.kwargs
+    assert repo == REPO
+    assert opened["marker"] == "ci/mini-app-polis/infra/CI@dev"
+    assert opened["title"] == "infra: CI failing on dev"
+    assert "**Streak:** 2 failure(s)" in opened["body"]
+    issues.task.assert_not_awaited()
     assert await _streaks(db_session) == [(3, 1, True, False)]
+    stored = await db_session.execute(
+        text("SELECT issue_repo, issue_number FROM signal_streaks")
+    )
+    assert tuple(stored.one()) == (REPO, 7)
+
+
+@pytest.mark.asyncio
+async def test_each_further_failure_comments_on_the_issue(
+    db_session: AsyncSession, issues
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+
+    issues.comment.assert_awaited_once()
+    repo, number, body = issues.comment.await_args.args
+    assert (repo, number) == (REPO, 7)
+    assert body.startswith("Failed again: 2 failure(s)")
+
+
+@pytest.mark.asyncio
+async def test_a_comment_that_does_not_land_still_bumps_the_streak(
+    db_session: AsyncSession, issues
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+    issues.comment.side_effect = github_issues.IssueError("refused")
+    outcome = await signals.observe(db_session, _signal(), rule=rule, settings=settings)
+
+    assert outcome == "bumped"
+    assert await _streaks(db_session) == [(2, 0, True, False)]
 
 
 @pytest.mark.asyncio
 async def test_a_recovery_closes_the_streak_and_the_next_failure_starts_afresh(
-    db_session: AsyncSession, dispatch
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=1)
@@ -233,14 +294,14 @@ async def test_a_recovery_closes_the_streak_and_the_next_failure_starts_afresh(
     await signals.observe(db_session, _signal(), rule=rule, settings=settings)
 
     assert recovered == "recovered"
-    first, second = (call.args[0] for call in dispatch.await_args_list)
-    assert first.external_id != second.external_id
+    assert issues.open.await_count == 2
+    issues.close.assert_awaited_once()
     assert await _streaks(db_session) == [(1, 0, True, True), (1, 0, True, False)]
 
 
 @pytest.mark.asyncio
 async def test_a_remediation_that_cannot_start_escalates_at_once(
-    db_session: AsyncSession, dispatch
+    db_session: AsyncSession, issues
 ) -> None:
     rule = signals.Rule(
         escalate_after=2, remediation=AsyncMock(return_value=False), max_remediations=1
@@ -250,28 +311,20 @@ async def test_a_remediation_that_cannot_start_escalates_at_once(
     )
 
     assert outcome == "escalated"
-    dispatch.assert_awaited_once()
+    issues.open.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_a_dropped_request_is_reported_and_retried_by_the_next_failure(
-    db_session: AsyncSession,
+async def test_an_issue_that_cannot_be_opened_is_reported_and_retried(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=1)
-    with (
-        patch.object(
-            task_dispatch,
-            "dispatch_task",
-            AsyncMock(
-                side_effect=[
-                    task_dispatch.DispatchError("down", detail="queue down"),
-                    {"message_id": "m-2"},
-                ]
-            ),
-        ) as dispatched,
-        patch.object(job_queue, "report_dropped", AsyncMock()) as reported,
-    ):
+    issues.open.side_effect = [
+        github_issues.IssueError("the signals GitHub App is not configured"),
+        github_issues.Issue(REPO, 8, f"https://github.com/{REPO}/issues/8"),
+    ]
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
         first = await signals.observe(
             db_session, _signal(), rule=rule, settings=settings
         )
@@ -281,8 +334,26 @@ async def test_a_dropped_request_is_reported_and_retried_by_the_next_failure(
 
     assert (first, second) == ("dropped", "escalated")
     reported.assert_awaited_once()
-    assert dispatched.await_count == 2
+    assert "not configured" in reported.await_args.args[0]
+    assert issues.open.await_count == 2
     assert await _streaks(db_session) == [(2, 0, True, False)]
+
+
+@pytest.mark.asyncio
+async def test_a_signal_that_names_no_repository_is_reported(
+    db_session: AsyncSession, issues
+) -> None:
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
+        outcome = await signals.observe(
+            db_session,
+            _signal(where=None),
+            rule=signals.Rule(escalate_after=1),
+            settings=get_settings(),
+        )
+
+    assert outcome == "dropped"
+    issues.open.assert_not_awaited()
+    reported.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -303,8 +374,8 @@ RECOVERY_LINK = "https://github.com/mini-app-polis/infra/actions/runs/2"
 
 
 @pytest.mark.asyncio
-async def test_an_escalated_streaks_recovery_moves_its_task_to_review(
-    db_session: AsyncSession, dispatch, updates
+async def test_an_escalated_streaks_recovery_closes_its_issue(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=1)
@@ -317,17 +388,39 @@ async def test_an_escalated_streaks_recovery_moves_its_task_to_review(
     )
 
     assert outcome == "recovered"
-    updates.assert_awaited_once()
-    (update,) = updates.await_args.args
-    assert update.external_id == dispatch.await_args.args[0].external_id
+    issues.close.assert_awaited_once()
+    assert issues.close.await_args.args == (REPO, 7)
+    body = issues.close.await_args.kwargs["body"]
+    assert body.startswith("Recovered: infra: CI passing on dev.")
+    assert RECOVERY_LINK in body
+    issues.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_streak_escalated_as_a_task_still_moves_it_to_review(
+    db_session: AsyncSession, issues
+) -> None:
+    await _escalated_task_streak(db_session, "ci.mini-app-polis/infra/CI@dev#1")
+    outcome = await signals.observe(
+        db_session,
+        _signal("recovered", title="infra: CI passing on dev", link=RECOVERY_LINK),
+        rule=signals.Rule(escalate_after=1),
+        settings=get_settings(),
+    )
+
+    assert outcome == "recovered"
+    issues.close.assert_not_awaited()
+    issues.update.assert_awaited_once()
+    (update,) = issues.update.await_args.args
+    assert update.external_id == "ci.mini-app-polis/infra/CI@dev#1"
     assert update.section == "Review"
     assert "infra: CI passing on dev" in update.comment
     assert RECOVERY_LINK in update.comment
 
 
 @pytest.mark.asyncio
-async def test_a_streak_that_heals_before_escalating_sends_no_update(
-    db_session: AsyncSession, dispatch, updates
+async def test_a_streak_that_heals_before_escalating_sends_nothing(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=2)
@@ -337,12 +430,13 @@ async def test_a_streak_that_heals_before_escalating_sends_no_update(
     )
 
     assert outcome == "healed"
-    updates.assert_not_awaited()
+    issues.close.assert_not_awaited()
+    issues.update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_a_repeated_recovery_sends_one_update(
-    db_session: AsyncSession, dispatch, updates
+async def test_a_repeated_recovery_closes_once(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=1)
@@ -355,26 +449,18 @@ async def test_a_repeated_recovery_sends_one_update(
     ]
 
     assert outcomes == ["recovered", "quiet"]
-    updates.assert_awaited_once()
+    issues.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_an_update_that_does_not_land_is_reported_and_the_recovery_stands(
-    db_session: AsyncSession, dispatch
+async def test_a_close_that_does_not_land_is_reported_and_the_recovery_stands(
+    db_session: AsyncSession, issues
 ) -> None:
     settings = get_settings()
     rule = signals.Rule(escalate_after=1)
     await signals.observe(db_session, _signal(), rule=rule, settings=settings)
-    with (
-        patch.object(
-            task_dispatch,
-            "dispatch_task_update",
-            AsyncMock(
-                side_effect=task_dispatch.DispatchError("down", detail="queue down")
-            ),
-        ),
-        patch.object(job_queue, "report_dropped", AsyncMock()) as reported,
-    ):
+    issues.close.side_effect = github_issues.IssueError("refused")
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
         outcome = await signals.observe(
             db_session, _signal("recovered"), rule=rule, settings=settings
         )
@@ -382,6 +468,24 @@ async def test_an_update_that_does_not_land_is_reported_and_the_recovery_stands(
     assert outcome == "recovered"
     reported.assert_awaited_once()
     assert await _streaks(db_session) == [(1, 0, True, True)]
+
+
+@pytest.mark.asyncio
+async def test_an_old_tasks_update_that_does_not_land_is_reported(
+    db_session: AsyncSession, issues
+) -> None:
+    await _escalated_task_streak(db_session, "ci.mini-app-polis/infra/CI@dev#1")
+    issues.update.side_effect = task_dispatch.DispatchError("down", detail="queue down")
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
+        outcome = await signals.observe(
+            db_session,
+            _signal("recovered"),
+            rule=signals.Rule(),
+            settings=get_settings(),
+        )
+
+    assert outcome == "recovered"
+    reported.assert_awaited_once()
 
 
 # ── through the webhook ───────────────────────────────────────────────────
@@ -405,7 +509,7 @@ async def _post(client: AsyncClient, payload: dict):
 @respx.mock
 @pytest.mark.asyncio
 async def test_the_webhook_reruns_then_escalates_a_failing_main_build(
-    client: AsyncClient, db_session: AsyncSession, dispatch
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     with patch.object(ci_signals, "remediate", AsyncMock(return_value=True)) as rerun:
@@ -414,15 +518,16 @@ async def test_the_webhook_reruns_then_escalates_a_failing_main_build(
 
     assert first.status_code == second.status_code == 200
     rerun.assert_awaited_once()
-    dispatch.assert_awaited_once()
+    issues.open.assert_awaited_once()
+    assert issues.open.await_args.args == ("mini-app-polis/infra",)
 
 
 @respx.mock
 @pytest.mark.asyncio
 async def test_the_webhook_does_not_watch_dev_builds(
-    client: AsyncClient, db_session: AsyncSession, dispatch
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
-    """dev is where work is expected to break: no streak, no re-run, no task."""
+    """dev is where work is expected to break: no streak, no re-run, no Issue."""
     discord = respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     with patch.object(ci_signals, "remediate", AsyncMock(return_value=True)) as rerun:
         first = await _post(client, _run("failure"))
@@ -430,7 +535,7 @@ async def test_the_webhook_does_not_watch_dev_builds(
 
     assert first.status_code == second.status_code == 200
     rerun.assert_not_awaited()
-    dispatch.assert_not_awaited()
+    issues.open.assert_not_awaited()
     assert await _streaks(db_session) == []
     assert not discord.called
 
@@ -438,13 +543,13 @@ async def test_the_webhook_does_not_watch_dev_builds(
 @respx.mock
 @pytest.mark.asyncio
 async def test_outside_production_the_webhook_observes_nothing(
-    client: AsyncClient, db_session: AsyncSession, dispatch, monkeypatch
+    client: AsyncClient, db_session: AsyncSession, issues, monkeypatch
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     await _post(client, _run("failure", branch="main"))
 
-    dispatch.assert_not_awaited()
+    issues.open.assert_not_awaited()
     assert await _streaks(db_session) == []
 
 
@@ -627,40 +732,39 @@ def test_anything_but_a_production_run_report_says_nothing(embeds) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_two_failing_runs_become_one_task(
-    client: AsyncClient, db_session: AsyncSession, dispatch
+async def test_two_failing_runs_become_one_issue(
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     for _ in range(3):
         resp = await client.post("/v1/notify", json=_report("ERROR"))
         assert resp.status_code == 200
 
-    dispatch.assert_awaited_once()
-    request = dispatch.await_args.args[0]
-    assert request.source == "cog-run"
-    assert request.external_id.startswith("cog-run.db-ops/db-backup#")
-    assert request.draft.where == "db-ops"
+    issues.open.assert_awaited_once()
+    assert issues.open.await_args.args == ("mini-app-polis/db-ops",)
+    assert issues.open.await_args.kwargs["marker"] == "cog-run/db-ops/db-backup"
+    issues.task.assert_not_awaited()
     assert await _streaks(db_session) == [(3, 0, True, False)]
 
 
 @respx.mock
 @pytest.mark.asyncio
 async def test_a_run_that_does_not_fail_closes_the_streak_quietly(
-    client: AsyncClient, db_session: AsyncSession, dispatch
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     await client.post("/v1/notify", json=_report("ERROR"))
     await client.post("/v1/notify", json=_report("WARN"))
     await client.post("/v1/notify", json=_report("ERROR"))
 
-    dispatch.assert_not_awaited()
+    issues.open.assert_not_awaited()
     assert await _streaks(db_session) == [(1, 0, False, True), (1, 0, False, False)]
 
 
 @respx.mock
 @pytest.mark.asyncio
 async def test_a_failing_run_is_seen_even_when_discord_is_down(
-    client: AsyncClient, db_session: AsyncSession, dispatch
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(500))
     resp = await client.post("/v1/notify", json=_report("ERROR"))
@@ -709,7 +813,7 @@ QUIET = signals.Rule(escalate_after=3, quiet_window=dt.timedelta(minutes=30))
 
 @pytest.mark.asyncio
 async def test_a_failure_within_the_window_bumps_the_streak(
-    db_session: AsyncSession, dispatch
+    db_session: AsyncSession, issues
 ) -> None:
     signal = _signal(kind="api-fault", key="GET /v1/x 500")
     for _ in range(2):
@@ -725,7 +829,7 @@ async def test_a_failure_within_the_window_bumps_the_streak(
 
 @pytest.mark.asyncio
 async def test_a_failure_after_a_quiet_window_starts_a_new_streak(
-    db_session: AsyncSession, dispatch
+    db_session: AsyncSession, issues
 ) -> None:
     signal = _signal(kind="api-fault", key="GET /v1/x 500")
     for _ in range(2):
@@ -736,7 +840,7 @@ async def test_a_failure_after_a_quiet_window_starts_a_new_streak(
     )
 
     assert outcome == "opened"
-    dispatch.assert_not_awaited()
+    issues.open.assert_not_awaited()
     assert await _streaks(db_session) == [(2, 0, False, True), (1, 0, False, False)]
     closed = await db_session.execute(
         text(
@@ -748,8 +852,8 @@ async def test_a_failure_after_a_quiet_window_starts_a_new_streak(
 
 
 @pytest.mark.asyncio
-async def test_an_escalated_streak_closed_by_its_quiet_window_moves_to_review(
-    db_session: AsyncSession, dispatch, updates
+async def test_an_escalated_streak_closed_by_its_quiet_window_closes_its_issue(
+    db_session: AsyncSession, issues
 ) -> None:
     signal = _signal(kind="api-fault", key="GET /v1/x 500")
     for _ in range(3):
@@ -760,23 +864,23 @@ async def test_an_escalated_streak_closed_by_its_quiet_window_moves_to_review(
     )
 
     assert outcome == "opened"
-    updates.assert_awaited_once()
-    (update,) = updates.await_args.args
-    assert update.external_id == dispatch.await_args.args[0].external_id
-    assert update.section == "Review"
-    assert "30 minutes passed without another GET /v1/x 500" in update.comment
+    issues.close.assert_awaited_once()
+    body = issues.close.await_args.kwargs["body"]
+    assert body == "Recovered: 30 minutes passed without another GET /v1/x 500."
+    issues.update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_a_quiet_window_closing_an_unescalated_streak_sends_no_update(
-    db_session: AsyncSession, dispatch, updates
+async def test_a_quiet_window_closing_an_unescalated_streak_sends_nothing(
+    db_session: AsyncSession, issues
 ) -> None:
     signal = _signal(kind="api-fault", key="GET /v1/x 500")
     await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
     await _age_streaks(db_session, 45)
     await signals.observe(db_session, signal, rule=QUIET, settings=get_settings())
 
-    updates.assert_not_awaited()
+    issues.close.assert_not_awaited()
+    issues.update.assert_not_awaited()
 
 
 # ── api faults ────────────────────────────────────────────────────────────
@@ -792,18 +896,20 @@ def test_a_fault_is_keyed_by_route_template_not_url() -> None:
     assert signal.constraints is not None
 
 
-def test_an_escalated_task_carries_the_template_fields_the_detector_knows() -> None:
+def test_an_escalated_issue_carries_what_the_detector_knows() -> None:
     signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500)
-    request = signals.request_for(
+    body = signals.issue_body(
         signal,
-        external_id="api-fault.GET /v1/sets/{set_id} 500#1",
         failures=3,
         opened_at=dt.datetime(2026, 10, 22, 18, 0, tzinfo=dt.UTC),
     )
-    assert request.draft.done_when == signal.done_when
-    assert request.draft.constraints == signal.constraints
-    assert request.draft.effort == "S"
-    assert request.draft.where == "api-kaianolevine-com"
+    assert f"**Done when:** {signal.done_when}" in body
+    assert f"**Constraints:** {signal.constraints}" in body
+    assert "**Streak:** 3 failure(s) since 2026-10-22 18:00 UTC" in body
+    assert (
+        signals.issue_repo_for(signal, get_settings())
+        == "mini-app-polis/api-kaianolevine-com"
+    )
 
 
 def test_a_request_that_matched_no_route_has_no_template() -> None:
@@ -845,8 +951,8 @@ async def raw_client(client: AsyncClient):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_repeated_5xx_from_one_route_become_one_task(
-    raw_client: AsyncClient, db_session: AsyncSession, dispatch, faulty_routes
+async def test_repeated_5xx_from_one_route_become_one_issue(
+    raw_client: AsyncClient, db_session: AsyncSession, issues, faulty_routes
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     for item in ("a", "b", "c", "d"):
@@ -854,11 +960,11 @@ async def test_repeated_5xx_from_one_route_become_one_task(
         assert resp.status_code == 503
         await _drain()
 
-    dispatch.assert_awaited_once()
-    request = dispatch.await_args.args[0]
-    assert request.source == "api-fault"
-    assert request.external_id.startswith(
-        "api-fault.GET /v1/test-faults/unavailable/{item_id} 503#"
+    issues.open.assert_awaited_once()
+    assert issues.open.await_args.args == ("mini-app-polis/api-kaianolevine-com",)
+    assert (
+        issues.open.await_args.kwargs["marker"]
+        == "api-fault/GET /v1/test-faults/unavailable/{item_id} 503"
     )
     assert await _streaks(db_session) == [(4, 0, True, False)]
 
@@ -866,7 +972,7 @@ async def test_repeated_5xx_from_one_route_become_one_task(
 @respx.mock
 @pytest.mark.asyncio
 async def test_an_unhandled_exception_is_a_500_fault(
-    raw_client: AsyncClient, db_session: AsyncSession, dispatch, faulty_routes
+    raw_client: AsyncClient, db_session: AsyncSession, issues, faulty_routes
 ) -> None:
     respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
     resp = await raw_client.get("/v1/test-faults/broken/a")
