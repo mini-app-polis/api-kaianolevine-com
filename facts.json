@@ -2,13 +2,13 @@
   "repo": "api-kaianolevine-com",
   "facts": {
     "machine_principals": {
-      "value": 20,
+      "value": 19,
       "description": "Machine principals declared in the identity registry",
       "source": "matches: src/kaianolevine_api/identity_registry.py /\\bMachine\\(/",
       "as_of": "2026-11-05"
     },
     "test_functions": {
-      "value": 1070,
+      "value": 1058,
       "description": "Test functions in the test suites (def test_*, each parametrized function once)",
       "source": "matches: tests/**/test_*.py /(?m)^\\s*(?:async\\s+)?def test_\\w+/",
       "as_of": "2026-11-05"

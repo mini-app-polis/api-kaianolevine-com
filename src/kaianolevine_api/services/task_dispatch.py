@@ -25,9 +25,7 @@ the cog's hourly schedule enqueues, on the same queue and in the same group,
 so it never runs beside a job creating a task. A request with no flags sends
 the schedule's body exactly; one with ``refine`` or ``agents`` adds a payload
 carrying the flags, which the cog reads as making that sweep the one for
-refining or agent dispatch. The payload carries ``refine`` under its grooming
-name ``groom`` as well, so a task manager that has not moved to refining reads
-it too; ``groom`` goes once it has. Two requests can send the same body, so each
+refining or agent dispatch. Two requests can send the same body, so each
 carries a deduplication id of its own: asking twice within the queue's
 five-minute window runs two sweeps, one after the other, rather than one.
 
@@ -106,11 +104,11 @@ def sweep_message(*, refine: bool = False, agents: bool = False) -> dict[str, An
 
     With no flags it is exactly what the cog's schedule sends: no payload,
     which the contract allows for a sweep with nothing to carry. With either
-    flag the payload carries every flag, ``refine`` under both its names.
+    flag the payload carries both.
     """
     message = TaskSweepMessage().model_dump(mode="json", exclude={"payload"})
     if refine or agents:
-        message["payload"] = {"refine": refine, "groom": refine, "agents": agents}
+        message["payload"] = {"refine": refine, "agents": agents}
     return message
 
 

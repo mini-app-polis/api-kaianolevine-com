@@ -216,9 +216,6 @@ MACHINES: tuple[Machine, ...] = (
             "pipeline-writer",
             "notifier",
             "task-refiner",
-            # The grooming name of task-refiner, for the release of the cog
-            # that still calls /v1/tasks/groomings; removed once none does.
-            "task-groomer",
             "agent-dispatcher",
         ),
         notes=(
@@ -251,20 +248,6 @@ MACHINES: tuple[Machine, ...] = (
             "/v1/tasks/refinings/claims, /v1/tasks/refinings/claims/release and "
             "/v1/tasks/refinings/budget-spent; "
             "GET /v1/tasks/refinings/spend; POST /v1/evaluations, /v1/notify "
-            "(run reports)."
-        ),
-    ),
-    # task-groomer-cog is task-refiner-cog under its grooming name: the
-    # function that still runs the groomer's last release, until every cog
-    # has moved to refining. Removed with the grooming routes.
-    Machine(
-        name="task-groomer-cog",
-        roles=("task-groomer", "pipeline-writer", "notifier"),
-        notes=(
-            "POST /v1/tasks/groomings/proposals, /v1/tasks/groomings/runs, "
-            "/v1/tasks/groomings/claims, /v1/tasks/groomings/claims/release and "
-            "/v1/tasks/groomings/budget-spent; "
-            "GET /v1/tasks/groomings/spend; POST /v1/evaluations, /v1/notify "
             "(run reports)."
         ),
     ),

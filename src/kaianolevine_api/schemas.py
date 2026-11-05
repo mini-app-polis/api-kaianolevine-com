@@ -24,21 +24,6 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     Envelope,
     ErrorDetail,
     ErrorEnvelope,
-    GroomingBudgetSpentMarked,
-    GroomingBudgetSpentRequest,
-    GroomingClaimReleased,
-    GroomingClaimRequest,
-    GroomingClaimResult,
-    GroomingJobAccepted,
-    GroomingJobRequest,
-    GroomingProposal,
-    GroomingProposalAccepted,
-    GroomingRecord,
-    GroomingRecordWrite,
-    GroomingReturnRate,
-    GroomingRunCreate,
-    GroomingRunRecorded,
-    GroomingSpend,
     IngestResponseData,
     IngestSet,
     IngestTrack,
@@ -171,9 +156,7 @@ class TaskSweepRequest(BaseModel):
     No body, or an empty one, is the sweep the hourly schedule sends.
     ``refine`` makes this sweep the one for task-manager-cog's
     ``REFINE_TIMES``, ``agents`` the one for its ``AGENT_TIMES``, whatever the
-    time of day. Neither turns on what is off or raises a cap. ``groom`` is
-    the grooming name of ``refine`` and sets it too, until every caller sends
-    ``refine``.
+    time of day. Neither turns on what is off or raises a cap.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -182,21 +165,10 @@ class TaskSweepRequest(BaseModel):
         default=False,
         description="Send tasks for refining in this sweep, whatever the time.",
     )
-    groom: bool = Field(
-        default=False,
-        description="The grooming name of refine; sets it too.",
-    )
     agents: bool = Field(
         default=False,
         description="Dispatch agents in this sweep, whatever the time.",
     )
-
-    @model_validator(mode="after")
-    def _groom_is_refine(self) -> TaskSweepRequest:
-        both = self.refine or self.groom
-        object.__setattr__(self, "refine", both)
-        object.__setattr__(self, "groom", both)
-        return self
 
 
 class TaskSweepAccepted(BaseModel):
