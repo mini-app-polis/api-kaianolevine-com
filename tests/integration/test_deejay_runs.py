@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kaianolevine_api import auth as auth_mod
 from kaianolevine_api import identity_registry
 from kaianolevine_api.main import app
-from kaianolevine_api.services import activity, job_queue
+from kaianolevine_api.services import activity, fault_signals, job_queue
 from kaianolevine_api.services import deejay_dispatch as dispatch
 
 pytestmark = pytest.mark.asyncio
@@ -32,6 +32,15 @@ pytestmark = pytest.mark.asyncio
 QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/400200465748/deejay-jobs.fifo"
 ISSUER = "https://clerk.kaianolevine.com"
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
+
+
+@pytest.fixture(autouse=True)
+def _no_fault_signals():
+    """These tests count the errors channel's fault posts. A 5xx is also an
+    api-fault signal, whose Issue (or its drop report) is
+    tests/integration/test_signals.py's to cover."""
+    with patch.object(fault_signals, "observe", AsyncMock()):
+        yield
 
 
 async def _drain() -> None:

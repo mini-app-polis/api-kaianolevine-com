@@ -551,6 +551,50 @@ async def _escalate(
     return "escalated"
 
 
+async def _close_if_issue_closed(
+    session: AsyncSession, signal: Signal, *, settings: Settings
+) -> int | None:
+    """Close the open streak if its Issue was closed; that Issue's number.
+
+    Read before this failure is counted: an Issue closed as though fixed,
+    and failing again, means this failure is the first of a new streak,
+    whose Issue links the old one. None when there is nothing to close.
+    """
+    open_streak = (
+        await session.execute(
+            text(
+                """
+                SELECT id, issue_repo, issue_number FROM signal_streaks
+                WHERE kind = :kind AND key = :key AND closed_at IS NULL
+                  AND escalated_at IS NOT NULL AND issue_number IS NOT NULL
+                """
+            ),
+            {"kind": signal.kind, "key": signal.key},
+        )
+    ).first()
+    if open_streak is None:
+        return None
+    streak_id, repo, number = open_streak
+    if not repo or not await _issue_closed(repo, number, settings=settings):
+        return None
+    await session.execute(
+        text(
+            "UPDATE signal_streaks SET closed_at = now() "
+            "WHERE id = :id AND closed_at IS NULL"
+        ),
+        {"id": streak_id},
+    )
+    await session.commit()
+    logger.info(
+        "signals: %s %s recurs after %s#%d was closed",
+        signal.kind,
+        signal.key,
+        repo,
+        number,
+    )
+    return int(number)
+
+
 async def _record_failure(session: AsyncSession, signal: Signal) -> Any:
     """Open a streak for this failure, or bump the open one; its row."""
     row = (
@@ -597,31 +641,11 @@ async def observe(
     if rule.quiet_window is not None:
         await close_if_quiet(session, signal, rule.quiet_window, settings=settings)
 
-    row = await _record_failure(session, signal)
     previous: int | None = None
-    if (
-        rule.reopen_closed_issue
-        and row.escalated_at is not None
-        and row.issue_repo
-        and row.issue_number is not None
-        and await _issue_closed(row.issue_repo, row.issue_number, settings=settings)
-    ):
-        # Closed as though fixed, and failing again: this failure is the
-        # first of a new streak, whose Issue links the old one.
-        await session.execute(
-            text("UPDATE signal_streaks SET closed_at = now() WHERE id = :id"),
-            {"id": row.id},
-        )
-        await session.commit()
-        logger.info(
-            "signals: %s %s recurs after %s#%d was closed",
-            signal.kind,
-            signal.key,
-            row.issue_repo,
-            row.issue_number,
-        )
-        previous = row.issue_number
-        row = await _record_failure(session, signal)
+    if rule.reopen_closed_issue:
+        previous = await _close_if_issue_closed(session, signal, settings=settings)
+
+    row = await _record_failure(session, signal)
     (
         streak_id,
         failures,
