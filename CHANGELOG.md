@@ -1,3 +1,10 @@
+## [2.58.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.58.0...v2.58.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **config:** list SIGNAL_FAULT_QUIET_HOURS in .env.example in place of the retired fault settings ([978de38](https://github.com/mini-app-polis/api-kaianolevine-com/commit/978de38adf68d4d4d3ebd7c821ab0dcf7789d5c6))
+
 # [2.58.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.57.0...v2.58.0) (2026-11-05)
 
 
