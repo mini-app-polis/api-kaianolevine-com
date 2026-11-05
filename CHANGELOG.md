@@ -1,3 +1,15 @@
+# [2.59.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.58.1...v2.59.0) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.19.0 ([619b618](https://github.com/mini-app-polis/api-kaianolevine-com/commit/619b6187deb009dcfc74412e9c94837676693233))
+
+
+### Features
+
+* **evaluations:** record the evaluated application's version and name all three versions on conformance Issues ([b3ff516](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b3ff51639599f123a826de51e6de63ace9dfc045))
+
 ## [2.58.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.58.0...v2.58.1) (2026-11-05)
 
 
