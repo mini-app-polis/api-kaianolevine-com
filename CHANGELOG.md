@@ -1,3 +1,19 @@
+# [2.55.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.54.0...v2.55.0) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 7.16.0 ([a1a747e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a1a747ec1dc8a2dc7899342ce33b249c7c36ea31))
+* **deps:** bump miniapppolis-common-utils to 7.17.0 ([e3a4f7e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e3a4f7e58ab3d6bdb171908c147c033a50a4c0d5))
+* **deps:** bump miniapppolis-common-utils to 7.18.0 ([907bb01](https://github.com/mini-app-polis/api-kaianolevine-com/commit/907bb01d8cc051ee15adec407bd88749b15f9419))
+
+
+### Features
+
+* **facts:** publish the test-function count ([29c9699](https://github.com/mini-app-polis/api-kaianolevine-com/commit/29c96996ad34fb14c04d069e196569344be31116))
+* **tasks:** add the refining routes, role, machine and migration 088 ([30c16da](https://github.com/mini-app-polis/api-kaianolevine-com/commit/30c16dae74e3c4e253352d1aab089e3bad7a7d5e))
+* **tasks:** serve refining routes, role and tables beside the grooming ones ([2b62c21](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2b62c211c1592c965544231de662e9865fb2cfd7))
+
 # [2.54.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.53.0...v2.54.0) (2026-11-04)
 
 
