@@ -9,7 +9,7 @@ go with those routes.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mini_app_polis.api.contract import TaskGroomMessage, TaskGroomProposalMessage
@@ -145,3 +145,70 @@ async def test_the_running_groomer_keeps_its_grooming_role() -> None:
     cog = identity_registry.declared("task-groomer-cog")
     assert cog is not None
     assert "task-groomer" in cog.roles
+
+
+CLAIM = {"task_gid": "1219848148842653", "fingerprint": "c" * 64}
+
+
+async def test_a_claim_under_grooming_names_is_the_refining_claim(client) -> None:
+    first = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    assert first.status_code == 200, first.text
+    assert first.json()["data"] == {**CLAIM, "claimed": True}
+    # The same claim, so the refining route sees it held.
+    again = await client.post("/v1/tasks/refinings/claims", json=CLAIM)
+    assert again.json()["data"]["claimed"] is False
+
+    released = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    assert released.status_code == 200, released.text
+    assert released.json()["data"] == {**CLAIM, "released": True}
+
+
+async def test_a_budget_stop_under_grooming_names_is_served_on_the_record(
+    client,
+) -> None:
+    await client.post("/v1/tasks/groomings", json=RECORD)
+    stop = {"task_gid": RECORD["task_gid"], "fingerprint": "d" * 64}
+    marked = await client.post("/v1/tasks/groomings/budget-spent", json=stop)
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["data"] == stop
+    (record,) = (await client.get("/v1/tasks/groomings")).json()["data"]
+    assert record["budget_spent_fingerprint"] == stop["fingerprint"]
+
+
+async def test_the_return_rate_under_grooming_names(client) -> None:
+    old = await client.get("/v1/tasks/groomings/return-rate")
+    assert old.status_code == 200, old.text
+    new = await client.get("/v1/tasks/refinings/return-rate")
+    assert old.json()["data"] == new.json()["data"]
+
+
+async def test_a_grooming_job_is_handed_to_the_groomer(client, monkeypatch) -> None:
+    _aws(monkeypatch)
+    with patch.object(
+        refining_dispatch,
+        "dispatch_grooming_job",
+        AsyncMock(return_value={"message_id": "m-1"}),
+    ) as dispatched:
+        response = await client.post("/v1/tasks/groomings/jobs", json=JOB)
+    assert response.status_code == 202, response.text
+    assert response.json()["data"] == {
+        "accepted": True,
+        "message_id": "m-1",
+        "task_gid": JOB["task"]["task_gid"],
+    }
+    assert dispatched.await_args.args[0] == RefiningJobRequest.model_validate(JOB)
+
+
+async def test_a_groomers_proposal_is_handed_to_the_task_manager(
+    client, monkeypatch
+) -> None:
+    _aws(monkeypatch)
+    with patch.object(
+        refining_dispatch,
+        "dispatch_grooming_proposal",
+        AsyncMock(return_value={"message_id": "m-2"}),
+    ) as dispatched:
+        response = await client.post("/v1/tasks/groomings/proposals", json=PROPOSAL)
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["message_id"] == "m-2"
+    assert dispatched.await_args.args[0] == RefiningProposal.model_validate(PROPOSAL)
