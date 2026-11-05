@@ -1,3 +1,10 @@
+# [2.56.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.55.2...v2.56.0) (2026-11-05)
+
+
+### Features
+
+* **tasks:** remove the grooming routes, role and views ([7e8aa13](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7e8aa1358a53cdfac34604533cb5c8cec8d8b780))
+
 ## [2.55.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.55.1...v2.55.2) (2026-11-05)
 
 
