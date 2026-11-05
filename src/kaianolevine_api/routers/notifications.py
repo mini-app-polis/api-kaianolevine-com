@@ -530,6 +530,13 @@ async def _observe_ci(
     await _observe(
         signal, ci_signals.rule(settings), session=session, settings=settings
     )
+    if signal is None:
+        # A failed audit off the signal branches still gets the fix. Never
+        # fails the delivery, as observing never does.
+        try:
+            await ci_signals.fix_audit_off_signal_branches(payload, settings)
+        except Exception:  # noqa: BLE001
+            logger.exception("signals: could not dispatch an off-branch audit fix")
 
 
 #: Run-report severities that are copied to the errors channel as well as

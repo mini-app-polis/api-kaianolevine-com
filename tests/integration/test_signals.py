@@ -656,6 +656,78 @@ async def test_without_a_token_no_remedy_starts(monkeypatch) -> None:
     get_settings.cache_clear()
 
 
+# ── a failed audit off the signal branches ────────────────────────────────
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_failed_audit_on_dev_dispatches_the_fix_without_a_signal(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    respx.get(url__startswith=JOBS).mock(
+        return_value=_jobs("security / dependency audit (python)")
+    )
+    dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
+
+    resp = await _post(client, _run("failure", branch="dev"))
+
+    assert resp.status_code == 200
+    assert json.loads(dispatch.calls.last.request.content) == {
+        "ref": "main",
+        "inputs": {"repository": "infra"},
+    }
+    issues.open.assert_not_called()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_other_failures_off_the_signal_branches_start_nothing(
+    client: AsyncClient, token
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    respx.get(url__startswith=JOBS).mock(return_value=_jobs("test / test"))
+    dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
+
+    await _post(
+        client, _run("failure", branch="commons-update/miniapppolis-common-utils")
+    )
+
+    assert not dispatch.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("branch", "attempt"), [("security-fix/deps", 1), ("dev", 2)])
+async def test_the_fixers_own_branch_and_re_runs_are_not_dispatched(
+    client: AsyncClient, token, branch: str, attempt: int
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    jobs = respx.get(url__startswith=JOBS).mock(
+        return_value=_jobs("security / dependency audit (python)")
+    )
+    dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
+
+    await _post(client, _run("failure", branch=branch, attempt=attempt))
+
+    assert not jobs.called and not dispatch.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_dispatch_error_never_fails_the_delivery(
+    client: AsyncClient, token
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    with patch.object(
+        ci_signals,
+        "fix_audit_off_signal_branches",
+        AsyncMock(side_effect=RuntimeError("github")),
+    ):
+        resp = await _post(client, _run("failure", branch="dev"))
+    assert resp.status_code == 200
+
+
 # ── cog runs ──────────────────────────────────────────────────────────────
 
 
