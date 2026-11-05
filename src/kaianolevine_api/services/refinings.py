@@ -1,10 +1,10 @@
-"""The task board's grooming records, and the month's paid grooming.
+"""The task board's refining records, and the month's paid refining.
 
 task-manager-cog is the only writer of records: it decides what a sweep
-made of each task, and this stores it. task-groomer-cog claims each job
-before its model call, so a job delivered twice is groomed once, and
+made of each task, and this stores it. task-refiner-cog claims each job
+before its model call, so a job delivered twice is refined once, and
 reports a run the spent budget stopped, which a later won claim clears. See
-``mini_app_polis.api.contract.groomings`` for what each field means.
+``mini_app_polis.api.contract.refinings`` for what each field means.
 """
 
 from __future__ import annotations
@@ -16,49 +16,51 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas import (
-    GroomingBudgetSpentMarked,
-    GroomingBudgetSpentRequest,
-    GroomingClaimReleased,
-    GroomingClaimRequest,
-    GroomingClaimResult,
     GroomingRecord,
     GroomingRecordWrite,
-    GroomingReturnRate,
-    GroomingRunCreate,
-    GroomingRunRecorded,
-    GroomingSpend,
+    RefiningBudgetSpentMarked,
+    RefiningBudgetSpentRequest,
+    RefiningClaimReleased,
+    RefiningClaimRequest,
+    RefiningClaimResult,
+    RefiningRecord,
+    RefiningRecordWrite,
+    RefiningReturnRate,
+    RefiningRunCreate,
+    RefiningRunRecorded,
+    RefiningSpend,
 )
 
 _COLUMNS = (
     "task_gid, task_id, fingerprint, outcome, problems, moved_to_ready_at, "
-    "returned_count, groomed_fingerprint, groom_sent_at, groom_attempts, "
+    "returned_count, refined_fingerprint, refine_sent_at, refine_attempts, "
     "updated_at"
 )
 
 # A record as served: its columns, and the budget stop kept apart from it.
 _SERVED = (
     "g.task_gid, g.task_id, g.fingerprint, g.outcome, g.problems, "
-    "g.moved_to_ready_at, g.returned_count, g.groomed_fingerprint, "
-    "g.groom_sent_at, g.groom_attempts, "
+    "g.moved_to_ready_at, g.returned_count, g.refined_fingerprint, "
+    "g.refine_sent_at, g.refine_attempts, "
     "g.updated_at, s.fingerprint AS budget_spent_fingerprint"
 )
 
 
-def _record(row: Any) -> GroomingRecord:
+def _record(row: Any) -> RefiningRecord:
     data = dict(row._mapping)
     problems = data["problems"]
     data["problems"] = json.loads(problems) if isinstance(problems, str) else problems
-    return GroomingRecord.model_validate(data)
+    return RefiningRecord.model_validate(data)
 
 
-async def list_records(session: AsyncSession) -> list[GroomingRecord]:
+async def list_records(session: AsyncSession) -> list[RefiningRecord]:
     """Every record, in a stable order."""
     rows = await session.execute(
         text(
             f"""
             SELECT {_SERVED}
-            FROM task_groomings g
-            LEFT JOIN task_grooming_budget_stops s USING (task_gid)
+            FROM task_refinings g
+            LEFT JOIN task_refining_budget_stops s USING (task_gid)
             ORDER BY g.task_gid
             """
         )
@@ -67,8 +69,8 @@ async def list_records(session: AsyncSession) -> list[GroomingRecord]:
 
 
 async def write_record(
-    session: AsyncSession, record: GroomingRecordWrite
-) -> GroomingRecord:
+    session: AsyncSession, record: RefiningRecordWrite
+) -> RefiningRecord:
     """Write one task's record, replacing any it had.
 
     The budget stop is not part of the write: it is served as stored. A
@@ -79,7 +81,7 @@ async def write_record(
     previous = (
         await session.execute(
             text(
-                "SELECT moved_to_ready_at, returned_count FROM task_groomings "
+                "SELECT moved_to_ready_at, returned_count FROM task_refinings "
                 "WHERE task_gid = :task_gid FOR UPDATE"
             ),
             {"task_gid": record.task_gid},
@@ -91,14 +93,14 @@ async def write_record(
             text(
                 f"""
                 WITH g AS (
-                  INSERT INTO task_groomings
+                  INSERT INTO task_refinings
                     (task_gid, task_id, fingerprint, outcome, problems,
-                     moved_to_ready_at, returned_count, groomed_fingerprint,
-                     groom_sent_at, groom_attempts, updated_at)
+                     moved_to_ready_at, returned_count, refined_fingerprint,
+                     refine_sent_at, refine_attempts, updated_at)
                   VALUES (:task_gid, :task_id, :fingerprint, :outcome,
                           CAST(:problems AS jsonb), :moved_to_ready_at,
-                          :returned_count, :groomed_fingerprint,
-                          :groom_sent_at, :groom_attempts, now())
+                          :returned_count, :refined_fingerprint,
+                          :refine_sent_at, :refine_attempts, now())
                   ON CONFLICT (task_gid) DO UPDATE SET
                     task_id = EXCLUDED.task_id,
                     fingerprint = EXCLUDED.fingerprint,
@@ -106,14 +108,14 @@ async def write_record(
                     problems = EXCLUDED.problems,
                     moved_to_ready_at = EXCLUDED.moved_to_ready_at,
                     returned_count = EXCLUDED.returned_count,
-                    groomed_fingerprint = EXCLUDED.groomed_fingerprint,
-                    groom_sent_at = EXCLUDED.groom_sent_at,
-                    groom_attempts = EXCLUDED.groom_attempts,
+                    refined_fingerprint = EXCLUDED.refined_fingerprint,
+                    refine_sent_at = EXCLUDED.refine_sent_at,
+                    refine_attempts = EXCLUDED.refine_attempts,
                     updated_at = now()
                   RETURNING {_COLUMNS}
                 )
                 SELECT {_SERVED}
-                FROM g LEFT JOIN task_grooming_budget_stops s USING (task_gid)
+                FROM g LEFT JOIN task_refining_budget_stops s USING (task_gid)
                 """
             ),
             {
@@ -127,7 +129,7 @@ async def write_record(
 
 
 async def _record_ready_events(
-    session: AsyncSession, record: GroomingRecordWrite, previous: Any
+    session: AsyncSession, record: RefiningRecordWrite, previous: Any
 ) -> None:
     """The moves to Ready and returns from it that this write records."""
     moved_before = previous.moved_to_ready_at if previous is not None else None
@@ -156,7 +158,7 @@ async def _record_ready_events(
 READY_EVENTS_MIGRATION = "083_task_ready_events.sql"
 
 
-async def return_rate(session: AsyncSession, days: int) -> GroomingReturnRate:
+async def return_rate(session: AsyncSession, days: int) -> RefiningReturnRate:
     """Moves to Ready and returns from it over the last ``days``, and their ratio.
 
     Counted from the window's start, or from when task_ready_events began
@@ -186,7 +188,7 @@ async def return_rate(session: AsyncSession, days: int) -> GroomingReturnRate:
         )
     ).one()
     moved, returned = int(row.moved), int(row.returned)
-    return GroomingReturnRate(
+    return RefiningReturnRate(
         days=days,
         since=row.since,
         counting_since=row.counting_since,
@@ -197,14 +199,14 @@ async def return_rate(session: AsyncSession, days: int) -> GroomingReturnRate:
 
 
 async def record_run(
-    session: AsyncSession, run: GroomingRunCreate
-) -> GroomingRunRecorded:
+    session: AsyncSession, run: RefiningRunCreate
+) -> RefiningRunRecorded:
     """Record one paid run."""
     row = (
         await session.execute(
             text(
                 """
-                INSERT INTO task_grooming_runs
+                INSERT INTO task_refining_runs
                   (task_gid, model, input_tokens, output_tokens, cost_usd)
                 VALUES (:task_gid, :model, :input_tokens, :output_tokens, :cost_usd)
                 RETURNING id, task_gid, cost_usd, recorded_at
@@ -214,7 +216,7 @@ async def record_run(
         )
     ).one()
     await session.commit()
-    return GroomingRunRecorded(
+    return RefiningRunRecorded(
         id=str(row.id),
         task_gid=row.task_gid,
         cost_usd=float(row.cost_usd),
@@ -222,7 +224,7 @@ async def record_run(
     )
 
 
-async def month_spend(session: AsyncSession) -> GroomingSpend:
+async def month_spend(session: AsyncSession) -> RefiningSpend:
     """The calendar month's paid runs so far, in UTC."""
     row = (
         await session.execute(
@@ -231,19 +233,19 @@ async def month_spend(session: AsyncSession) -> GroomingSpend:
                 SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM') AS month,
                        count(*) AS runs,
                        coalesce(sum(cost_usd), 0) AS cost_usd
-                FROM task_grooming_runs
+                FROM task_refining_runs
                 WHERE recorded_at >=
                   date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                 """
             )
         )
     ).one()
-    return GroomingSpend(month=row.month, runs=row.runs, cost_usd=float(row.cost_usd))
+    return RefiningSpend(month=row.month, runs=row.runs, cost_usd=float(row.cost_usd))
 
 
 async def claim(
-    session: AsyncSession, key: GroomingClaimRequest
-) -> GroomingClaimResult:
+    session: AsyncSession, key: RefiningClaimRequest
+) -> RefiningClaimResult:
     """Claim one job for its task and content; won only if nobody holds it.
 
     One statement, so the primary key decides between two callers claiming
@@ -256,16 +258,16 @@ async def claim(
             text(
                 """
                 WITH won AS (
-                  INSERT INTO task_grooming_claims (task_gid, fingerprint)
+                  INSERT INTO task_refining_claims (task_gid, fingerprint)
                   VALUES (:task_gid, :fingerprint)
                   ON CONFLICT (task_gid, fingerprint) DO UPDATE SET
                     state = 'claimed',
                     claimed_at = now(),
                     released_at = NULL
-                  WHERE task_grooming_claims.state = 'released'
+                  WHERE task_refining_claims.state = 'released'
                   RETURNING task_gid, fingerprint
                 ), cleared AS (
-                  DELETE FROM task_grooming_budget_stops s
+                  DELETE FROM task_refining_budget_stops s
                   USING won
                   WHERE s.task_gid = won.task_gid
                     AND s.fingerprint = won.fingerprint
@@ -277,18 +279,18 @@ async def claim(
         )
     ).first()
     await session.commit()
-    return GroomingClaimResult(**key.model_dump(), claimed=row is not None)
+    return RefiningClaimResult(**key.model_dump(), claimed=row is not None)
 
 
 async def release_claim(
-    session: AsyncSession, key: GroomingClaimRequest
-) -> GroomingClaimReleased:
+    session: AsyncSession, key: RefiningClaimRequest
+) -> RefiningClaimReleased:
     """Give a held claim back, so the same content can be claimed again."""
     row = (
         await session.execute(
             text(
                 """
-                UPDATE task_grooming_claims
+                UPDATE task_refining_claims
                 SET state = 'released', released_at = now()
                 WHERE task_gid = :task_gid
                   AND fingerprint = :fingerprint
@@ -300,12 +302,12 @@ async def release_claim(
         )
     ).first()
     await session.commit()
-    return GroomingClaimReleased(**key.model_dump(), released=row is not None)
+    return RefiningClaimReleased(**key.model_dump(), released=row is not None)
 
 
 async def mark_budget_spent(
-    session: AsyncSession, stop: GroomingBudgetSpentRequest
-) -> GroomingBudgetSpentMarked:
+    session: AsyncSession, stop: RefiningBudgetSpentRequest
+) -> RefiningBudgetSpentMarked:
     """Store a run the spent budget stopped, replacing the task's last stop.
 
     Kept apart from the record, so it can be marked before a sweep has
@@ -315,7 +317,7 @@ async def mark_budget_spent(
         await session.execute(
             text(
                 """
-                INSERT INTO task_grooming_budget_stops (task_gid, fingerprint)
+                INSERT INTO task_refining_budget_stops (task_gid, fingerprint)
                 VALUES (:task_gid, :fingerprint)
                 ON CONFLICT (task_gid) DO UPDATE SET
                   fingerprint = EXCLUDED.fingerprint,
@@ -327,4 +329,33 @@ async def mark_budget_spent(
         )
     ).one()
     await session.commit()
-    return GroomingBudgetSpentMarked(task_gid=row.task_gid, fingerprint=row.fingerprint)
+    return RefiningBudgetSpentMarked(task_gid=row.task_gid, fingerprint=row.fingerprint)
+
+
+# The grooming names. The /v1/tasks/groomings routes speak the record under
+# its old field names until every cog has moved to refining; these turn one
+# shape into the other. Removed with those routes.
+
+#: Each record field's grooming name, by its refining name.
+GROOMING_FIELD_NAMES = {
+    "refined_fingerprint": "groomed_fingerprint",
+    "refine_sent_at": "groom_sent_at",
+    "refine_attempts": "groom_attempts",
+}
+
+
+def as_grooming_record(record: RefiningRecord) -> GroomingRecord:
+    """A refining record under its grooming field names."""
+    data = record.model_dump()
+    return GroomingRecord.model_validate(
+        {GROOMING_FIELD_NAMES.get(name, name): value for name, value in data.items()}
+    )
+
+
+def from_grooming_write(record: GroomingRecordWrite) -> RefiningRecordWrite:
+    """A record written under its grooming field names, as a refining one."""
+    refining_names = {old: new for new, old in GROOMING_FIELD_NAMES.items()}
+    data = record.model_dump()
+    return RefiningRecordWrite.model_validate(
+        {refining_names.get(name, name): value for name, value in data.items()}
+    )

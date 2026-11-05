@@ -23,9 +23,11 @@ task already has, so a repeated update changes nothing.
 A sweep of the board asked for on demand is the same ``task.sweep`` message
 the cog's hourly schedule enqueues, on the same queue and in the same group,
 so it never runs beside a job creating a task. A request with no flags sends
-the schedule's body exactly; one with ``groom`` or ``agents`` adds a payload
-carrying both flags, which the cog reads as making that sweep the one for
-grooming or agent dispatch. Two requests can send the same body, so each
+the schedule's body exactly; one with ``refine`` or ``agents`` adds a payload
+carrying the flags, which the cog reads as making that sweep the one for
+refining or agent dispatch. The payload carries ``refine`` under its grooming
+name ``groom`` as well, so a task manager that has not moved to refining reads
+it too; ``groom`` goes once it has. Two requests can send the same body, so each
 carries a deduplication id of its own: asking twice within the queue's
 five-minute window runs two sweeps, one after the other, rather than one.
 
@@ -99,25 +101,25 @@ async def dispatch_task_update(
     )
 
 
-def sweep_message(*, groom: bool = False, agents: bool = False) -> dict[str, Any]:
+def sweep_message(*, refine: bool = False, agents: bool = False) -> dict[str, Any]:
     """A ``task.sweep`` message.
 
     With no flags it is exactly what the cog's schedule sends: no payload,
     which the contract allows for a sweep with nothing to carry. With either
-    flag the payload carries both.
+    flag the payload carries every flag, ``refine`` under both its names.
     """
     message = TaskSweepMessage().model_dump(mode="json", exclude={"payload"})
-    if groom or agents:
-        message["payload"] = {"groom": groom, "agents": agents}
+    if refine or agents:
+        message["payload"] = {"refine": refine, "groom": refine, "agents": agents}
     return message
 
 
 async def dispatch_sweep(
-    *, settings: Settings, groom: bool = False, agents: bool = False
+    *, settings: Settings, refine: bool = False, agents: bool = False
 ) -> dict:
     """Enqueue one sweep of the board. Raises DispatchError when it did not land."""
     return await job_queue.enqueue(
-        sweep_message(groom=groom, agents=agents),
+        sweep_message(refine=refine, agents=agents),
         "a board sweep",
         cog="task-manager",
         label="task dispatch",

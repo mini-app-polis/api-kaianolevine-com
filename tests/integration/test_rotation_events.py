@@ -332,4 +332,4 @@ async def test_the_owner_console_records_and_reads_rotations_and_nothing_else(
         await client.post("/v1/notify", json={"content": "hello"})
     ).status_code == 403
     assert (await client.post("/v1/tasks/sweeps")).status_code == 403
-    assert (await client.get("/v1/tasks/groomings")).status_code == 403
+    assert (await client.get("/v1/tasks/refinings")).status_code == 403

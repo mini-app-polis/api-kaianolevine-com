@@ -189,7 +189,7 @@ async def test_a_dropped_result_is_not_recorded(client, monkeypatch) -> None:
     assert again.status_code == 202
 
 
-async def test_a_run_that_needs_grooming_is_recorded_with_its_questions(
+async def test_a_run_that_needs_refining_is_recorded_with_its_questions(
     client, monkeypatch
 ) -> None:
     _aws(monkeypatch)
@@ -197,7 +197,7 @@ async def test_a_run_that_needs_grooming_is_recorded_with_its_questions(
     questions = ["Which env var replaces FOLDER_ID?", "Should infra change too?"]
     result = {
         "run_id": run["id"],
-        "outcome": "needs_grooming",
+        "outcome": "needs_refining",
         "cost_usd": 0.31,
         "actions_run_url": RUN_URL,
         "questions": questions,
@@ -211,13 +211,13 @@ async def test_a_run_that_needs_grooming_is_recorded_with_its_questions(
     queued: AgentRun = dispatched.await_args.args[0]
     assert dispatched.await_count == 1
     assert (queued.status, queued.questions, queued.pr_url) == (
-        "needs_grooming",
+        "needs_refining",
         questions,
         None,
     )
 
     (listed,) = (
-        await client.get("/v1/tasks/agent-runs", params={"status": "needs_grooming"})
+        await client.get("/v1/tasks/agent-runs", params={"status": "needs_refining"})
     ).json()["data"]
     assert listed["questions"] == questions
     assert listed["cost_usd"] == pytest.approx(0.31)
@@ -242,7 +242,7 @@ async def test_other_outcomes_are_recorded_with_no_questions(
 @pytest.mark.parametrize(
     "change",
     [
-        {"outcome": "needs_grooming"},  # no questions
+        {"outcome": "needs_refining"},  # no questions
         {"outcome": "failed", "questions": ["Which one?"]},
         {"outcome": "succeeded"},  # no pull request
         {"outcome": "failed", "pr_url": PR},

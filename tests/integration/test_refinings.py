@@ -1,4 +1,4 @@
-"""Tests for the task board's grooming records, paid grooming, and the hand-offs."""
+"""Tests for the task board's refining records, paid refining, and the hand-offs."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from mini_app_polis.api.contract import TaskGroomMessage, TaskGroomProposalMessage
+from mini_app_polis.api.contract import TaskRefineMessage, TaskRefineProposalMessage
 from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api import identity_registry
-from kaianolevine_api.schemas import GroomingJobRequest, GroomingProposal
-from kaianolevine_api.services import grooming_dispatch, job_queue
+from kaianolevine_api.schemas import RefiningJobRequest, RefiningProposal
+from kaianolevine_api.services import job_queue, refining_dispatch
 
 pytestmark = pytest.mark.asyncio
 
@@ -28,20 +28,20 @@ RECORD = {
 
 
 async def test_a_record_is_written_and_listed(client) -> None:
-    written = await client.post("/v1/tasks/groomings", json=RECORD)
+    written = await client.post("/v1/tasks/refinings", json=RECORD)
     assert written.status_code == 200, written.text
     stored = written.json()["data"]
     assert stored["problems"] == RECORD["problems"]
     assert stored["returned_count"] == 0
     assert stored["moved_to_ready_at"] is None
 
-    listed = await client.get("/v1/tasks/groomings")
+    listed = await client.get("/v1/tasks/refinings")
     assert listed.status_code == 200
     assert [r["task_gid"] for r in listed.json()["data"]] == [RECORD["task_gid"]]
 
 
 async def test_writing_a_record_again_replaces_it(client) -> None:
-    await client.post("/v1/tasks/groomings", json=RECORD)
+    await client.post("/v1/tasks/refinings", json=RECORD)
     moved = {
         **RECORD,
         "fingerprint": "b" * 64,
@@ -49,39 +49,39 @@ async def test_writing_a_record_again_replaces_it(client) -> None:
         "problems": [],
         "moved_to_ready_at": "2026-10-21T20:00:00Z",
         "returned_count": 1,
-        "groomed_fingerprint": "b" * 64,
+        "refined_fingerprint": "b" * 64,
     }
-    response = await client.post("/v1/tasks/groomings", json=moved)
+    response = await client.post("/v1/tasks/refinings", json=moved)
     data = response.json()["data"]
     assert data["outcome"] == "ready"
     assert data["fingerprint"] == "b" * 64
     assert data["returned_count"] == 1
-    assert data["groomed_fingerprint"] == "b" * 64
+    assert data["refined_fingerprint"] == "b" * 64
     assert data["moved_to_ready_at"].startswith("2026-10-21T20:00:00")
 
-    listed = (await client.get("/v1/tasks/groomings")).json()["data"]
+    listed = (await client.get("/v1/tasks/refinings")).json()["data"]
     assert len(listed) == 1
 
 
-async def test_a_record_keeps_a_send_until_a_grooming_clears_it(client) -> None:
-    fresh = (await client.post("/v1/tasks/groomings", json=RECORD)).json()["data"]
-    assert (fresh["groom_sent_at"], fresh["groom_attempts"]) == (None, 0)
+async def test_a_record_keeps_a_send_until_a_refining_clears_it(client) -> None:
+    fresh = (await client.post("/v1/tasks/refinings", json=RECORD)).json()["data"]
+    assert (fresh["refine_sent_at"], fresh["refine_attempts"]) == (None, 0)
 
     sent = {
         **RECORD,
-        "groomed_fingerprint": RECORD["fingerprint"],
-        "groom_sent_at": "2026-10-28T09:15:00Z",
-        "groom_attempts": 2,
+        "refined_fingerprint": RECORD["fingerprint"],
+        "refine_sent_at": "2026-10-28T09:15:00Z",
+        "refine_attempts": 2,
     }
-    data = (await client.post("/v1/tasks/groomings", json=sent)).json()["data"]
-    assert data["groom_sent_at"].startswith("2026-10-28T09:15:00")
-    assert data["groom_attempts"] == 2
-    listed = (await client.get("/v1/tasks/groomings")).json()["data"][0]
-    assert listed["groom_attempts"] == 2
+    data = (await client.post("/v1/tasks/refinings", json=sent)).json()["data"]
+    assert data["refine_sent_at"].startswith("2026-10-28T09:15:00")
+    assert data["refine_attempts"] == 2
+    listed = (await client.get("/v1/tasks/refinings")).json()["data"][0]
+    assert listed["refine_attempts"] == 2
 
-    groomed = {**RECORD, "groomed_fingerprint": "b" * 64}
-    data = (await client.post("/v1/tasks/groomings", json=groomed)).json()["data"]
-    assert (data["groom_sent_at"], data["groom_attempts"]) == (None, 0)
+    refined = {**RECORD, "refined_fingerprint": "b" * 64}
+    data = (await client.post("/v1/tasks/refinings", json=refined)).json()["data"]
+    assert (data["refine_sent_at"], data["refine_attempts"]) == (None, 0)
 
 
 @pytest.mark.parametrize(
@@ -91,25 +91,25 @@ async def test_a_record_keeps_a_send_until_a_grooming_clears_it(client) -> None:
         {"outcome": "maybe"},
         {"task_gid": "TASK-151"},
         {"returned_count": -1},
-        {"groom_attempts": -1},
+        {"refine_attempts": -1},
         {"extra": True},
     ],
 )
 async def test_a_malformed_record_is_rejected(client, change) -> None:
-    response = await client.post("/v1/tasks/groomings", json={**RECORD, **change})
+    response = await client.post("/v1/tasks/refinings", json={**RECORD, **change})
     assert response.status_code == 422
 
 
 async def test_paid_runs_add_up_to_the_months_spend(
     client, db_session: AsyncSession
 ) -> None:
-    empty = (await client.get("/v1/tasks/groomings/spend")).json()["data"]
+    empty = (await client.get("/v1/tasks/refinings/spend")).json()["data"]
     assert empty["runs"] == 0
     assert empty["cost_usd"] == 0
 
     for cost in (0.12, 0.3):
         response = await client.post(
-            "/v1/tasks/groomings/runs",
+            "/v1/tasks/refinings/runs",
             json={
                 "task_gid": RECORD["task_gid"],
                 "model": "claude-sonnet-5-5",
@@ -124,14 +124,14 @@ async def test_paid_runs_add_up_to_the_months_spend(
     # A run from last month is not this month's spend.
     await db_session.execute(
         text(
-            "INSERT INTO task_grooming_runs "
+            "INSERT INTO task_refining_runs "
             "(task_gid, model, input_tokens, output_tokens, cost_usd, recorded_at) "
             "VALUES ('1', 'm', 1, 1, 5, now() - interval '40 days')"
         )
     )
     await db_session.commit()
 
-    spend = (await client.get("/v1/tasks/groomings/spend")).json()["data"]
+    spend = (await client.get("/v1/tasks/refinings/spend")).json()["data"]
     assert spend["runs"] == 2
     assert spend["cost_usd"] == pytest.approx(0.42)
     assert len(spend["month"]) == 7
@@ -140,10 +140,10 @@ async def test_paid_runs_add_up_to_the_months_spend(
 async def test_the_task_manager_keeps_the_records() -> None:
     cog = identity_registry.declared("task-manager-cog")
     assert cog is not None
-    assert "task-groomer" in cog.roles
+    assert "task-refiner" in cog.roles
 
 
-# ── hand-offs between the task manager and the groomer ────────────────────
+# ── hand-offs between the task manager and the refiner ────────────────────
 
 ACCOUNT_QUEUES = "https://sqs.us-east-1.amazonaws.com/400200465748"
 
@@ -181,12 +181,12 @@ def _aws(monkeypatch):
     return get_settings()
 
 
-async def test_a_grooming_job_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
+async def test_a_refining_job_is_enqueued_and_acknowledged(client, monkeypatch) -> None:
     _aws(monkeypatch)
     with patch.object(
-        grooming_dispatch, "dispatch_job", AsyncMock(return_value={"message_id": "m-1"})
+        refining_dispatch, "dispatch_job", AsyncMock(return_value={"message_id": "m-1"})
     ) as dispatched:
-        response = await client.post("/v1/tasks/groomings/jobs", json=JOB)
+        response = await client.post("/v1/tasks/refinings/jobs", json=JOB)
 
     assert response.status_code == 202, response.text
     assert response.json()["data"] == {
@@ -194,36 +194,36 @@ async def test_a_grooming_job_is_enqueued_and_acknowledged(client, monkeypatch) 
         "message_id": "m-1",
         "task_gid": JOB["task"]["task_gid"],
     }
-    assert dispatched.await_args.args[0] == GroomingJobRequest.model_validate(JOB)
+    assert dispatched.await_args.args[0] == RefiningJobRequest.model_validate(JOB)
 
 
 async def test_a_proposal_is_enqueued_for_the_task_manager(client, monkeypatch) -> None:
     _aws(monkeypatch)
     with patch.object(
-        grooming_dispatch,
+        refining_dispatch,
         "dispatch_proposal",
         AsyncMock(return_value={"message_id": "m-2"}),
     ) as dispatched:
-        response = await client.post("/v1/tasks/groomings/proposals", json=PROPOSAL)
+        response = await client.post("/v1/tasks/refinings/proposals", json=PROPOSAL)
 
     assert response.status_code == 202, response.text
     assert response.json()["data"]["message_id"] == "m-2"
-    assert dispatched.await_args.args[0] == GroomingProposal.model_validate(PROPOSAL)
+    assert dispatched.await_args.args[0] == RefiningProposal.model_validate(PROPOSAL)
 
 
 @pytest.mark.parametrize(
     ("path", "body", "target"),
     [
-        ("/v1/tasks/groomings/jobs", JOB, "dispatch_job"),
-        ("/v1/tasks/groomings/proposals", PROPOSAL, "dispatch_proposal"),
+        ("/v1/tasks/refinings/jobs", JOB, "dispatch_job"),
+        ("/v1/tasks/refinings/proposals", PROPOSAL, "dispatch_proposal"),
     ],
 )
 async def test_a_dropped_hand_off_is_a_502(client, monkeypatch, path, body, target):
     _aws(monkeypatch)
     with patch.object(
-        grooming_dispatch,
+        refining_dispatch,
         target,
-        AsyncMock(side_effect=grooming_dispatch.DispatchError("queue unreachable")),
+        AsyncMock(side_effect=refining_dispatch.DispatchError("queue unreachable")),
     ):
         response = await client.post(path, json=body)
     assert response.status_code == 502
@@ -232,30 +232,30 @@ async def test_a_dropped_hand_off_is_a_502(client, monkeypatch, path, body, targ
 
 async def test_a_proposal_with_an_effort_off_the_scale_is_rejected(client) -> None:
     response = await client.post(
-        "/v1/tasks/groomings/proposals", json={**PROPOSAL, "effort": "XL"}
+        "/v1/tasks/refinings/proposals", json={**PROPOSAL, "effort": "XL"}
     )
     assert response.status_code == 422
 
 
-async def test_a_job_goes_to_the_groomers_queue(monkeypatch) -> None:
+async def test_a_job_goes_to_the_refiners_queue(monkeypatch) -> None:
     settings = _aws(monkeypatch)
     sqs = MagicMock()
     sqs.send_message.return_value = {"MessageId": "m-1"}
     with patch.object(job_queue.boto3, "client", return_value=sqs):
-        await grooming_dispatch.dispatch_job(
-            GroomingJobRequest.model_validate(JOB), settings=settings
+        await refining_dispatch.dispatch_job(
+            RefiningJobRequest.model_validate(JOB), settings=settings
         )
     sent = sqs.send_message.call_args.kwargs
-    assert sent["QueueUrl"] == f"{ACCOUNT_QUEUES}/task-groomer-jobs"
+    assert sent["QueueUrl"] == f"{ACCOUNT_QUEUES}/task-refiner-jobs"
     assert "MessageGroupId" not in sent
     body = json.loads(sent["MessageBody"])
-    assert (body["type"], body["version"]) == ("task.groom", 1)
-    # What task-groomer-cog's worker reads it as.
-    assert parse_message(sent["MessageBody"], TaskGroomMessage).payload == (
-        GroomingJobRequest.model_validate(JOB)
+    assert (body["type"], body["version"]) == ("task.refine", 1)
+    # What task-refiner-cog's worker reads it as.
+    assert parse_message(sent["MessageBody"], TaskRefineMessage).payload == (
+        RefiningJobRequest.model_validate(JOB)
     )
-    assert GroomingJobRequest.model_validate(body["payload"]) == (
-        GroomingJobRequest.model_validate(JOB)
+    assert RefiningJobRequest.model_validate(body["payload"]) == (
+        RefiningJobRequest.model_validate(JOB)
     )
 
 
@@ -264,45 +264,45 @@ async def test_a_proposal_goes_to_the_task_managers_queue(monkeypatch) -> None:
     sqs = MagicMock()
     sqs.send_message.return_value = {"MessageId": "m-2"}
     with patch.object(job_queue.boto3, "client", return_value=sqs):
-        await grooming_dispatch.dispatch_proposal(
-            GroomingProposal.model_validate(PROPOSAL), settings=settings
+        await refining_dispatch.dispatch_proposal(
+            RefiningProposal.model_validate(PROPOSAL), settings=settings
         )
     sent = sqs.send_message.call_args.kwargs
     assert sent["QueueUrl"] == f"{ACCOUNT_QUEUES}/task-manager-jobs.fifo"
     assert sent["MessageGroupId"] == "task-manager"
     body = json.loads(sent["MessageBody"])
-    assert (body["type"], body["version"]) == ("task.groom-proposal", 1)
+    assert (body["type"], body["version"]) == ("task.refine-proposal", 1)
     # What task-manager-cog's worker reads it as.
-    assert parse_message(sent["MessageBody"], TaskGroomProposalMessage).payload == (
-        GroomingProposal.model_validate(PROPOSAL)
+    assert parse_message(sent["MessageBody"], TaskRefineProposalMessage).payload == (
+        RefiningProposal.model_validate(PROPOSAL)
     )
 
 
-async def test_the_groomer_proposes_and_never_asks_for_tasks() -> None:
-    cog = identity_registry.declared("task-groomer-cog")
+async def test_the_refiner_proposes_and_never_asks_for_tasks() -> None:
+    cog = identity_registry.declared("task-refiner-cog")
     assert cog is not None
-    assert "task-groomer" in cog.roles
+    assert "task-refiner" in cog.roles
     assert "task-requester" not in cog.roles
 
 
-# ── claims on grooming jobs ───────────────────────────────────────────────
+# ── claims on refining jobs ───────────────────────────────────────────────
 
 CLAIM = {"task_gid": "1219848148842653", "fingerprint": "c" * 64}
 
 
 async def test_the_first_claim_wins_and_a_repeat_does_not(client) -> None:
-    first = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    first = await client.post("/v1/tasks/refinings/claims", json=CLAIM)
     assert first.status_code == 200, first.text
     assert first.json()["data"] == {**CLAIM, "claimed": True}
 
-    again = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    again = await client.post("/v1/tasks/refinings/claims", json=CLAIM)
     assert again.status_code == 200
     assert again.json()["data"]["claimed"] is False
 
 
 async def test_two_concurrent_claims_have_one_winner(client) -> None:
     results = await asyncio.gather(
-        *(client.post("/v1/tasks/groomings/claims", json=CLAIM) for _ in range(5))
+        *(client.post("/v1/tasks/refinings/claims", json=CLAIM) for _ in range(5))
     )
     assert all(r.status_code == 200 for r in results)
     assert sorted(r.json()["data"]["claimed"] for r in results) == [
@@ -315,33 +315,33 @@ async def test_two_concurrent_claims_have_one_winner(client) -> None:
 
 
 async def test_a_released_claim_can_be_claimed_again(client) -> None:
-    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    await client.post("/v1/tasks/refinings/claims", json=CLAIM)
 
-    released = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    released = await client.post("/v1/tasks/refinings/claims/release", json=CLAIM)
     assert released.status_code == 200, released.text
     assert released.json()["data"] == {**CLAIM, "released": True}
 
-    again = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    again = await client.post("/v1/tasks/refinings/claims", json=CLAIM)
     assert again.json()["data"]["claimed"] is True
-    held = await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    held = await client.post("/v1/tasks/refinings/claims", json=CLAIM)
     assert held.json()["data"]["claimed"] is False
 
 
 async def test_releasing_what_is_not_held_releases_nothing(client) -> None:
-    never = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    never = await client.post("/v1/tasks/refinings/claims/release", json=CLAIM)
     assert never.status_code == 200
     assert never.json()["data"]["released"] is False
 
-    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
-    await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
-    twice = await client.post("/v1/tasks/groomings/claims/release", json=CLAIM)
+    await client.post("/v1/tasks/refinings/claims", json=CLAIM)
+    await client.post("/v1/tasks/refinings/claims/release", json=CLAIM)
+    twice = await client.post("/v1/tasks/refinings/claims/release", json=CLAIM)
     assert twice.json()["data"]["released"] is False
 
 
 async def test_new_content_for_the_same_task_is_a_new_claim(client) -> None:
-    await client.post("/v1/tasks/groomings/claims", json=CLAIM)
+    await client.post("/v1/tasks/refinings/claims", json=CLAIM)
     changed = {**CLAIM, "fingerprint": "d" * 64}
-    response = await client.post("/v1/tasks/groomings/claims", json=changed)
+    response = await client.post("/v1/tasks/refinings/claims", json=changed)
     assert response.json()["data"]["claimed"] is True
 
 
@@ -350,7 +350,7 @@ async def test_new_content_for_the_same_task_is_a_new_claim(client) -> None:
     [{"fingerprint": "not-a-sha"}, {"task_gid": "TASK-292"}, {"extra": True}],
 )
 async def test_a_malformed_claim_is_rejected(client, change) -> None:
-    for path in ("/v1/tasks/groomings/claims", "/v1/tasks/groomings/claims/release"):
+    for path in ("/v1/tasks/refinings/claims", "/v1/tasks/refinings/claims/release"):
         response = await client.post(path, json={**CLAIM, **change})
         assert response.status_code == 422
 
@@ -360,19 +360,19 @@ async def test_a_caller_without_the_scope_may_not_claim_or_release(
 ) -> None:
     async with role_client("agent-reporter") as reporter:
         for path in (
-            "/v1/tasks/groomings/claims",
-            "/v1/tasks/groomings/claims/release",
+            "/v1/tasks/refinings/claims",
+            "/v1/tasks/refinings/claims/release",
         ):
             assert (await reporter.post(path, json=CLAIM)).status_code == 403
-    async with role_client("task-groomer") as groomer:
-        response = await groomer.post("/v1/tasks/groomings/claims", json=CLAIM)
+    async with role_client("task-refiner") as refiner:
+        response = await refiner.post("/v1/tasks/refinings/claims", json=CLAIM)
         assert response.json()["data"]["claimed"] is True
 
 
-async def test_the_groomer_holds_the_claim_scope() -> None:
-    cog = identity_registry.declared("task-groomer-cog")
+async def test_the_refiner_holds_the_claim_scope() -> None:
+    cog = identity_registry.declared("task-refiner-cog")
     assert cog is not None
-    assert "task-groomer" in cog.roles
+    assert "task-refiner" in cog.roles
 
 
 # ── runs the spent budget stopped ─────────────────────────────────────────
@@ -381,89 +381,89 @@ STOP = {"task_gid": RECORD["task_gid"], "fingerprint": RECORD["fingerprint"]}
 
 
 async def _listed_stop(client, task_gid: str) -> str | None:
-    listed = (await client.get("/v1/tasks/groomings")).json()["data"]
+    listed = (await client.get("/v1/tasks/refinings")).json()["data"]
     (record,) = (r for r in listed if r["task_gid"] == task_gid)
     return record["budget_spent_fingerprint"]
 
 
 async def test_a_stop_is_marked_and_served_on_the_record(client) -> None:
-    await client.post("/v1/tasks/groomings", json=RECORD)
+    await client.post("/v1/tasks/refinings", json=RECORD)
     assert await _listed_stop(client, RECORD["task_gid"]) is None
 
-    marked = await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    marked = await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
     assert marked.status_code == 200, marked.text
     assert marked.json()["data"] == STOP
     assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
 
 
 async def test_a_later_stop_replaces_the_tasks_last(client) -> None:
-    await client.post("/v1/tasks/groomings", json=RECORD)
-    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    await client.post("/v1/tasks/refinings", json=RECORD)
+    await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
     later = {**STOP, "fingerprint": "e" * 64}
-    await client.post("/v1/tasks/groomings/budget-spent", json=later)
+    await client.post("/v1/tasks/refinings/budget-spent", json=later)
     assert await _listed_stop(client, RECORD["task_gid"]) == "e" * 64
 
 
 async def test_a_stop_is_marked_before_the_task_has_a_record(client) -> None:
-    marked = await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    marked = await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
     assert marked.status_code == 200, marked.text
-    assert (await client.get("/v1/tasks/groomings")).json()["data"] == []
+    assert (await client.get("/v1/tasks/refinings")).json()["data"] == []
 
     # The sweep's first record for the task is served with it.
-    written = await client.post("/v1/tasks/groomings", json=RECORD)
+    written = await client.post("/v1/tasks/refinings", json=RECORD)
     assert written.json()["data"]["budget_spent_fingerprint"] == STOP["fingerprint"]
     assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
 
 
 async def test_a_won_claim_for_the_stopped_content_clears_the_stop(client) -> None:
-    await client.post("/v1/tasks/groomings", json=RECORD)
-    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    await client.post("/v1/tasks/refinings", json=RECORD)
+    await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
 
-    won = await client.post("/v1/tasks/groomings/claims", json=STOP)
+    won = await client.post("/v1/tasks/refinings/claims", json=STOP)
     assert won.json()["data"] == {**STOP, "claimed": True}
     assert await _listed_stop(client, RECORD["task_gid"]) is None
 
 
 async def test_a_claim_that_does_not_clear_the_stop(client) -> None:
-    await client.post("/v1/tasks/groomings", json=RECORD)
+    await client.post("/v1/tasks/refinings", json=RECORD)
     other = {**STOP, "fingerprint": "f" * 64}
 
     # A claim held before the stop is not won again, so the stop stays.
-    await client.post("/v1/tasks/groomings/claims", json=STOP)
-    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
-    held = await client.post("/v1/tasks/groomings/claims", json=STOP)
+    await client.post("/v1/tasks/refinings/claims", json=STOP)
+    await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
+    held = await client.post("/v1/tasks/refinings/claims", json=STOP)
     assert held.json()["data"]["claimed"] is False
     assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
 
     # A claim won for other content leaves the stop for this content.
-    won = await client.post("/v1/tasks/groomings/claims", json=other)
+    won = await client.post("/v1/tasks/refinings/claims", json=other)
     assert won.json()["data"]["claimed"] is True
     assert await _listed_stop(client, RECORD["task_gid"]) == STOP["fingerprint"]
 
 
-async def test_a_record_write_leaves_the_stop_and_groomed_fingerprint(
+async def test_a_record_write_leaves_the_stop_and_refined_fingerprint(
     client,
 ) -> None:
-    groomed = {**RECORD, "groomed_fingerprint": "b" * 64}
-    await client.post("/v1/tasks/groomings", json=groomed)
-    await client.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    refined = {**RECORD, "refined_fingerprint": "b" * 64}
+    await client.post("/v1/tasks/refinings", json=refined)
+    await client.post("/v1/tasks/refinings/budget-spent", json=STOP)
 
-    rewritten = {**groomed, "outcome": "questions", "returned_count": 2}
-    response = await client.post("/v1/tasks/groomings", json=rewritten)
+    rewritten = {**refined, "outcome": "questions", "returned_count": 2}
+    response = await client.post("/v1/tasks/refinings", json=rewritten)
     data = response.json()["data"]
-    assert data["groomed_fingerprint"] == "b" * 64
+    assert data["refined_fingerprint"] == "b" * 64
     assert data["budget_spent_fingerprint"] == STOP["fingerprint"]
 
-    (listed,) = (await client.get("/v1/tasks/groomings")).json()["data"]
-    assert listed["groomed_fingerprint"] == "b" * 64
+    (listed,) = (await client.get("/v1/tasks/refinings")).json()["data"]
+    assert listed["refined_fingerprint"] == "b" * 64
     assert listed["budget_spent_fingerprint"] == STOP["fingerprint"]
 
     # A stop changes nothing in the record either.
     await client.post(
-        "/v1/tasks/groomings/budget-spent", json={**STOP, "fingerprint": "e" * 64}
+        "/v1/tasks/refinings/budget-spent", json={**STOP, "fingerprint": "e" * 64}
     )
-    (listed,) = (await client.get("/v1/tasks/groomings")).json()["data"]
-    assert listed["groomed_fingerprint"] == "b" * 64
+    (listed,) = (await client.get("/v1/tasks/refinings")).json()["data"]
+    assert listed["refined_fingerprint"] == "b" * 64
     assert listed["fingerprint"] == RECORD["fingerprint"]
 
 
@@ -473,7 +473,7 @@ async def test_a_record_write_leaves_the_stop_and_groomed_fingerprint(
 )
 async def test_a_malformed_stop_is_rejected(client, change) -> None:
     response = await client.post(
-        "/v1/tasks/groomings/budget-spent", json={**STOP, **change}
+        "/v1/tasks/refinings/budget-spent", json={**STOP, **change}
     )
     assert response.status_code == 422
 
@@ -482,10 +482,10 @@ async def test_a_caller_without_the_scope_may_not_mark_a_stop(
     client, role_client
 ) -> None:
     async with role_client("agent-reporter") as reporter:
-        response = await reporter.post("/v1/tasks/groomings/budget-spent", json=STOP)
+        response = await reporter.post("/v1/tasks/refinings/budget-spent", json=STOP)
         assert response.status_code == 403
-    async with role_client("task-groomer") as groomer:
-        response = await groomer.post("/v1/tasks/groomings/budget-spent", json=STOP)
+    async with role_client("task-refiner") as refiner:
+        response = await refiner.post("/v1/tasks/refinings/budget-spent", json=STOP)
         assert response.status_code == 200, response.text
 
 
@@ -493,7 +493,7 @@ async def test_a_caller_without_the_scope_may_not_mark_a_stop(
 
 
 async def test_the_return_rate_of_an_empty_window_is_none(client) -> None:
-    response = await client.get("/v1/tasks/groomings/return-rate")
+    response = await client.get("/v1/tasks/refinings/return-rate")
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["days"] == 30
@@ -507,21 +507,21 @@ async def test_moves_and_returns_are_counted_from_the_records(client) -> None:
     other = {**RECORD, "task_gid": "1219755103049632", "task_id": "TASK-152"}
     for record in (RECORD, other):
         await client.post(
-            "/v1/tasks/groomings",
+            "/v1/tasks/refinings",
             json={**record, "outcome": "ready", "moved_to_ready_at": moved_at},
         )
     # The same move written again is not a second move.
     await client.post(
-        "/v1/tasks/groomings",
+        "/v1/tasks/refinings",
         json={**RECORD, "outcome": "ready", "moved_to_ready_at": moved_at},
     )
     # One of them comes back out of Ready.
     await client.post(
-        "/v1/tasks/groomings",
+        "/v1/tasks/refinings",
         json={**RECORD, "moved_to_ready_at": None, "returned_count": 1},
     )
 
-    data = (await client.get("/v1/tasks/groomings/return-rate")).json()["data"]
+    data = (await client.get("/v1/tasks/refinings/return-rate")).json()["data"]
     assert (data["moved_to_ready"], data["returned"]) == (2, 1)
     assert data["ratio"] == pytest.approx(0.5)
 
@@ -545,11 +545,11 @@ async def test_events_before_the_window_are_not_counted(
     )
     await db_session.commit()
 
-    data = (await client.get("/v1/tasks/groomings/return-rate")).json()["data"]
+    data = (await client.get("/v1/tasks/refinings/return-rate")).json()["data"]
     assert (data["moved_to_ready"], data["returned"], data["ratio"]) == (1, 0, 0.0)
     assert data["counting_since"] == data["since"]
     wide = (
-        await client.get("/v1/tasks/groomings/return-rate", params={"days": 60})
+        await client.get("/v1/tasks/refinings/return-rate", params={"days": 60})
     ).json()["data"]
     assert (wide["moved_to_ready"], wide["returned"]) == (2, 1)
 
@@ -557,6 +557,6 @@ async def test_events_before_the_window_are_not_counted(
 @pytest.mark.parametrize("days", ["0", "366", "x"])
 async def test_the_window_is_bounded(client, days: str) -> None:
     response = await client.get(
-        "/v1/tasks/groomings/return-rate", params={"days": days}
+        "/v1/tasks/refinings/return-rate", params={"days": days}
     )
     assert response.status_code == 422

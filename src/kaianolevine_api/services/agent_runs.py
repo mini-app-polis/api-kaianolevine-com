@@ -3,7 +3,7 @@
 task-manager-cog records a run before it starts one, and a run still
 ``dispatched`` is the lock on its repository: the table allows one per
 repository. A run ends once, with its workflow's result or with
-task-manager-cog marking it failed. A run that needs grooming ends with
+task-manager-cog marking it failed. A run that needs refining ends with
 the questions it asked, for task-manager-cog to post on the task. See
 ``mini_app_polis.api.contract.agent_runs`` for what each field means.
 """

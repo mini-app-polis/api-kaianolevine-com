@@ -6,7 +6,7 @@ resolution-markers = [
     "python_full_version == '3.14.*'",
     "python_full_version == '3.13.*'",
     "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' or (python_full_version == '3.12.*' and sys_platform != 'emscripten')",
+    "(python_full_version < '3.13' and sys_platform != 'emscripten') or (python_full_version < '3.12' and sys_platform == 'emscripten')",
 ]
 
 [[package]]
@@ -1482,7 +1482,7 @@ wheels = [
 
 [[package]]
 name = "miniapppolis-common-utils"
-version = "7.14.0"
+version = "7.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1500,9 +1500,9 @@ dependencies = [
     { name = "spotipy" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/2b/e43f91a9b884fee879363278ac0bc3e813c0880fad228c2db34056460025/miniapppolis_common_utils-7.14.0.tar.gz", hash = "sha256:2d7ed7abaf62607a3c43f890c0094d7635e3b1e75ef78e2b8d3b601756d9e348", size = 494616, upload-time = "2026-11-04T22:00:20.206Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/8e/2954deba9ca47e06b003d6c8d42de0651e57c1faa78c4d126b5b404c9cf8/miniapppolis_common_utils-7.18.0.tar.gz", hash = "sha256:d6e30edebfc5d6e78760a4bc72c8712fa8324a1be108a4ca0df30d799e3ec342", size = 500200, upload-time = "2026-11-05T01:42:08.56Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/4b/53a21dd09314e336bcca2bb7d2bea6f3ffb61c93da39f8b7f5d03172faa3/miniapppolis_common_utils-7.14.0-py3-none-any.whl", hash = "sha256:9b6d82320fcf8feb8e278ea9f8322167a923ef0d4412161890b09c19eac8f0ae", size = 228479, upload-time = "2026-11-04T22:00:18.561Z" },
+    { url = "https://files.pythonhosted.org/packages/92/09/83b9a6ecb09283b0e4bf8e6c609886b70fefb37a97375d15b880d6f1824c/miniapppolis_common_utils-7.18.0-py3-none-any.whl", hash = "sha256:d9118e8859d5e3c9db4a1d4f4b53362b89df471a4bc56055279682fe1303ad17", size = 232467, upload-time = "2026-11-05T01:42:07.153Z" },
 ]
 
 [package.optional-dependencies]

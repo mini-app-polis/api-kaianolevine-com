@@ -8,3 +8,8 @@ facts:
     matches:
       file: src/kaianolevine_api/identity_registry.py
       pattern: "\\bMachine\\("
+  test_functions:
+    description: Test functions in the test suites (def test_*, each parametrized function once)
+    matches:
+      file: tests/**/test_*.py
+      pattern: '(?m)^\s*(?:async\s+)?def test_\w+'
