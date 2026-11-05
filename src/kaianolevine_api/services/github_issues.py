@@ -187,6 +187,20 @@ async def find_open(repo: str, marker: str, *, settings: Settings) -> Issue | No
         page += 1
 
 
+async def is_open(repo: str, number: int, *, settings: Settings) -> bool:
+    """Whether Issue ``number`` in ``repo`` is open."""
+    issue = _expect(
+        await _call(
+            "GET",
+            f"/repos/{repo}/issues/{number}",
+            authorization=await _authorized(repo, settings),
+        ),
+        200,
+        f"{repo}#{number}",
+    )
+    return str((issue or {}).get("state")) == "open"
+
+
 async def open_issue(
     repo: str, *, marker: str, title: str, body: str, settings: Settings
 ) -> Issue:

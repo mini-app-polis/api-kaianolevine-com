@@ -16,10 +16,16 @@ open row per (kind, key) in ``signal_streaks``. A failure opens one or bumps
 the open one; a recovery closes it, so the next failure starts afresh.
 
 **A rule** per kind says when a streak escalates. A kind with no recovery
-event of its own (a 5xx has no "and now it works") closes by a quiet window
-instead: a failure arriving after the window has passed with none closes the
-old streak and opens a new one. Nothing runs on a timer; the window is
-applied when the next failure arrives. A kind may have a
+event of its own (a dependency's 5xx has no "and now it works") may close by
+a quiet window instead: :func:`close_if_quiet` closes a streak that has gone
+the window without a failure, called by a scheduled sweep
+(``fault_signals.sweep_quiet``) and again when the next failure arrives, so
+a sweep that did not run delays a close and never loses one. A rule may
+instead leave its Issue to a person or a fixing pull request
+(``reopen_closed_issue``): the streak never closes on its own, and its next
+failure asks GitHub whether the Issue is still open. A closed one means the
+problem was thought fixed, so the failure starts a new streak whose Issue
+links the old one. A kind may have a
 remediation, tried before anything is reported: for CI, re-running the
 failed jobs once. A remediation that cannot start escalates at once rather
 than leaving the streak to wait on a failure that may never come. A streak
@@ -111,6 +117,12 @@ class Signal:
     remediable: bool = False
     #: What a remediation needs to act on this event (a repo, a run id).
     context: dict[str, Any] = field(default_factory=dict)
+    #: This one event's particulars (when, which request), as labelled lines:
+    #: in the Issue it opens, and in the comment it posts on one already open.
+    evidence: tuple[tuple[str, str], ...] = ()
+    #: Posted on an Issue as soon as it opens, with ``{number}`` replaced by
+    #: its number: what only the number lets the Issue say.
+    opened_comment: str | None = None
 
 
 #: Starts a remediation for a signal. Returns whether it started.
@@ -127,8 +139,14 @@ class Rule:
     remediation: Remediation | None = None
     max_remediations: int = 0
     #: For a kind with no recovery event: a streak with no failure for this
-    #: long is over, and the next failure starts a new one.
+    #: long is over (:func:`close_if_quiet`), and the next failure starts a
+    #: new one.
     quiet_window: dt.timedelta | None = None
+    #: An escalated streak whose Issue was closed (by a person, or a pull
+    #: request that fixes it) is over: its next failure starts a new streak,
+    #: whose Issue links the closed one. Costs that failure one read of the
+    #: Issue from GitHub.
+    reopen_closed_issue: bool = False
 
 
 def _cut(value: str, limit: int) -> str:
@@ -158,8 +176,22 @@ def _https(link: str | None) -> str | None:
     return link if link and link.startswith("https://") else None
 
 
-def issue_body(signal: Signal, *, failures: int, opened_at: dt.datetime) -> str:
-    """The body of the Issue an escalated streak opens."""
+def _evidence_lines(signal: Signal) -> list[str]:
+    return [f"**{label}:** {value}" for label, value in signal.evidence if value]
+
+
+def issue_body(
+    signal: Signal,
+    *,
+    failures: int,
+    opened_at: dt.datetime,
+    previous: int | None = None,
+) -> str:
+    """The body of the Issue an escalated streak opens.
+
+    ``previous`` is the number of the closed Issue, in the same repository,
+    of the streak this one follows.
+    """
     lines: list[str] = []
     if signal.details:
         lines += [signal.details, ""]
@@ -171,6 +203,9 @@ def issue_body(signal: Signal, *, failures: int, opened_at: dt.datetime) -> str:
     lines.append(
         f"**Streak:** {failures} failure(s) since {opened_at:%Y-%m-%d %H:%M} UTC"
     )
+    if previous is not None:
+        lines.append(f"**Recurs:** #{previous} was closed, and it failed again.")
+    lines += _evidence_lines(signal)
     link = _https(signal.link)
     if link:
         lines.append(f"**Latest failure:** {link}")
@@ -180,6 +215,7 @@ def issue_body(signal: Signal, *, failures: int, opened_at: dt.datetime) -> str:
 def failure_comment(signal: Signal, *, failures: int) -> str:
     """The comment a further failure of an escalated streak posts."""
     lines = [f"Failed again: {failures} failure(s) in this streak."]
+    lines += _evidence_lines(signal)
     if signal.details:
         lines.append(signal.details)
     link = _https(signal.link)
@@ -210,9 +246,17 @@ def issue_recovery_comment(signal: Signal) -> str:
     return _cut("\n".join(_recovered_lines(signal)), _TEXT_MAX)
 
 
-def _quiet_line(signal: Signal, window: dt.timedelta) -> str:
+def _span(window: dt.timedelta) -> str:
+    """A window in whole hours where it is whole hours, else in minutes."""
     minutes = int(window.total_seconds() // 60)
-    return f"Recovered: {minutes} minutes passed without another {signal.key}."
+    if minutes >= 60 and minutes % 60 == 0:
+        hours = minutes // 60
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    return f"{minutes} minutes"
+
+
+def _quiet_line(signal: Signal, window: dt.timedelta) -> str:
+    return f"Recovered: {_span(window)} passed without another {signal.key}."
 
 
 def quiet_comment(signal: Signal, window: dt.timedelta) -> str:
@@ -357,16 +401,18 @@ async def _recover(
     return "recovered"
 
 
-async def _close_if_quiet(
+async def close_if_quiet(
     session: AsyncSession,
     signal: Signal,
     window: dt.timedelta,
     *,
     settings: Settings,
-) -> None:
+) -> bool:
     """Close the open streak if it has gone ``window`` without a failure.
 
     Closed as of the end of its window, not now: that is when it was over.
+    An escalated streak's Issue is commented and closed. Returns whether a
+    streak closed.
     """
     row = (
         await session.execute(
@@ -389,7 +435,7 @@ async def _close_if_quiet(
     ).first()
     await session.commit()
     if row is None:
-        return
+        return False
     escalated_at, failures, task_external_id, issue_repo, issue_number = row
     logger.info(
         "signals: %s %s went quiet after %d failure(s)%s",
@@ -408,6 +454,35 @@ async def _close_if_quiet(
             task_comment=quiet_comment(signal, window),
             settings=settings,
         )
+    return True
+
+
+async def _issue_closed(repo: str, number: int, *, settings: Settings) -> bool:
+    """Whether the Issue is closed. One GitHub can't answer counts as open."""
+    try:
+        return not await github_issues.is_open(repo, number, settings=settings)
+    except github_issues.IssueError as exc:
+        logger.warning("signals: could not read %s#%d: %s", repo, number, exc)
+        return False
+
+
+async def _post_opened_comment(
+    signal: Signal, issue: github_issues.Issue, *, settings: Settings
+) -> None:
+    """Post the signal's opening comment on its new Issue. Only logged."""
+    if not signal.opened_comment:
+        return
+    try:
+        await github_issues.comment(
+            issue.repo,
+            issue.number,
+            _cut(signal.opened_comment.format(number=issue.number), _TEXT_MAX),
+            settings=settings,
+        )
+    except github_issues.IssueError as exc:
+        logger.warning(
+            "signals: no opening comment on %s#%d: %s", issue.repo, issue.number, exc
+        )
 
 
 async def _escalate(
@@ -418,6 +493,7 @@ async def _escalate(
     failures: int,
     opened_at: dt.datetime,
     settings: Settings,
+    previous: int | None = None,
 ) -> Outcome:
     claimed = (
         await session.execute(
@@ -443,7 +519,9 @@ async def _escalate(
             repo,
             marker=issue_marker(signal),
             title=_cut(signal.title, _TITLE_MAX),
-            body=issue_body(signal, failures=failures, opened_at=opened_at),
+            body=issue_body(
+                signal, failures=failures, opened_at=opened_at, previous=previous
+            ),
             settings=settings,
         )
     except github_issues.IssueError as exc:
@@ -469,23 +547,12 @@ async def _escalate(
     )
     await session.commit()
     logger.info("signals: %s escalated as %s#%d", signal.key, issue.repo, issue.number)
+    await _post_opened_comment(signal, issue, settings=settings)
     return "escalated"
 
 
-async def observe(
-    session: AsyncSession,
-    signal: Signal,
-    *,
-    rule: Rule,
-    settings: Settings,
-) -> Outcome:
-    """Record one signal under its kind's rule, and act on it."""
-    if signal.state == "recovered":
-        return await _recover(session, signal, settings=settings)
-
-    if rule.quiet_window is not None:
-        await _close_if_quiet(session, signal, rule.quiet_window, settings=settings)
-
+async def _record_failure(session: AsyncSession, signal: Signal) -> Any:
+    """Open a streak for this failure, or bump the open one; its row."""
     row = (
         await session.execute(
             text(
@@ -513,6 +580,48 @@ async def observe(
         )
     ).one()
     await session.commit()
+    return row
+
+
+async def observe(
+    session: AsyncSession,
+    signal: Signal,
+    *,
+    rule: Rule,
+    settings: Settings,
+) -> Outcome:
+    """Record one signal under its kind's rule, and act on it."""
+    if signal.state == "recovered":
+        return await _recover(session, signal, settings=settings)
+
+    if rule.quiet_window is not None:
+        await close_if_quiet(session, signal, rule.quiet_window, settings=settings)
+
+    row = await _record_failure(session, signal)
+    previous: int | None = None
+    if (
+        rule.reopen_closed_issue
+        and row.escalated_at is not None
+        and row.issue_repo
+        and row.issue_number is not None
+        and await _issue_closed(row.issue_repo, row.issue_number, settings=settings)
+    ):
+        # Closed as though fixed, and failing again: this failure is the
+        # first of a new streak, whose Issue links the old one.
+        await session.execute(
+            text("UPDATE signal_streaks SET closed_at = now() WHERE id = :id"),
+            {"id": row.id},
+        )
+        await session.commit()
+        logger.info(
+            "signals: %s %s recurs after %s#%d was closed",
+            signal.kind,
+            signal.key,
+            row.issue_repo,
+            row.issue_number,
+        )
+        previous = row.issue_number
+        row = await _record_failure(session, signal)
     (
         streak_id,
         failures,
@@ -562,6 +671,7 @@ async def observe(
             failures=failures,
             opened_at=opened_at,
             settings=settings,
+            previous=previous,
         )
 
     if failures < rule.escalate_after:
@@ -573,4 +683,5 @@ async def observe(
         failures=failures,
         opened_at=opened_at,
         settings=settings,
+        previous=previous,
     )

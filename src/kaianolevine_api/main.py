@@ -38,6 +38,7 @@ from .routers import (
     resume,
     secrets,
     sets,
+    signals,
     spotify,
     spotify_reauth,
     standards,
@@ -344,6 +345,7 @@ def _build_app() -> FastAPI:
     app.include_router(ingest.router, prefix="/v1", tags=["ingest"])
     app.include_router(live_plays.router, prefix="/v1", tags=["live-plays"])
     app.include_router(notifications.router, prefix="/v1", tags=["notifications"])
+    app.include_router(signals.router, prefix="/v1", tags=["signals"])
     app.include_router(contact.router, prefix="/v1", tags=["contact"])
     app.include_router(resume.router, prefix="/v1", tags=["resume"])
     app.include_router(wcs_notes.router, prefix="/v1", tags=["wcs"])

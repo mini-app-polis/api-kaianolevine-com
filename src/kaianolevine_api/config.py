@@ -160,11 +160,10 @@ class Settings(BaseSettings):
     # Consecutive failing runs of one cog flow (run reports at ERROR or
     # CRITICAL) before an Issue. There is no remedy: the next run is the retry.
     SIGNAL_RUN_ESCALATE_AFTER: int = 2
-    # 5xx answers from one route (method, route template, status) before an
-    # Issue, each within SIGNAL_FAULT_WINDOW_MINUTES of the last. A route quiet
-    # for the window has recovered; its next 5xx starts a new count.
-    SIGNAL_FAULT_ESCALATE_AFTER: int = 3
-    SIGNAL_FAULT_WINDOW_MINUTES: int = 30
+    # Every 5xx opens an Issue on its route's first fault. A 502, 503 or 504
+    # (a dependency failing) closes once its route has gone this many hours
+    # without it; a 500 closes only through a fixing pull request.
+    SIGNAL_FAULT_QUIET_HOURS: int = 24
     # A token that may run and re-run Actions workflows in SIGNAL_ORGS
     # (actions: write) and nothing more. Unset, a failure escalates without a
     # remedy.
