@@ -207,16 +207,24 @@ MACHINES: tuple[Machine, ...] = (
     ),
     # task-manager-cog is the one writer to the task board, which is Asana,
     # reached with its own token. Through this API it writes run reports,
-    # keeps its grooming records between sweeps, and records the agent runs
+    # keeps its refining records between sweeps, and records the agent runs
     # it dispatches. It asks for no tasks itself, so it does not hold
     # task-requester.
     Machine(
         name="task-manager-cog",
-        roles=("pipeline-writer", "notifier", "task-groomer", "agent-dispatcher"),
+        roles=(
+            "pipeline-writer",
+            "notifier",
+            "task-refiner",
+            # The grooming name of task-refiner, for the release of the cog
+            # that still calls /v1/tasks/groomings; removed once none does.
+            "task-groomer",
+            "agent-dispatcher",
+        ),
         notes=(
             "POST /v1/evaluations, /v1/notify (run reports); GET and POST "
-            "/v1/tasks/groomings (grooming records); POST "
-            "/v1/tasks/groomings/jobs (sending a task for grooming); GET and "
+            "/v1/tasks/refinings (refining records); POST "
+            "/v1/tasks/refinings/jobs (sending a task for refining); GET and "
             "POST /v1/tasks/agent-runs, GET /v1/tasks/agent-runs/spend, POST "
             "/v1/tasks/agent-runs/failures (agent runs)."
         ),
@@ -231,10 +239,24 @@ MACHINES: tuple[Machine, ...] = (
         roles=("agent-reporter", "notifier"),
         notes="POST /v1/tasks/agent-runs/results (a run's result).",
     ),
-    # task-groomer-cog reads a task and the code it names, and proposes what
+    # task-refiner-cog reads a task and the code it names, and proposes what
     # the task should say. It hands the proposal back through this API and
     # never writes to the board. It records each paid run and reads the
     # month's spend, which caps it, and reports a run the cap stopped.
+    Machine(
+        name="task-refiner-cog",
+        roles=("task-refiner", "pipeline-writer", "notifier"),
+        notes=(
+            "POST /v1/tasks/refinings/proposals, /v1/tasks/refinings/runs, "
+            "/v1/tasks/refinings/claims, /v1/tasks/refinings/claims/release and "
+            "/v1/tasks/refinings/budget-spent; "
+            "GET /v1/tasks/refinings/spend; POST /v1/evaluations, /v1/notify "
+            "(run reports)."
+        ),
+    ),
+    # task-groomer-cog is task-refiner-cog under its grooming name: the
+    # function that still runs the groomer's last release, until every cog
+    # has moved to refining. Removed with the grooming routes.
     Machine(
         name="task-groomer-cog",
         roles=("task-groomer", "pipeline-writer", "notifier"),

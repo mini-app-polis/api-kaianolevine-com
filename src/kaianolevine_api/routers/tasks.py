@@ -1,4 +1,4 @@
-"""Asking task-manager-cog to put a task on the board, and its grooming records.
+"""Asking task-manager-cog to put a task on the board, and its refining records.
 
 The callers of ``POST /v1/tasks`` are the fleet's sources of tasks. A source
 hands over a draft of the work; task-manager-cog adds the board's template,
@@ -11,12 +11,13 @@ A machine may only ask for, and update, tasks under the sources it owns
 its source and a dot, so that is the whole check: the API keeps no record of
 who asked for which task. A person who holds the scope is not limited.
 
-The ``/v1/tasks/groomings`` routes are task-manager-cog's memory between
-sweeps of the board, the month's paid grooming, the hand-offs between
-task-manager-cog and task-groomer-cog (services/grooming_dispatch.py), the
-claims task-groomer-cog takes on a job before grooming it, and the runs it
+The ``/v1/tasks/refinings`` routes are task-manager-cog's memory between
+sweeps of the board, the month's paid refining, the hand-offs between
+task-manager-cog and task-refiner-cog (services/refining_dispatch.py), the
+claims task-refiner-cog takes on a job before refining it, and the runs it
 reports the spent budget stopped. See
-``mini_app_polis.api.contract.groomings``.
+``mini_app_polis.api.contract.refinings``. The ``/v1/tasks/groomings`` routes
+are their grooming names, served beside them until every cog has moved.
 
 The ``/v1/tasks/agent-runs`` routes record the agent runs task-manager-cog
 dispatches for Ready tasks, their month's spend, and each run's result,
@@ -26,7 +27,7 @@ which the run's workflow posts and this API hands to task-manager-cog
 ``POST /v1/tasks/sweeps`` is the admin's, and the claude-session machine's:
 it puts a sweep of the board on task-manager-cog's queue now, rather than
 waiting for the hourly schedule. Its optional body can make that sweep the
-one for grooming, for agent dispatch, or both, whatever the time of day.
+one for refining, for agent dispatch, or both, whatever the time of day.
 """
 
 from __future__ import annotations
@@ -65,6 +66,21 @@ from ..schemas import (
     GroomingRunCreate,
     GroomingRunRecorded,
     GroomingSpend,
+    RefiningBudgetSpentMarked,
+    RefiningBudgetSpentRequest,
+    RefiningClaimReleased,
+    RefiningClaimRequest,
+    RefiningClaimResult,
+    RefiningJobAccepted,
+    RefiningJobRequest,
+    RefiningProposal,
+    RefiningProposalAccepted,
+    RefiningRecord,
+    RefiningRecordWrite,
+    RefiningReturnRate,
+    RefiningRunCreate,
+    RefiningRunRecorded,
+    RefiningSpend,
     TaskCreateAccepted,
     TaskCreateRequest,
     TaskSweepAccepted,
@@ -77,9 +93,9 @@ from ..schemas import (
 from ..services import (
     agent_dispatch,
     agent_runs,
-    grooming_dispatch,
-    groomings,
     job_queue,
+    refining_dispatch,
+    refinings,
     task_dispatch,
 )
 
@@ -196,9 +212,10 @@ async def update_task_request(
         "hourly schedule sends, and acknowledges. The sweep runs afterwards, "
         "in line with the queue's other jobs. Each request is its own sweep: "
         "asking twice runs two, one after the other. The body is optional: "
-        "`groom` makes the sweep send tasks for grooming and `agents` makes "
-        "it dispatch agents, whatever the time of day. Every on/off setting "
-        "and spending cap still applies."
+        "`refine` makes the sweep send tasks for refining and `agents` makes "
+        "it dispatch agents, whatever the time of day (`groom` is the old "
+        "name of `refine`). Every on/off setting and spending cap still "
+        "applies."
     ),
 )
 async def request_sweep(
@@ -211,7 +228,7 @@ async def request_sweep(
     flags = payload or TaskSweepRequest()
     try:
         accepted = await task_dispatch.dispatch_sweep(
-            settings=settings, groom=flags.groom, agents=flags.agents
+            settings=settings, refine=flags.refine, agents=flags.agents
         )
     except task_dispatch.DispatchError as exc:
         job_queue.record_drop(request, exc)
@@ -223,7 +240,239 @@ async def request_sweep(
 
 
 @router.get(
+    "/tasks/refinings",
+    response_model=Envelope[list[RefiningRecord]],
+    summary="Every task's refining record",
+    description=(
+        "What the task manager last made of each task: the fingerprint of the "
+        "content it judged, the verdict and its problems, and whether it moved "
+        "the task to Ready."
+    ),
+)
+async def list_refinings(
+    principal: Principal = Depends(require_scope("tasks.refinings.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[RefiningRecord]]:
+    """All records at once: the board is small, and a sweep needs every one."""
+    records = await refinings.list_records(session)
+    return success_envelope(
+        records,
+        count=len(records),
+        total=len(records),
+    )
+
+
+@router.post(
+    "/tasks/refinings",
+    response_model=Envelope[RefiningRecord],
+    summary="Write one task's refining record",
+    description="Keyed by task_gid: writing a task's record again replaces it.",
+)
+async def record_refining(
+    payload: RefiningRecordWrite,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningRecord]:
+    """Replace one task's record with what the sweep made of it now."""
+    record = await refinings.write_record(session, payload)
+    return success_envelope(record, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/runs",
+    response_model=Envelope[RefiningRunRecorded],
+    status_code=201,
+    summary="Record one paid refining run",
+    description=(
+        "One model run's tokens and cost, recorded so the month's spend can "
+        "be capped. Recorded whether or not the run produced a proposal."
+    ),
+)
+async def record_refining_run(
+    payload: RefiningRunCreate,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningRunRecorded]:
+    """Record one paid run, for the month's spend."""
+    run = await refinings.record_run(session, payload)
+    return success_envelope(run, count=1, total=1)
+
+
+@router.get(
+    "/tasks/refinings/spend",
+    response_model=Envelope[RefiningSpend],
+    summary="This month's paid refining, in total",
+    description=(
+        "The calendar month's paid runs and their cost so far (UTC). The "
+        "refiner reads it before each run and stops at its monthly cap."
+    ),
+)
+async def refining_spend(
+    principal: Principal = Depends(require_scope("tasks.refinings.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningSpend]:
+    """The month's paid runs and their cost so far."""
+    spend = await refinings.month_spend(session)
+    return success_envelope(spend, count=1, total=1)
+
+
+@router.get(
+    "/tasks/refinings/return-rate",
+    response_model=Envelope[RefiningReturnRate],
+    summary="How often a task moved to Ready came back out",
+    description=(
+        "Over the last `days` (default 30): the tasks moved to Ready, the "
+        "tasks sent back out of Ready, and returned ÷ moved (null when "
+        "nothing moved). Counted from when these events began to be recorded "
+        "when that is later than the window's start: `counting_since` says "
+        "where the counts start."
+    ),
+)
+async def refining_return_rate(
+    days: Annotated[
+        int, Query(ge=1, le=RETURN_RATE_MAX_DAYS)
+    ] = RETURN_RATE_DEFAULT_DAYS,
+    principal: Principal = Depends(require_scope("tasks.refinings.read")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningReturnRate]:
+    """Moves to Ready, returns from it, and their ratio, over a window."""
+    rate = await refinings.return_rate(session, days)
+    return success_envelope(rate, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/jobs",
+    response_model=Envelope[RefiningJobAccepted],
+    status_code=202,
+    summary="Ask task-refiner-cog to refine one task",
+    description=(
+        "Enqueues one refining job and acknowledges. The refiner's proposal "
+        "comes back through POST /v1/tasks/refinings/proposals."
+    ),
+)
+async def request_refining(
+    payload: RefiningJobRequest,
+    request: Request,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+) -> Envelope[RefiningJobAccepted]:
+    """Put one job on the refiner's queue; a dropped job is a 502."""
+    settings = get_settings()
+    try:
+        accepted = await refining_dispatch.dispatch_job(payload, settings=settings)
+    except refining_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502, "dispatch_failed", f"The refining job was not enqueued: {exc}"
+        ) from exc
+    data = RefiningJobAccepted(
+        message_id=str(accepted.get("message_id") or ""),
+        task_gid=payload.task.task_gid,
+    )
+    return success_envelope(data, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/claims",
+    response_model=Envelope[RefiningClaimResult],
+    summary="Claim one refining job before refining it",
+    description=(
+        "Keyed on the task and the fingerprint of the content the job was sent "
+        "for. claimed is true for the first caller and false while the claim "
+        "is held, so a job delivered twice is refined once. A claim given back "
+        "through POST /v1/tasks/refinings/claims/release can be taken again."
+    ),
+)
+async def claim_refining(
+    payload: RefiningClaimRequest,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningClaimResult]:
+    """Claim the job; a claim already held is an answer, not an error."""
+    result = await refinings.claim(session, payload)
+    return success_envelope(result, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/claims/release",
+    response_model=Envelope[RefiningClaimReleased],
+    summary="Give a refining claim back after a failed run",
+    description=(
+        "Marks a held claim released, so the next send of the same content can "
+        "claim it. released is false when no claim was held."
+    ),
+)
+async def release_refining_claim(
+    payload: RefiningClaimRequest,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningClaimReleased]:
+    """Release the claim, if one is held."""
+    result = await refinings.release_claim(session, payload)
+    return success_envelope(result, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/budget-spent",
+    response_model=Envelope[RefiningBudgetSpentMarked],
+    summary="Report a refining run the spent budget stopped",
+    description=(
+        "Keyed on the task, holding the fingerprint of the content the job was "
+        "sent for; a later stop for the task replaces it. Served on each "
+        "record as budget_spent_fingerprint, and cleared when a claim for the "
+        "same task and content is won. Marking needs no record for the task."
+    ),
+)
+async def mark_refining_budget_spent(
+    payload: RefiningBudgetSpentRequest,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[RefiningBudgetSpentMarked]:
+    """Store the stop, so the sweep sends the same content again."""
+    result = await refinings.mark_budget_spent(session, payload)
+    return success_envelope(result, count=1, total=1)
+
+
+@router.post(
+    "/tasks/refinings/proposals",
+    response_model=Envelope[RefiningProposalAccepted],
+    status_code=202,
+    summary="Hand a refiner's proposal to task-manager-cog",
+    description=(
+        "Enqueues the proposal on task-manager-cog's queue, which applies it "
+        "to the board. The refiner itself never writes to the board."
+    ),
+)
+async def submit_refining_proposal(
+    payload: RefiningProposal,
+    request: Request,
+    principal: Principal = Depends(require_scope("tasks.refinings.write")),
+) -> Envelope[RefiningProposalAccepted]:
+    """Put one proposal on the task manager's queue; a dropped one is a 502."""
+    settings = get_settings()
+    try:
+        accepted = await refining_dispatch.dispatch_proposal(payload, settings=settings)
+    except refining_dispatch.DispatchError as exc:
+        job_queue.record_drop(request, exc)
+        raise api_error(
+            502, "dispatch_failed", f"The refining proposal was not enqueued: {exc}"
+        ) from exc
+    data = RefiningProposalAccepted(
+        message_id=str(accepted.get("message_id") or ""),
+        task_gid=payload.task_gid,
+    )
+    return success_envelope(data, count=1, total=1)
+
+
+# The grooming names of the routes above, served beside them until every cog
+# has moved to refining (a cog pinned to an older common-python-utils still
+# calls these). Same records, same scopes under their grooming names, and the
+# record under its grooming field names. Jobs and proposals go through the
+# groomer that is still running, on its own queue and message names.
+
+
+@router.get(
     "/tasks/groomings",
+    deprecated=True,
     response_model=Envelope[list[GroomingRecord]],
     summary="Every task's grooming record",
     description=(
@@ -237,7 +486,9 @@ async def list_groomings(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[GroomingRecord]]:
     """All records at once: the board is small, and a sweep needs every one."""
-    records = await groomings.list_records(session)
+    records = [
+        refinings.as_grooming_record(r) for r in await refinings.list_records(session)
+    ]
     return success_envelope(
         records,
         count=len(records),
@@ -247,6 +498,7 @@ async def list_groomings(
 
 @router.post(
     "/tasks/groomings",
+    deprecated=True,
     response_model=Envelope[GroomingRecord],
     summary="Write one task's grooming record",
     description="Keyed by task_gid: writing a task's record again replaces it.",
@@ -257,12 +509,15 @@ async def record_grooming(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingRecord]:
     """Replace one task's record with what the sweep made of it now."""
-    record = await groomings.write_record(session, payload)
+    record = refinings.as_grooming_record(
+        await refinings.write_record(session, refinings.from_grooming_write(payload))
+    )
     return success_envelope(record, count=1, total=1)
 
 
 @router.post(
     "/tasks/groomings/runs",
+    deprecated=True,
     response_model=Envelope[GroomingRunRecorded],
     status_code=201,
     summary="Record one paid grooming run",
@@ -277,12 +532,13 @@ async def record_grooming_run(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingRunRecorded]:
     """Record one paid run, for the month's spend."""
-    run = await groomings.record_run(session, payload)
+    run = await refinings.record_run(session, payload)
     return success_envelope(run, count=1, total=1)
 
 
 @router.get(
     "/tasks/groomings/spend",
+    deprecated=True,
     response_model=Envelope[GroomingSpend],
     summary="This month's paid grooming, in total",
     description=(
@@ -295,12 +551,13 @@ async def grooming_spend(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingSpend]:
     """The month's paid runs and their cost so far."""
-    spend = await groomings.month_spend(session)
+    spend = await refinings.month_spend(session)
     return success_envelope(spend, count=1, total=1)
 
 
 @router.get(
     "/tasks/groomings/return-rate",
+    deprecated=True,
     response_model=Envelope[GroomingReturnRate],
     summary="How often a task moved to Ready came back out",
     description=(
@@ -319,12 +576,13 @@ async def grooming_return_rate(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingReturnRate]:
     """Moves to Ready, returns from it, and their ratio, over a window."""
-    rate = await groomings.return_rate(session, days)
+    rate = await refinings.return_rate(session, days)
     return success_envelope(rate, count=1, total=1)
 
 
 @router.post(
     "/tasks/groomings/jobs",
+    deprecated=True,
     response_model=Envelope[GroomingJobAccepted],
     status_code=202,
     summary="Ask task-groomer-cog to groom one task",
@@ -341,8 +599,10 @@ async def request_grooming(
     """Put one job on the groomer's queue; a dropped job is a 502."""
     settings = get_settings()
     try:
-        accepted = await grooming_dispatch.dispatch_job(payload, settings=settings)
-    except grooming_dispatch.DispatchError as exc:
+        accepted = await refining_dispatch.dispatch_grooming_job(
+            payload, settings=settings
+        )
+    except refining_dispatch.DispatchError as exc:
         job_queue.record_drop(request, exc)
         raise api_error(
             502, "dispatch_failed", f"The grooming job was not enqueued: {exc}"
@@ -356,6 +616,7 @@ async def request_grooming(
 
 @router.post(
     "/tasks/groomings/claims",
+    deprecated=True,
     response_model=Envelope[GroomingClaimResult],
     summary="Claim one grooming job before grooming it",
     description=(
@@ -371,12 +632,13 @@ async def claim_grooming(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingClaimResult]:
     """Claim the job; a claim already held is an answer, not an error."""
-    result = await groomings.claim(session, payload)
+    result = await refinings.claim(session, payload)
     return success_envelope(result, count=1, total=1)
 
 
 @router.post(
     "/tasks/groomings/claims/release",
+    deprecated=True,
     response_model=Envelope[GroomingClaimReleased],
     summary="Give a grooming claim back after a failed run",
     description=(
@@ -390,12 +652,13 @@ async def release_grooming_claim(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingClaimReleased]:
     """Release the claim, if one is held."""
-    result = await groomings.release_claim(session, payload)
+    result = await refinings.release_claim(session, payload)
     return success_envelope(result, count=1, total=1)
 
 
 @router.post(
     "/tasks/groomings/budget-spent",
+    deprecated=True,
     response_model=Envelope[GroomingBudgetSpentMarked],
     summary="Report a grooming run the spent budget stopped",
     description=(
@@ -411,12 +674,13 @@ async def mark_grooming_budget_spent(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[GroomingBudgetSpentMarked]:
     """Store the stop, so the sweep sends the same content again."""
-    result = await groomings.mark_budget_spent(session, payload)
+    result = await refinings.mark_budget_spent(session, payload)
     return success_envelope(result, count=1, total=1)
 
 
 @router.post(
     "/tasks/groomings/proposals",
+    deprecated=True,
     response_model=Envelope[GroomingProposalAccepted],
     status_code=202,
     summary="Hand a groomer's proposal to task-manager-cog",
@@ -433,8 +697,10 @@ async def submit_grooming_proposal(
     """Put one proposal on the task manager's queue; a dropped one is a 502."""
     settings = get_settings()
     try:
-        accepted = await grooming_dispatch.dispatch_proposal(payload, settings=settings)
-    except grooming_dispatch.DispatchError as exc:
+        accepted = await refining_dispatch.dispatch_grooming_proposal(
+            payload, settings=settings
+        )
+    except refining_dispatch.DispatchError as exc:
         job_queue.record_drop(request, exc)
         raise api_error(
             502, "dispatch_failed", f"The grooming proposal was not enqueued: {exc}"

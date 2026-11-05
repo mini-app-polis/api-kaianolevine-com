@@ -201,21 +201,23 @@ async def test_a_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None
     assert response.json()["data"] == {"accepted": True, "message_id": "m-7"}
     dispatched.assert_awaited_once()
     # No body is the schedule's sweep: no flags.
-    assert dispatched.await_args.kwargs["groom"] is False
+    assert dispatched.await_args.kwargs["refine"] is False
     assert dispatched.await_args.kwargs["agents"] is False
 
 
 @pytest.mark.parametrize(
-    ("body", "groom", "agents"),
+    ("body", "refine", "agents"),
     [
         ({}, False, False),
+        ({"refine": True}, True, False),
+        # The grooming name of refine, still accepted.
         ({"groom": True}, True, False),
         ({"agents": True}, False, True),
-        ({"groom": True, "agents": True}, True, True),
+        ({"refine": True, "agents": True}, True, True),
     ],
 )
 async def test_a_sweeps_flags_reach_the_dispatcher(
-    client, monkeypatch, body, groom, agents
+    client, monkeypatch, body, refine, agents
 ) -> None:
     _settings(monkeypatch)
     with patch.object(
@@ -224,7 +226,7 @@ async def test_a_sweeps_flags_reach_the_dispatcher(
         response = await client.post("/v1/tasks/sweeps", json=body)
 
     assert response.status_code == 202, response.text
-    assert dispatched.await_args.kwargs["groom"] is groom
+    assert dispatched.await_args.kwargs["refine"] is refine
     assert dispatched.await_args.kwargs["agents"] is agents
 
 
@@ -332,23 +334,24 @@ async def test_a_sweep_goes_to_the_task_managers_queue(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("groom", "agents"), [(True, False), (False, True), (True, True)]
+    ("refine", "agents"), [(True, False), (False, True), (True, True)]
 )
-async def test_a_flagged_sweep_carries_both_flags(monkeypatch, groom, agents) -> None:
-    """Either flag adds a payload with both; the worker reads it as a sweep."""
+async def test_a_flagged_sweep_carries_both_flags(monkeypatch, refine, agents) -> None:
+    """Either flag adds a payload with every flag, refine under both its
+    names; the worker reads it as a sweep."""
     settings = _settings(monkeypatch)
     sqs = MagicMock()
     sqs.send_message.return_value = {"MessageId": "m-1"}
 
     with patch.object(job_queue.boto3, "client", return_value=sqs):
-        await dispatch.dispatch_sweep(settings=settings, groom=groom, agents=agents)
+        await dispatch.dispatch_sweep(settings=settings, refine=refine, agents=agents)
 
     sent = sqs.send_message.call_args.kwargs
     assert sent["MessageGroupId"] == "task-manager"
     assert json.loads(sent["MessageBody"]) == {
         "type": "task.sweep",
         "version": 1,
-        "payload": {"groom": groom, "agents": agents},
+        "payload": {"refine": refine, "groom": refine, "agents": agents},
     }
     assert isinstance(
         parse_message(sent["MessageBody"], TaskSweepMessage), TaskSweepMessage
@@ -586,10 +589,10 @@ async def test_the_claude_session_asks_for_a_sweep(
         dispatch, "dispatch_sweep", AsyncMock(return_value={"message_id": "m-2"})
     ) as dispatched:
         response = await session.post(
-            "/v1/tasks/sweeps", json={"groom": True, "agents": True}
+            "/v1/tasks/sweeps", json={"refine": True, "agents": True}
         )
     assert response.status_code == 202, response.text
-    assert dispatched.await_args.kwargs["groom"] is True
+    assert dispatched.await_args.kwargs["refine"] is True
     assert dispatched.await_args.kwargs["agents"] is True
 
 
@@ -599,6 +602,7 @@ async def test_the_claude_session_can_do_nothing_but_file_and_sweep(
     session = declared_machine("claude-session")
     update = {"external_id": MANUAL["external_id"], "comment": "done"}
     assert (await session.post("/v1/tasks/updates", json=update)).status_code == 403
+    assert (await session.get("/v1/tasks/refinings")).status_code == 403
     assert (await session.get("/v1/tasks/groomings")).status_code == 403
     assert (
         await session.post("/v1/notify", json={"content": "hello"})
@@ -654,7 +658,7 @@ async def test_infra_apply_can_reach_no_other_route(declared_machine) -> None:
     update = {"external_id": INFRA_APPLY["external_id"], "comment": "done"}
     assert (await apply_job.post("/v1/tasks/updates", json=update)).status_code == 403
     assert (await apply_job.post("/v1/tasks/sweeps")).status_code == 403
-    assert (await apply_job.get("/v1/tasks/groomings")).status_code == 403
+    assert (await apply_job.get("/v1/tasks/refinings")).status_code == 403
     assert (
         await apply_job.post("/v1/notify", json={"content": "hello"})
     ).status_code == 403
