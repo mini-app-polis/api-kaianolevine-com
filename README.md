@@ -485,6 +485,13 @@ only a row this request stored, so a redelivered finding is not counted
 twice. Deferred and downgraded findings arrive at `INFO` and exempted ones
 not at all, so neither opens anything.
 
+Each conformance Issue names what was graded, against what and by what,
+where the row says: the application's version and commit (`repo_version`,
+`repo_commit`, sent by the evaluator), the standards version and the
+evaluator-cog version. The Issue and each further comment name them for the
+finding (`Evaluated:`); the comment that closes the Issue names them for the
+clean evaluation that closed it.
+
 `services/github_issues.py` writes the Issues, as the signals GitHub App
 (`SIGNALS_APP_CLIENT_ID`, `SIGNALS_APP_PRIVATE_KEY`; Issues read and write).
 It knows nothing of signals and keeps at most one open Issue per marker in a

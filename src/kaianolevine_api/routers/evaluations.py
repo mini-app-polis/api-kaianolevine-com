@@ -223,6 +223,8 @@ async def list_evaluations(
             suggestion=row.suggestion,
             standards_version=row.standards_version,
             evaluator_version=row.evaluator_version,
+            repo_version=row.repo_version,
+            repo_commit=row.repo_commit,
             source=row.source,
             flow_name=row.flow_name,
             evaluated_at=row.evaluated_at or row.created_at,
@@ -294,6 +296,8 @@ def _write_result(
             suggestion=row.suggestion,
             standards_version=row.standards_version,
             evaluator_version=row.evaluator_version,
+            repo_version=row.repo_version,
+            repo_commit=row.repo_commit,
             source=row.source,
             flow_name=row.flow_name,
             evaluated_at=row.evaluated_at,
@@ -377,6 +381,8 @@ async def create_evaluation(
         suggestion=payload.suggestion,
         standards_version=payload.standards_version,
         evaluator_version=payload.evaluator_version,
+        repo_version=payload.repo_version,
+        repo_commit=payload.repo_commit,
         source=payload.source,
         flow_name=payload.flow_name,
         fingerprint=fingerprint,
@@ -424,6 +430,12 @@ async def _observe_conformance(row: DbEval, *, session: AsyncSession) -> None:
             finding=row.finding,
             suggestion=row.suggestion,
             settings=get_settings(),
+            versions=conformance_signals.Versions(
+                repo_version=row.repo_version,
+                repo_commit=row.repo_commit,
+                evaluator_version=row.evaluator_version,
+                standards_version=row.standards_version,
+            ),
         )
     except Exception:  # noqa: BLE001 — see docstring
         logger.exception("signals: could not observe the finding for %s", row.repo)
