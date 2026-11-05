@@ -108,24 +108,41 @@ async def test_a_lookup_writes_no_track_and_no_entry(client, async_engine) -> No
     assert detail["genre"] is None
 
 
-async def test_another_owners_entry_is_not_returned(client, async_engine) -> None:
+def _entry(owner_id: str, genre: str, play_count: int) -> DbCatalog:
+    return DbCatalog(
+        owner_id=owner_id,
+        title="Thong Song (Radio Edit)",
+        artist="Amber Mack",
+        title_normalized="thong song",
+        artist_normalized="amber mack",
+        genre=genre,
+        source="play_history",
+        confidence="low",
+        play_count=play_count,
+    )
+
+
+async def test_an_entry_filed_under_another_key_is_found(client, async_engine) -> None:
+    # Plays filed by an older key (the shared fleet secret) are the same song.
     maker = async_sessionmaker(async_engine, expire_on_commit=False)
     async with maker() as session:
-        session.add(
-            DbCatalog(
-                owner_id="someone-else",
-                title="Their Song",
-                artist="Their Artist",
-                title_normalized="their song",
-                artist_normalized="their artist",
-                source="play_history",
-                confidence="low",
-                play_count=1,
-            )
-        )
+        session.add(_entry("fleet-shared-secret", "R&B", 29))
         await session.commit()
-    (match,) = await _lookup(client, _track("Their Song", "Their Artist"))
-    assert match is None
+    (match,) = await _lookup(client, _track("Thong Song", "Amber Mack"))
+    assert match is not None
+    assert match["title"] == "Thong Song (Radio Edit)"
+
+
+async def test_the_most_played_of_several_owners_entries_wins(
+    client, async_engine
+) -> None:
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        session.add(_entry("fleet-shared-secret", "R&B", 29))
+        session.add(_entry("deejay-cog", "Pop", 2))
+        await session.commit()
+    (match,) = await _lookup(client, _track("Thong Song", "Amber Mack"))
+    assert match["genre"] == "R&B"
 
 
 async def test_the_lookup_needs_the_ingest_scope(role_client) -> None:

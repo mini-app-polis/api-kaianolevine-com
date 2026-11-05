@@ -105,8 +105,9 @@ async def list_catalog(
     response_model=Envelope[list[CatalogMatch | None]],
     summary="Find tracks' catalog entries, as their plays would be filed",
     description=(
-        "Resolves each track with the set ingest's own matching, for the "
-        "caller's catalog, and returns its entry or null, in the order sent. "
+        "Resolves each track with the set ingest's own matching, across "
+        "every owner's entries, and returns its entry or null, in the order "
+        "sent. "
         "Records nothing: no play, no entry. Requires catalog.sets.write, as "
         "the ingest does."
     ),
@@ -116,10 +117,8 @@ async def lookup_catalog_entries(
     principal: Principal = Depends(require_scope("catalog.sets.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[CatalogMatch | None]]:
-    """Each track's catalog entry for the caller, or null."""
-    found = await lookup_catalog(
-        session=session, owner_id=principal.subject, tracks=payload.tracks
-    )
+    """Each track's catalog entry, or null."""
+    found = await lookup_catalog(session=session, tracks=payload.tracks)
     data = [
         None
         if entry is None
