@@ -15,6 +15,8 @@ by :func:`remediate`, which picks the remedy from the jobs that failed:
 - the dependency audit: dispatch the fleet's ``dependency-fix`` workflow for
   the repository, which re-locks what the advisory flagged and opens a
   ``fix(deps)`` pull request into ``dev``. Re-running would fail the same way.
+  A failed audit on any other branch dispatches the same fix, without a
+  streak (:func:`fix_audit_off_signal_branches`).
 - anything else: re-run the failed jobs, which clears the common case of a
   dependency not yet published. ``action_required`` is failing but not
 remediable, since a re-run would wait for the same approval. ``success``
@@ -224,6 +226,58 @@ async def remediate(signal: Signal, settings: Settings) -> bool:
         )
         return await dispatch_dependency_fix(repo, token=token, settings=settings)
     return await rerun_failed_jobs(repo, run_id, token=token, settings=settings)
+
+
+#: The branch the dependency fixer pushes its pull request from. Its own
+#: failed audit is not dispatched again: the fixer already ran for it.
+DEPENDENCY_FIX_BRANCH = "security-fix/deps"
+
+
+async def fix_audit_off_signal_branches(
+    payload: dict[str, Any], settings: Settings
+) -> bool:
+    """Dispatch the dependency fixer for a failed audit on any other branch.
+
+    Only ``SIGNAL_CI_BRANCHES`` are signals: a failure on ``dev`` or a pull
+    request branch opens nothing, since work is expected to break there. A
+    failed dependency audit is different. It is not the work's fault, a new
+    advisory fails every branch of the repository at once, and the remedy is
+    the same wherever it shows: re-lock ``dev``. So it is dispatched from any
+    branch, once per first attempt, with no streak and no Issue. The fixer
+    opens nothing when ``dev`` is already clean, so a second dispatch for the
+    same advisory costs one short run. Returns whether a dispatch started.
+    """
+    run = payload.get("workflow_run")
+    repository = payload.get("repository")
+    if not isinstance(run, dict) or not isinstance(repository, dict):
+        return False
+    if payload.get("action") != "completed" or run.get("status") != "completed":
+        return False
+    if str(run.get("conclusion") or "") not in _REMEDIABLE:
+        return False
+    if int(run.get("run_attempt") or 1) != 1:
+        return False
+    full_name = str(repository.get("full_name") or "")
+    owner, _, name = full_name.partition("/")
+    branch = str(run.get("head_branch") or "")
+    if owner not in settings.SIGNAL_ORGS or not name:
+        return False
+    if branch in settings.SIGNAL_CI_BRANCHES or branch == DEPENDENCY_FIX_BRANCH:
+        return False
+    run_id = run.get("id")
+    token = (settings.GITHUB_ACTIONS_TOKEN or "").strip()
+    if not token or not isinstance(run_id, int):
+        return False
+
+    failed = await failed_job_names(full_name, run_id, token=token, settings=settings)
+    if not failed or not any(DEPENDENCY_AUDIT_JOB in job for job in failed):
+        return False
+    logger.info(
+        "ci signals: %s failed its dependency audit on %s; dispatching the fix",
+        full_name,
+        branch,
+    )
+    return await dispatch_dependency_fix(full_name, token=token, settings=settings)
 
 
 def rule(settings: Settings) -> Rule:
