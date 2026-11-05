@@ -179,7 +179,10 @@ async def test_the_return_rate_under_grooming_names(client) -> None:
     old = await client.get("/v1/tasks/groomings/return-rate")
     assert old.status_code == 200, old.text
     new = await client.get("/v1/tasks/refinings/return-rate")
-    assert old.json()["data"] == new.json()["data"]
+    # The window's start is read from the clock on each call, so it differs.
+    old_rate = {k: v for k, v in old.json()["data"].items() if k != "since"}
+    new_rate = {k: v for k, v in new.json()["data"].items() if k != "since"}
+    assert old_rate == new_rate
 
 
 async def test_a_grooming_job_is_handed_to_the_groomer(client, monkeypatch) -> None:
