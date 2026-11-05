@@ -1,3 +1,11 @@
+## [2.59.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.59.0...v2.59.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **catalog:** look up tracks across every owner's catalog entries ([dc9b738](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dc9b73810e6d92d61db69fce36439534498fe94d))
+* **deps:** bump oauthlib to 4.0.1 and miniapppolis-common-utils to 7.20.0 ([add6ced](https://github.com/mini-app-polis/api-kaianolevine-com/commit/add6cedbebcc7f42d67a97517e26de7752b8381b))
+
 # [2.59.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.58.1...v2.59.0) (2026-11-05)
 
 
