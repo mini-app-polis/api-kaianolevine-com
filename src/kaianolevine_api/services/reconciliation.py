@@ -88,6 +88,12 @@ def _escalate_confidence(
     return current_lower
 
 
+def _most_played_last(c: TrackCatalog) -> tuple[int, str]:
+    """Sort key putting the most played entry last (ties by id), so it is
+    the one kept when entries share a key."""
+    return (c.play_count or 0, str(c.id))
+
+
 @dataclasses.dataclass(frozen=True)
 class TrackKeys:
     """How a played track is keyed against the catalog."""
@@ -123,9 +129,13 @@ class CatalogMatcher:
     main artist. A match that is another owner's entry gives its title and
     keys, and the owner's own entry under those keys, if there is one.
     Reading only: nothing here writes.
+
+    With no ``owner_id`` (the catalog lookup), every owner's entries count as
+    the caller's: which key filed a play does not change what the song is,
+    and among entries under the same key the most played one is the song.
     """
 
-    def __init__(self, session: AsyncSession, owner_id: str) -> None:
+    def __init__(self, session: AsyncSession, owner_id: str | None) -> None:
         self.session = session
         self.owner_id = owner_id
         #: The owner's entries by normalized (title, artist). The ingest adds
@@ -140,15 +150,15 @@ class CatalogMatcher:
         wanted = list(dict.fromkeys(pairs))
         if not wanted:
             return
-        result = await self.session.execute(
-            select(TrackCatalog).where(
-                TrackCatalog.owner_id == self.owner_id,
-                tuple_(
-                    TrackCatalog.title_normalized, TrackCatalog.artist_normalized
-                ).in_(wanted),
+        stmt = select(TrackCatalog).where(
+            tuple_(TrackCatalog.title_normalized, TrackCatalog.artist_normalized).in_(
+                wanted
             )
         )
-        for c in result.scalars().all():
+        if self.owner_id is not None:
+            stmt = stmt.where(TrackCatalog.owner_id == self.owner_id)
+        result = await self.session.execute(stmt)
+        for c in sorted(result.scalars().all(), key=_most_played_last):
             self.by_pair[(c.title_normalized, c.artist_normalized)] = c
 
     # A version with no exact key match may already be in the catalog under
@@ -166,8 +176,11 @@ class CatalogMatcher:
                     main_artist_key(c.artist),
                 )
                 self._version_index.setdefault(key, []).append(c)
-                if c.owner_id == self.owner_id:
-                    self._own_by_key[(c.title_normalized, c.artist_normalized)] = c
+                if self.owner_id is None or c.owner_id == self.owner_id:
+                    key = (c.title_normalized, c.artist_normalized)
+                    held = self._own_by_key.get(key)
+                    if held is None or _most_played_last(c) > _most_played_last(held):
+                        self._own_by_key[key] = c
         return self._version_index
 
     async def _find_version(self, display: str, artist: str) -> TrackCatalog | None:
@@ -239,7 +252,11 @@ class CatalogMatcher:
             found = self.by_pair.get(keys.pair)
         if found is None and keys.is_version:
             found = await self._find_version(keys.display, catalog_artist(track.artist))
-        if found is not None and found.owner_id != self.owner_id:
+        if (
+            found is not None
+            and self.owner_id is not None
+            and found.owner_id != self.owner_id
+        ):
             new_title = found.title
             new_keys = (found.title_normalized, found.artist_normalized)
             await self._load_catalog()
@@ -248,15 +265,17 @@ class CatalogMatcher:
 
 
 async def lookup_catalog(
-    *, session: AsyncSession, owner_id: str, tracks: Iterable[IngestTrack]
+    *, session: AsyncSession, tracks: Iterable[IngestTrack]
 ) -> list[TrackCatalog | None]:
-    """Each track's catalog entry for ``owner_id``, as its play would be filed.
+    """Each track's catalog entry, as its play would be filed.
 
     The set ingest's matching, without its writes: no play, no entry, no
-    change to an entry. A placeholder ("---SILENCE---") has no entry.
+    change to an entry. A placeholder ("---SILENCE---") has no entry. Every
+    owner's entries are searched: which key filed a play is not part of what
+    the song is.
     """
     items = [(t, track_keys(t)) for t in tracks]
-    matcher = CatalogMatcher(session, owner_id)
+    matcher = CatalogMatcher(session, None)
     await matcher.prefetch(keys.pair for _, keys in items)
     out: list[TrackCatalog | None] = []
     for track, keys in items:
