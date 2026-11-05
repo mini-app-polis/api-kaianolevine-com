@@ -14,6 +14,11 @@ evaluation found nothing. That row recovers every open streak for the repo
 and source. A run that still reports other findings, or one that did not
 finish, closes nothing.
 
+Every Issue names what was graded, against what and by what, where the row
+says: the application's version and commit, the standards version and the
+evaluator-cog version. The Issue and each further comment name them for the
+finding; the comment that closes it names them for the clean evaluation.
+
 The evaluator's own STATUS rows say a repo was not evaluated, or not
 assessed against the LLM checks. They are about the evaluator's run, not
 about the repo, so their Issues open in evaluator-cog, one per repo, source
@@ -21,6 +26,8 @@ and kind, and the same SUCCESS row closes them.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +57,32 @@ EVALUATOR_REPO = "evaluator-cog"
 _KINDS = (KIND, STATUS_KIND)
 
 
+@dataclass(frozen=True)
+class Versions:
+    """What an evaluation row says was graded, against what, by what."""
+
+    repo_version: str | None = None
+    repo_commit: str | None = None
+    evaluator_version: str | None = None
+    standards_version: str | None = None
+
+    def line(self, repo: str) -> str:
+        """``<repo> <version> (<commit>), evaluator-cog <v>, standards <v>``.
+
+        Each part only where the row has it; empty when it has none.
+        """
+        parts: list[str] = []
+        application = " ".join(p for p in (repo, self.repo_version or "") if p)
+        if self.repo_version or self.repo_commit:
+            commit = (self.repo_commit or "")[:7]
+            parts.append(f"{application} ({commit})" if commit else application)
+        if self.evaluator_version:
+            parts.append(f"evaluator-cog {self.evaluator_version}")
+        if self.standards_version:
+            parts.append(f"standards {self.standards_version}")
+        return ", ".join(parts)
+
+
 def status_kind(finding: str) -> str:
     """Which statement about the run a STATUS row makes."""
     if "not assessed" in finding:
@@ -67,6 +100,7 @@ def failing_signal(
     violation_id: str | None,
     finding: str | None,
     suggestion: str | None,
+    versions: Versions | None = None,
 ) -> Signal | None:
     """The failing signal one stored row carries, or None."""
     label = SOURCES.get(source)
@@ -74,6 +108,8 @@ def failing_signal(
         return None
     finding = (finding or "").strip()
     sections = (("Severity", severity), ("Source", source))
+    evaluated = (versions or Versions()).line(repo)
+    evidence = (("Evaluated", evaluated),) if evaluated else ()
     if violation_id == STATUS_RULE:
         kind = status_kind(finding)
         return Signal(
@@ -92,6 +128,7 @@ def failing_signal(
                 "is unknown, not clean."
             ),
             sections=sections,
+            evidence=evidence,
         )
     return Signal(
         kind=KIND,
@@ -109,6 +146,7 @@ def failing_signal(
             "silence the check."
         ),
         sections=(*sections, ("Rule", violation_id), ("Suggestion", suggestion or "")),
+        evidence=evidence,
     )
 
 
@@ -142,6 +180,7 @@ async def observe_row(
     finding: str | None,
     suggestion: str | None,
     settings: Settings,
+    versions: Versions | None = None,
 ) -> list[Outcome]:
     """Hand one stored evaluation row to the signal engine.
 
@@ -152,6 +191,10 @@ async def observe_row(
         return []
     if severity == "SUCCESS":
         label = SOURCES[source]
+        evaluated = (versions or Versions()).line(repo)
+        details = f"A complete {label} conformance evaluation of {repo} found nothing."
+        if evaluated:
+            details += f"\nEvaluated: {evaluated}"
         outcomes: list[Outcome] = []
         for kind, key in await _open_keys(session, f"{repo}/{source}/"):
             recovered = Signal(
@@ -159,10 +202,7 @@ async def observe_row(
                 key=key,
                 state="recovered",
                 title=f"{repo}: the {label} conformance evaluation came back clean",
-                details=(
-                    f"A complete {label} conformance evaluation of {repo} found "
-                    "nothing."
-                ),
+                details=details,
             )
             outcomes.append(
                 await signals.observe(
@@ -177,6 +217,7 @@ async def observe_row(
         violation_id=violation_id,
         finding=finding,
         suggestion=suggestion,
+        versions=versions,
     )
     if signal is None:
         return []

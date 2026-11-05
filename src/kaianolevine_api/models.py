@@ -212,6 +212,11 @@ class PipelineEvaluation(Base):
     #: The evaluator-cog release that wrote the row (migration 031). Null for
     #: rows that predate it and for self-reports from pipeline cogs.
     evaluator_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: The version of the application graded: the ref the evaluator read (a
+    #: release tag on a release-triggered evaluation) and its commit
+    #: (migration 092). Null for rows that predate it and for self-reports.
+    repo_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    repo_commit: Mapped[str | None] = mapped_column(String, nullable=True)
     source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     flow_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

@@ -47,6 +47,7 @@ async def _post(
     run_id: str = "deterministic-6.0-aaaaaaaaaaaa",
     finding: str = "SIGNALS_APP_CLIENT_ID is read but not in .env.example.",
     repo: str = REPO,
+    **extra: str,
 ) -> None:
     body = {
         "repo": repo,
@@ -60,6 +61,7 @@ async def _post(
     }
     if violation_id is not None:
         body["violation_id"] = violation_id
+    body.update(extra)
     resp = await client.post("/v1/evaluations", json=body)
     assert resp.status_code == 200, resp.text
 
@@ -282,3 +284,64 @@ def test_a_finding_signal_carries_what_ends_it() -> None:
     )
     assert ("Suggestion", "Use react-hook-form.") in signal.sections
     assert isinstance(signal, signals.Signal)
+
+
+# -- what was graded, against what, by what ------------------------------------
+
+VERSIONS = {
+    "repo_version": "v1.43.0",
+    "repo_commit": "abc1234def5678",
+    "evaluator_version": "4.2.0",
+}
+
+
+@pytest.mark.asyncio
+async def test_a_finding_is_stored_and_read_with_the_application_version(
+    client: AsyncClient, issues
+) -> None:
+    await _post(client, severity="WARN", **VERSIONS)
+    resp = await client.get("/v1/evaluations", params={"repo": REPO})
+    (row,) = resp.json()["data"]
+    assert row["repo_version"] == "v1.43.0"
+    assert row["repo_commit"] == "abc1234def5678"
+
+
+@pytest.mark.asyncio
+async def test_an_issue_names_the_versions_its_finding_came_from(
+    client: AsyncClient, issues
+) -> None:
+    await _post(client, severity="WARN", **VERSIONS)
+    body = issues.open.await_args.kwargs["body"]
+    assert (
+        f"**Evaluated:** {REPO} v1.43.0 (abc1234), evaluator-cog 4.2.0, standards 6.0"
+    ) in body
+
+
+@pytest.mark.asyncio
+async def test_the_closing_comment_names_the_clean_evaluations_versions(
+    client: AsyncClient, issues
+) -> None:
+    await _post(client, severity="WARN", **VERSIONS)
+    await _post(
+        client,
+        severity="SUCCESS",
+        violation_id=None,
+        run_id="deterministic-6.0-dddddddddddd",
+        finding=f"{REPO} passed all deterministic checks for standards v6.0.",
+        repo_version="v1.44.0",
+        repo_commit="0123456789abcdef",
+        evaluator_version="4.2.0",
+    )
+    closing = issues.close.await_args.kwargs["body"]
+    assert (
+        f"Evaluated: {REPO} v1.44.0 (0123456), evaluator-cog 4.2.0, standards 6.0"
+    ) in closing
+
+
+@pytest.mark.asyncio
+async def test_a_row_without_versions_leaves_them_out(
+    client: AsyncClient, issues
+) -> None:
+    await _post(client, severity="WARN", standards_version="")
+    body = issues.open.await_args.kwargs["body"]
+    assert "Evaluated" not in body
