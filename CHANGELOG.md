@@ -1,3 +1,15 @@
+# [2.58.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.57.0...v2.58.0) (2026-11-05)
+
+
+### Bug Fixes
+
+* **signals:** check a closed Issue before counting the fault that recurs ([e2a8dca](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e2a8dca89850b81141954dc7059b68721f36e03b))
+
+
+### Features
+
+* **signals:** open an Issue on every 5xx; close 500s by a fixing PR and 502-504s after a quiet day ([0be1b48](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0be1b482c189c0e98022be93ea2e0816bc1287d9))
+
 # [2.57.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.56.0...v2.57.0) (2026-11-05)
 
 
