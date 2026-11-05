@@ -1,3 +1,10 @@
+# [2.57.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.56.0...v2.57.0) (2026-11-05)
+
+
+### Features
+
+* **data:** file task-groomer-cog's history under task-refiner-cog ([59a6fd7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/59a6fd7c4b3890d6ffb0a63b6b6fcb6651dd2cf7))
+
 # [2.56.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.55.2...v2.56.0) (2026-11-05)
 
 
