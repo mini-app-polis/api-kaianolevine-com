@@ -16,8 +16,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas import (
-    GroomingRecord,
-    GroomingRecordWrite,
     RefiningBudgetSpentMarked,
     RefiningBudgetSpentRequest,
     RefiningClaimReleased,
@@ -330,32 +328,3 @@ async def mark_budget_spent(
     ).one()
     await session.commit()
     return RefiningBudgetSpentMarked(task_gid=row.task_gid, fingerprint=row.fingerprint)
-
-
-# The grooming names. The /v1/tasks/groomings routes speak the record under
-# its old field names until every cog has moved to refining; these turn one
-# shape into the other. Removed with those routes.
-
-#: Each record field's grooming name, by its refining name.
-GROOMING_FIELD_NAMES = {
-    "refined_fingerprint": "groomed_fingerprint",
-    "refine_sent_at": "groom_sent_at",
-    "refine_attempts": "groom_attempts",
-}
-
-
-def as_grooming_record(record: RefiningRecord) -> GroomingRecord:
-    """A refining record under its grooming field names."""
-    data = record.model_dump()
-    return GroomingRecord.model_validate(
-        {GROOMING_FIELD_NAMES.get(name, name): value for name, value in data.items()}
-    )
-
-
-def from_grooming_write(record: GroomingRecordWrite) -> RefiningRecordWrite:
-    """A record written under its grooming field names, as a refining one."""
-    refining_names = {old: new for new, old in GROOMING_FIELD_NAMES.items()}
-    data = record.model_dump()
-    return RefiningRecordWrite.model_validate(
-        {refining_names.get(name, name): value for name, value in data.items()}
-    )

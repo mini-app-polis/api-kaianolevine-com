@@ -210,8 +210,6 @@ async def test_a_sweep_is_enqueued_and_acknowledged(client, monkeypatch) -> None
     [
         ({}, False, False),
         ({"refine": True}, True, False),
-        # The grooming name of refine, still accepted.
-        ({"groom": True}, True, False),
         ({"agents": True}, False, True),
         ({"refine": True, "agents": True}, True, True),
     ],
@@ -351,7 +349,7 @@ async def test_a_flagged_sweep_carries_both_flags(monkeypatch, refine, agents) -
     assert json.loads(sent["MessageBody"]) == {
         "type": "task.sweep",
         "version": 1,
-        "payload": {"refine": refine, "groom": refine, "agents": agents},
+        "payload": {"refine": refine, "agents": agents},
     }
     assert isinstance(
         parse_message(sent["MessageBody"], TaskSweepMessage), TaskSweepMessage
@@ -603,7 +601,6 @@ async def test_the_claude_session_can_do_nothing_but_file_and_sweep(
     update = {"external_id": MANUAL["external_id"], "comment": "done"}
     assert (await session.post("/v1/tasks/updates", json=update)).status_code == 403
     assert (await session.get("/v1/tasks/refinings")).status_code == 403
-    assert (await session.get("/v1/tasks/groomings")).status_code == 403
     assert (
         await session.post("/v1/notify", json={"content": "hello"})
     ).status_code == 403

@@ -448,7 +448,6 @@ _DEV_ROLES = {
     "task-filer": ["tasks.requests.create"],
     "sweep-requester": ["tasks.sweeps.create"],
     "task-refiner": ["tasks.refinings.read", "tasks.refinings.write"],
-    "task-groomer": ["tasks.groomings.read", "tasks.groomings.write"],
     "agent-dispatcher": ["tasks.agent-runs.read", "tasks.agent-runs.write"],
     "agent-reporter": ["tasks.agent-runs.report"],
     "secrets-rotator": [
