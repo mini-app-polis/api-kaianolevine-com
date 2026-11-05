@@ -9,15 +9,25 @@ arithmetic and nothing at all about whether that path holds.
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import respx
 from httpx import ASGITransport, AsyncClient, Response
 
 from kaianolevine_api.config import get_settings
-from kaianolevine_api.services import activity
+from kaianolevine_api.services import activity, fault_signals
 
 DISCORD_URL = "https://discord.test/api/webhooks/1/token"
+
+
+@pytest.fixture(autouse=True)
+def _no_fault_signals():
+    """These tests count the errors channel's fault posts. A 5xx is also an
+    api-fault signal, whose Issue (or its drop report) is
+    tests/integration/test_signals.py's to cover."""
+    with patch.object(fault_signals, "observe", AsyncMock()):
+        yield
 
 
 async def _drain() -> None:

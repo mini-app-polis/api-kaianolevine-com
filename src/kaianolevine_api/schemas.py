@@ -180,6 +180,25 @@ class TaskSweepAccepted(BaseModel):
     message_id: str = Field(..., description="Queue message id of the enqueued sweep.")
 
 
+class ApiFaultSweepResult(BaseModel):
+    """What one quiet sweep of the API's dependency faults did."""
+
+    quiet: int = Field(
+        ...,
+        description=(
+            "Open 502, 503 and 504 fault streaks that have gone "
+            "SIGNAL_FAULT_QUIET_HOURS without a fault."
+        ),
+    )
+    closed: int = Field(
+        ...,
+        description=(
+            "Of those, the streaks this sweep closed, each with its Issue "
+            "commented and closed where it had one."
+        ),
+    )
+
+
 class SetListItem(BaseModel):
     """Summary view of one set returned by list endpoints."""
 

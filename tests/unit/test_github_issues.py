@@ -176,6 +176,20 @@ async def test_closing_comments_then_closes_as_completed(settings) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("state", "expected"), [("open", True), ("closed", False)])
+async def test_an_issues_state_is_read_from_github(
+    settings, state: str, expected: bool
+) -> None:
+    _app_token_routes()
+    respx.get(f"{GH}/repos/{REPO}/issues/5").mock(
+        return_value=Response(200, json={"number": 5, "state": state})
+    )
+
+    assert await github_issues.is_open(REPO, 5, settings=settings) is expected
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_a_refusal_raises_an_issue_error(settings) -> None:
     respx.get(f"{GH}/repos/{REPO}/installation").mock(return_value=Response(404))
 

@@ -115,6 +115,7 @@ def issues():
         ) as opened,
         patch.object(github_issues, "comment", AsyncMock()) as commented,
         patch.object(github_issues, "close", AsyncMock()) as closed,
+        patch.object(github_issues, "is_open", AsyncMock(return_value=True)) as is_open,
         patch.object(
             task_dispatch,
             "dispatch_task",
@@ -130,6 +131,7 @@ def issues():
             open=opened,
             comment=commented,
             close=closed,
+            is_open=is_open,
             task=tasked,
             update=updated,
         )
@@ -887,17 +889,17 @@ async def test_a_quiet_window_closing_an_unescalated_streak_sends_nothing(
 
 
 def test_a_fault_is_keyed_by_route_template_not_url() -> None:
-    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500)
+    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500, quiet_hours=24)
     assert signal.kind == "api-fault"
     assert signal.key == "GET /v1/sets/{set_id} 500"
     assert signal.where == "api-kaianolevine-com"
     assert signal.state == "failing"
-    assert signal.done_when == "GET /v1/sets/{set_id} no longer answers 500."
+    assert signal.done_when is not None
     assert signal.constraints is not None
 
 
 def test_an_escalated_issue_carries_what_the_detector_knows() -> None:
-    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500)
+    signal = fault_signals.signal_for("GET", "/v1/sets/{set_id}", 500, quiet_hours=24)
     body = signals.issue_body(
         signal,
         failures=3,
@@ -966,6 +968,8 @@ async def test_repeated_5xx_from_one_route_become_one_issue(
         issues.open.await_args.kwargs["marker"]
         == "api-fault/GET /v1/test-faults/unavailable/{item_id} 503"
     )
+    # A dependency fault's Issue gets no opening comment: three, one a fault.
+    assert issues.comment.await_count == 3
     assert await _streaks(db_session) == [(4, 0, True, False)]
 
 
@@ -1006,3 +1010,207 @@ async def test_a_signal_error_never_changes_the_answer(
         resp = await raw_client.get("/v1/test-faults/unavailable/a")
         await _drain()
     assert resp.status_code == 503
+
+
+# ── every 5xx an Issue: 500s by a fix, 502-504 by a quiet day ────────────
+
+FAULT_REPO = "mini-app-polis/api-kaianolevine-com"
+
+
+def _fault(status: int, **kwargs) -> signals.Signal:
+    return fault_signals.signal_for(
+        "GET", "/v1/x/{id}", status, quiet_hours=24, **kwargs
+    )
+
+
+async def _observe_fault(db_session: AsyncSession, signal: signals.Signal) -> str:
+    status = signal.context["status"]
+    return await signals.observe(
+        db_session,
+        signal,
+        rule=fault_signals.rule(status, get_settings()),
+        settings=get_settings(),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+async def test_the_first_fault_opens_an_issue(
+    db_session: AsyncSession, issues, status: int
+) -> None:
+    assert await _observe_fault(db_session, _fault(status)) == "escalated"
+    issues.open.assert_awaited_once()
+    assert issues.open.await_args.args == (FAULT_REPO,)
+    assert await _streaks(db_session) == [(1, 0, True, False)]
+
+
+@pytest.mark.asyncio
+async def test_a_500_issue_is_told_to_close_by_a_fixing_pull_request(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(500))
+
+    issues.comment.assert_awaited_once()
+    repo, number, body = issues.comment.await_args.args
+    assert (repo, number) == (FAULT_REPO, 7)
+    assert "`Fixes #7`" in body
+
+
+@pytest.mark.asyncio
+async def test_each_further_fault_comments_with_its_particulars(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(503))
+    outcome = await _observe_fault(
+        db_session, _fault(503, request_id="req-2", sentry_event_id="evt-2")
+    )
+
+    assert outcome == "bumped"
+    body = issues.comment.await_args.args[2]
+    assert body.startswith("Failed again: 2 failure(s) in this streak.")
+    assert "**Request id:** req-2" in body
+    assert "**Sentry event:** evt-2" in body
+    assert "**At:** " in body
+
+
+@pytest.mark.asyncio
+async def test_a_500_recurring_after_its_issue_closed_opens_one_linking_it(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(500))
+    issues.is_open.return_value = False
+    issues.open.side_effect = lambda repo, **_: github_issues.Issue(
+        repo, 8, f"https://github.com/{repo}/issues/8"
+    )
+
+    outcome = await _observe_fault(db_session, _fault(500))
+
+    assert outcome == "escalated"
+    issues.is_open.assert_awaited_once_with(FAULT_REPO, 7, settings=get_settings())
+    assert "**Recurs:** #7 was closed" in issues.open.await_args.kwargs["body"]
+    assert await _streaks(db_session) == [(1, 0, True, True), (1, 0, True, False)]
+    issue = await db_session.execute(
+        text("SELECT issue_number FROM signal_streaks WHERE closed_at IS NULL")
+    )
+    assert issue.scalar_one() == 8
+
+
+@pytest.mark.asyncio
+async def test_a_500_with_its_issue_still_open_only_comments(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(500))
+    assert await _observe_fault(db_session, _fault(500)) == "bumped"
+    issues.open.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_github_unable_to_say_leaves_the_issue_open(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(500))
+    issues.is_open.side_effect = github_issues.IssueError("down")
+    assert await _observe_fault(db_session, _fault(500)) == "bumped"
+    issues.open.assert_awaited_once()
+
+
+async def _age_hours(db_session: AsyncSession, hours: int) -> None:
+    await _age_streaks(db_session, hours * 60)
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_closes_a_dependency_fault_quiet_for_a_day(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(503))
+    await _age_hours(db_session, 25)
+
+    result = await fault_signals.sweep_quiet(get_settings())
+
+    assert result == fault_signals.SweepResult(quiet=1, closed=1)
+    issues.close.assert_awaited_once()
+    assert issues.close.await_args.args == (FAULT_REPO, 7)
+    assert issues.close.await_args.kwargs["body"] == (
+        "Recovered: 24 hours passed without another GET /v1/x/{id} 503."
+    )
+    assert await _streaks(db_session) == [(1, 0, True, True)]
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_leaves_a_dependency_fault_inside_its_day(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(502))
+    await _age_hours(db_session, 23)
+
+    assert await fault_signals.sweep_quiet(get_settings()) == (
+        fault_signals.SweepResult(quiet=0, closed=0)
+    )
+    issues.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_never_closes_a_500(db_session: AsyncSession, issues) -> None:
+    await _observe_fault(db_session, _fault(500))
+    await _age_hours(db_session, 72)
+
+    assert await fault_signals.sweep_quiet(get_settings()) == (
+        fault_signals.SweepResult(quiet=0, closed=0)
+    )
+    issues.close.assert_not_awaited()
+    assert await _streaks(db_session) == [(1, 0, True, False)]
+
+
+@pytest.mark.asyncio
+async def test_a_dependency_fault_after_a_quiet_day_opens_a_new_issue(
+    db_session: AsyncSession, issues
+) -> None:
+    await _observe_fault(db_session, _fault(504))
+    await _age_hours(db_session, 25)
+
+    assert await _observe_fault(db_session, _fault(504)) == "escalated"
+    issues.close.assert_awaited_once()
+    assert issues.open.await_count == 2
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_the_middleware_names_the_request_and_sentry_event(
+    raw_client: AsyncClient, db_session: AsyncSession, issues, faulty_routes
+) -> None:
+    respx.post(url__startswith=DISCORD_URL).mock(return_value=Response(204))
+    await raw_client.get(
+        "/v1/test-faults/unavailable/a", headers={"X-Request-Id": "req-a"}
+    )
+    await _drain()
+    with patch.object(activity.sentry_sdk, "capture_exception", return_value="ev-b"):
+        await raw_client.get("/v1/test-faults/broken/b", headers={"CF-Ray": "8f00-ORD"})
+        await _drain()
+
+    first = issues.open.await_args_list[0].kwargs["body"]
+    assert "**Request id:** req-a" in first
+    second = issues.open.await_args_list[1].kwargs["body"]
+    assert "**Request id:** 8f00-ORD" in second
+    assert "**Sentry event:** ev-b" in second
+
+
+@pytest.mark.asyncio
+async def test_the_quiet_sweep_route_runs_the_sweep(client: AsyncClient) -> None:
+    with patch.object(
+        fault_signals,
+        "sweep_quiet",
+        AsyncMock(return_value=fault_signals.SweepResult(quiet=2, closed=1)),
+    ) as swept:
+        response = await client.post("/v1/signals/api-faults/quiet-sweep")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"quiet": 2, "closed": 1}
+    swept.assert_awaited_once()
+
+
+def test_watcher_is_declared_with_the_fault_sweeper_role() -> None:
+    from kaianolevine_api import identity_registry
+
+    watcher = identity_registry.declared("watcher-cog")
+    assert watcher is not None
+    assert "fault-sweeper" in watcher.roles

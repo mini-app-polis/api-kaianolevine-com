@@ -21,8 +21,11 @@ development process logs what it changed and what broke instead.
 
 from __future__ import annotations
 
+import contextlib
+import datetime as dt
 from typing import Any
 
+import sentry_sdk
 from fastapi import Request
 from mini_app_polis import activity as _activity
 from mini_app_polis.activity import (
@@ -168,14 +171,66 @@ async def emit_fault(
 
 _middleware = _activity.activity_middleware(lambda: _config(get_settings()))
 
+#: Where a fault's request id comes from, first present wins: one the caller
+#: sent, then Cloudflare's ray id (on every request through the edge), then
+#: Railway's own request id.
+REQUEST_ID_HEADERS = ("X-Request-Id", "CF-Ray", "X-Railway-Request-Id")
 
-def _observe_fault(request: Request, status_code: int) -> None:
+
+def request_id(request: Request) -> str | None:
+    """The id that finds this request in the logs, where one came with it."""
+    for name in REQUEST_ID_HEADERS:
+        value = (request.headers.get(name) or "").strip()
+        if value:
+            return value[:200]
+    return None
+
+
+def _last_event_id() -> str | None:
+    """Sentry's latest event id on this request's scope. Never raises."""
+    with contextlib.suppress(Exception):
+        event_id = sentry_sdk.last_event_id()
+        return str(event_id) if event_id else None
+    return None
+
+
+def _sentry_event_id(before: str | None, exc: BaseException | None) -> str | None:
+    """This fault's Sentry event, if one was captured during the request.
+
+    ``before`` is the id read as the request began: a forked scope inherits
+    its parent's last id, so only one that changed belongs to this request.
+    An unhandled exception the middleware did not report (faults not posted)
+    is captured here, and Sentry's dedupe drops the integration's own copy.
+    """
+    after = _last_event_id()
+    if after and after != before:
+        return after
+    if exc is not None:
+        with contextlib.suppress(Exception):
+            event_id = sentry_sdk.capture_exception(exc)
+            return str(event_id) if event_id else None
+    return None
+
+
+def _observe_fault(
+    request: Request,
+    status_code: int,
+    *,
+    sentry_before: str | None,
+    exc: BaseException | None = None,
+) -> None:
     """Hand a 5xx to the signal engine, after the response. Production only."""
     settings = get_settings()
     if not is_production() or _excluded(request.url.path, settings):
         return
     signal = fault_signals.signal_for(
-        request.method, fault_signals.route_template(request.scope), status_code
+        request.method,
+        fault_signals.route_template(request.scope),
+        status_code,
+        quiet_hours=settings.SIGNAL_FAULT_QUIET_HOURS,
+        at=dt.datetime.now(dt.UTC),
+        request_id=request_id(request),
+        sentry_event_id=_sentry_event_id(sentry_before, exc),
     )
     _activity.dispatch(fault_signals.observe(signal, settings))
 
@@ -190,13 +245,15 @@ async def activity_middleware(request: Request, call_next: Any) -> Any:
     reported and re-raised unchanged.
 
     A 5xx is also an api-fault signal (services/fault_signals.py), observed
-    in the background so the response does not wait on it.
+    in the background so the response does not wait on it, with its time,
+    request id and Sentry event.
     """
+    sentry_before = _last_event_id()
     try:
         response = await _middleware(request, call_next)
-    except Exception:
-        _observe_fault(request, 500)
+    except Exception as exc:
+        _observe_fault(request, 500, sentry_before=sentry_before, exc=exc)
         raise
     if response.status_code >= 500:
-        _observe_fault(request, response.status_code)
+        _observe_fault(request, response.status_code, sentry_before=sentry_before)
     return response

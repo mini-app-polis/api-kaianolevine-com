@@ -62,6 +62,16 @@ def test_a_quiet_comment_says_the_window_passed_without_the_fault() -> None:
     )
 
 
+def test_a_quiet_window_of_whole_hours_is_said_in_hours() -> None:
+    signal = _recovered(kind="api-fault", key="GET /v1/x 503", link=None)
+    assert signals.issue_quiet_comment(signal, dt.timedelta(hours=24)) == (
+        "Recovered: 24 hours passed without another GET /v1/x 503."
+    )
+    assert signals.issue_quiet_comment(signal, dt.timedelta(hours=1)) == (
+        "Recovered: 1 hour passed without another GET /v1/x 503."
+    )
+
+
 def test_a_green_run_links_itself() -> None:
     signal = ci_signals.signal_from_workflow_run(
         {

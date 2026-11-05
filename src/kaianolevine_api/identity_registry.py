@@ -254,11 +254,21 @@ MACHINES: tuple[Machine, ...] = (
     # watcher-cog polls Drive and turns a change in a watched folder into a
     # run of the cog that owns it by asking the API, which enqueues onto
     # that cog's queue. One trigger role per downstream cog, so a watcher
-    # key can start exactly the work watcher starts and nothing else.
+    # key can start exactly the work watcher starts and nothing else. Its
+    # scheduled jobs ask for the API's quiet sweep of dependency faults,
+    # which can close a 502-504 Issue that has gone quiet and nothing more.
     Machine(
         name="watcher-cog",
-        roles=("deejay-trigger", "transcription-trigger", "notifier"),
-        notes="Polls Drive. POST /v1/deejay/runs, /v1/transcription/runs, /v1/notify.",
+        roles=(
+            "deejay-trigger",
+            "transcription-trigger",
+            "fault-sweeper",
+            "notifier",
+        ),
+        notes=(
+            "Polls Drive. POST /v1/deejay/runs, /v1/transcription/runs, "
+            "/v1/signals/api-faults/quiet-sweep, /v1/notify."
+        ),
     ),
     # db-ops runs Postgres operations for both production databases as
     # Railway cron services: db-backup's nightly dumps now, the poller and the
