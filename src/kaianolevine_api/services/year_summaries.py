@@ -33,6 +33,7 @@ from ..schemas import (
     YearSummarySong,
     YearSummaryStatus,
 )
+from .display import Rules, load_rules, render
 
 
 def song_ids() -> Subquery:
@@ -248,14 +249,17 @@ async def _song_rows(
     ).all()
 
 
-def _song_fields(c: DbCatalog, count: int, length: int | None, total) -> dict:
+def _song_fields(
+    c: DbCatalog, count: int, length: int | None, total, rules: Rules
+) -> dict:
+    shown = render(c, rules)
     return {
         "catalog_id": c.id,
-        "title": c.title,
-        "remix": c.remix,
-        "artist": c.artist,
+        "title": shown.title,
+        "remix": shown.remix,
+        "artist": shown.artist,
         "genre": c.genre,
-        "bpm": c.bpm,
+        "bpm": shown.bpm,
         "release_year": c.release_year,
         "length_secs": length,
         "play_count": count,
@@ -277,8 +281,9 @@ async def list_year_songs(
     if not has_sets:
         return None
     rows = await _song_rows(session, start, end)
+    rules = await load_rules(session)
     return [
-        YearSummarySong(**_song_fields(c, count, length, total))
+        YearSummarySong(**_song_fields(c, count, length, total, rules))
         for c, count, length, total, *_ in rows
     ]
 
@@ -289,9 +294,10 @@ async def list_collection(session: AsyncSession) -> list[CollectionSong]:
     on its own as sets are ingested — a new song adds a row, a song played
     in a new year gains that year."""
     rows = await _song_rows(session)
+    rules = await load_rules(session)
     return [
         CollectionSong(
-            **_song_fields(c, count, length, total),
+            **_song_fields(c, count, length, total, rules),
             years=sorted(int(y) for y in years),
             year_count=len(years),
             first_played=first,

@@ -1,12 +1,13 @@
 """Conformance findings as a source of signals.
 
 The evaluator posts its findings to ``POST /v1/evaluations`` one row at a
-time. A finding at WARN or worse from a conformance source is a failing
+time. Every finding from a conformance source, INFO included, is a failing
 signal, keyed ``<repo>/<source>/<rule>``, so one rule failing in one repo for
 one source is one streak however many runs report it; it escalates on first
-sight, and each further run that reports it comments on its Issue. Deferred
-and downgraded findings arrive at INFO and exempted ones not at all, so the
-severity alone keeps them out.
+sight, and each further run that reports it comments on its Issue. A rule
+whose severity is INFO is still a decision someone has to make, and a
+deferred or downgraded finding, which arrives at INFO, is still something
+to fix, so each opens an Issue too. Exempted findings arrive not at all.
 
 Only a complete, clean evaluation is proof that a finding cleared: the
 evaluator posts a SUCCESS row for a repo and source only when that
@@ -45,7 +46,7 @@ SOURCES: dict[str, str] = {
     "conformance_llm": "LLM",
 }
 
-_FAILING = frozenset({"WARN", "ERROR", "CRITICAL"})
+_FAILING = frozenset({"INFO", "WARN", "ERROR", "CRITICAL"})
 
 #: The id the evaluator posts a statement about its own run under.
 STATUS_RULE = "STATUS"

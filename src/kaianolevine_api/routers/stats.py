@@ -21,6 +21,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.display import load_rules, render
 from ..services.year_summaries import (
     get_year_summary,
     list_collection,
@@ -197,14 +198,16 @@ async def stats_top_tracks(
         )
     ).all()
 
+    rules = await load_rules(session)
     data = [
         StatsTopTrackItem(
             catalog_id=row.id,
-            title=row.title,
-            artist=row.artist,
+            title=shown.title,
+            artist=shown.artist,
             play_count=int(play_count),
         )
         for row, play_count in rows
+        for shown in [render(row, rules)]
     ]
     total = (
         await session.execute(

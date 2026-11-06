@@ -121,11 +121,22 @@ async def test_a_redelivered_finding_is_not_observed_twice(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("severity", ["INFO", "SUCCESS"])
-async def test_deferred_and_downgraded_findings_open_nothing(
-    client: AsyncClient, db_session: AsyncSession, issues, severity: str
+async def test_an_info_finding_opens_an_issue(
+    client: AsyncClient, db_session: AsyncSession, issues
 ) -> None:
-    await _post(client, severity=severity)
+    await _post(client, severity="INFO", violation_id="LAYOUT-002")
+
+    issues.open.assert_awaited_once()
+    assert await _streaks(db_session) == [
+        ("conformance", f"{REPO}/{DET}/LAYOUT-002", 1, False)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_clean_row_on_its_own_opens_nothing(
+    client: AsyncClient, db_session: AsyncSession, issues
+) -> None:
+    await _post(client, severity="SUCCESS")
 
     issues.open.assert_not_awaited()
     assert await _streaks(db_session) == []

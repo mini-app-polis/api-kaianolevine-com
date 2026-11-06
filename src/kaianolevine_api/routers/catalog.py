@@ -24,9 +24,26 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.display import Rules, load_rules, render
 from ..services.reconciliation import lookup_catalog
 
 router = APIRouter()
+
+
+def catalog_match(entry: DbCatalog, rules: Rules) -> CatalogMatch:
+    """An entry as a lookup answers it: the fields a tag carries, shown by
+    the display rules."""
+    shown = render(entry, rules)
+    return CatalogMatch(
+        id=entry.id,
+        title=shown.title,
+        remix=shown.remix,
+        artist=shown.artist,
+        label=entry.label,
+        genre=entry.genre,
+        bpm=shown.bpm,
+        release_year=entry.release_year,
+    )
 
 
 @router.get(
@@ -80,21 +97,23 @@ async def list_catalog(
     stmt = stmt.limit(limit).offset(offset)
     rows = (await session.execute(stmt)).scalars().all()
 
+    rules = await load_rules(session)
     data = [
         CatalogListItem(
             id=row.id,
-            title=row.title,
-            artist=row.artist,
+            title=shown.title,
+            artist=shown.artist,
             confidence=row.confidence,
             source=row.source,
             genre=row.genre,
-            bpm=row.bpm,
+            bpm=shown.bpm,
             release_year=row.release_year,
             play_count=row.play_count,
             first_played=row.first_played,
             last_played=row.last_played,
         )
         for row in rows
+        for shown in [render(row, rules)]
     ]
 
     return success_envelope(data, count=len(data), total=total)
@@ -119,21 +138,8 @@ async def lookup_catalog_entries(
 ) -> Envelope[list[CatalogMatch | None]]:
     """Each track's catalog entry, or null."""
     found = await lookup_catalog(session=session, tracks=payload.tracks)
-    data = [
-        None
-        if entry is None
-        else CatalogMatch(
-            id=entry.id,
-            title=entry.title,
-            remix=entry.remix,
-            artist=entry.artist,
-            label=entry.label,
-            genre=entry.genre,
-            bpm=entry.bpm,
-            release_year=entry.release_year,
-        )
-        for entry in found
-    ]
+    rules = await load_rules(session)
+    data = [None if entry is None else catalog_match(entry, rules) for entry in found]
     return success_envelope(data, count=len(data), total=len(data))
 
 
@@ -179,14 +185,15 @@ async def get_catalog(
         for track, set_row in rows
     ]
 
+    shown = render(catalog, await load_rules(session))
     data = CatalogDetail(
         id=catalog.id,
-        title=catalog.title,
-        artist=catalog.artist,
+        title=shown.title,
+        artist=shown.artist,
         confidence=catalog.confidence,
         source=catalog.source,
         genre=catalog.genre,
-        bpm=catalog.bpm,
+        bpm=shown.bpm,
         release_year=catalog.release_year,
         play_count=catalog.play_count,
         first_played=catalog.first_played,

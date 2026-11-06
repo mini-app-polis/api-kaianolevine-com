@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     Time,
@@ -141,6 +142,19 @@ class TrackCatalog(Base):
     bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
     release_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # The song's parts (migration 093). The display rules write the shown
+    # title and artist from them; until base_title and a main artist are
+    # filled, readers show the title and artist columns above.
+    base_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    version: Mapped[str | None] = mapped_column(String, nullable=True)
+    main_artists: Mapped[list[str]] = mapped_column(
+        PgARRAY(String), nullable=False, default=list, server_default=text("'{}'")
+    )
+    featured_artists: Mapped[list[str]] = mapped_column(
+        PgARRAY(String), nullable=False, default=list, server_default=text("'{}'")
+    )
+    subgenre: Mapped[str | None] = mapped_column(String, nullable=True)
+
     play_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     first_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     last_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
@@ -162,6 +176,25 @@ class TrackCatalog(Base):
             "artist_normalized",
             name="uq_track_catalog_owner_norm_title_artist",
         ),
+    )
+
+
+class DisplayRules(Base):
+    """The one set of rules that writes a catalog entry's parts out as the
+    title and artist shown for it (migration 093). A single row, id 1."""
+
+    __tablename__ = "display_rules"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    featured_placement: Mapped[str] = mapped_column(String, nullable=False)
+    featured_word: Mapped[str] = mapped_column(String, nullable=False)
+    artist_joiner: Mapped[str] = mapped_column(String, nullable=False)
+    version_open: Mapped[str] = mapped_column(String, nullable=False)
+    version_close: Mapped[str] = mapped_column(String, nullable=False)
+    bpm_decimals: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    case_style: Mapped[str] = mapped_column(String, nullable=False)
+    changed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
