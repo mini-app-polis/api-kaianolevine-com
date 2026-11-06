@@ -1,3 +1,11 @@
+## [2.60.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.2...v2.60.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **catalog:** match titles and artists ignoring spaces and symbols when the lookup finds no exact match ([15030b0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/15030b0977eb80ee685f3863ca968b873bf77040))
+* **deps:** bump miniapppolis-common-utils to 8.1.0 ([9102280](https://github.com/mini-app-polis/api-kaianolevine-com/commit/91022800ac703f597be3eafe650c0b775f67b3fd))
+
 ## [2.60.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.1...v2.60.2) (2026-11-06)
 
 
