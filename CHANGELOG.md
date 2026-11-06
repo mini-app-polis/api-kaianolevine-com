@@ -1,3 +1,14 @@
+# [2.63.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.62.0...v2.63.0) (2026-11-06)
+
+
+### Features
+
+* **catalog:** entries keep every spelling they matched under, and matching uses them ([c1c0a97](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c1c0a9725b4db3548a6d37a07d0a273cc680af25))
+* **catalog:** map every genre onto the two-level vocabulary, with a reviewable clean-up command ([f5a6f57](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f5a6f574ba565515223ba8ad17f51eeabb882648))
+* **catalog:** split entries into their parts with a reviewable clean-up command ([750cae1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/750cae1a601d15026c3f0c99d6f9ae986edfee96))
+* **catalog:** the reconcile's display read and fill-up endpoints ([7eff1ce](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7eff1ce0aad31462833fbeadf39c3785008907a6))
+* **catalog:** the reconcile's display read and fill-up endpoints ([7629bbe](https://github.com/mini-app-polis/api-kaianolevine-com/commit/7629bbe53bb6ad2207424a6d4d1169f8096968fc))
+
 # [2.62.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.61.0...v2.62.0) (2026-11-06)
 
 
