@@ -474,7 +474,7 @@ files a task from an Issue by hand. Production only.
 | `ci` | `<repo>/<workflow>@<branch>`, branches `SIGNAL_CI_BRANCHES` (`main` only: a dev failure opens nothing) | one remedy, chosen by the failed jobs: a failed dependency audit dispatches the org's `dependency-fix` workflow for the repo, anything else is re-run. The next failure escalates | a green run |
 | `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 | `api-fault` | `<method> <route template> <status>`, from the activity middleware. Paths in `NOTIFY_EXCLUDED_PATHS` are not watched | none: the first 5xx escalates. Each further one comments with its time, request id and Sentry event, where known | a 502, 503 or 504 (a dependency failing): once the route has gone `SIGNAL_FAULT_QUIET_HOURS` (24) without it, by the scheduled quiet sweep or the next fault. Any other 5xx (500 above all, this service's bug): never on its own; a pull request saying `Fixes #N` closes its Issue. See below |
-| `conformance` | `<repo>/<source>/<rule>`, from a finding at `WARN` or worse posted to `POST /v1/evaluations` by `conformance_deterministic` or `conformance_llm` | none: the first finding escalates; each later run that reports it comments | a `SUCCESS` row for the repo and source: the evaluator posts one only for a complete evaluation that found nothing, so a run with other findings, or one that did not finish, closes nothing |
+| `conformance` | `<repo>/<source>/<rule>`, from any finding, `INFO` included, posted to `POST /v1/evaluations` by `conformance_deterministic` or `conformance_llm` | none: the first finding escalates; each later run that reports it comments | a `SUCCESS` row for the repo and source: the evaluator posts one only for a complete evaluation that found nothing, so a run with other findings, or one that did not finish, closes nothing |
 | `evaluator-status` | `<repo>/<source>/<not-evaluated\|not-assessed>`, from the evaluator's `STATUS` rows; the Issue opens in evaluator-cog | none | the same `SUCCESS` row |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
@@ -482,8 +482,10 @@ escalates at once.
 
 Conformance findings come from `services/conformance_signals.py`, which sees
 only a row this request stored, so a redelivered finding is not counted
-twice. Deferred and downgraded findings arrive at `INFO` and exempted ones
-not at all, so neither opens anything.
+twice. Every finding is work to do, so every finding opens an Issue: an
+`INFO` rule, and a deferred or downgraded finding, which arrives at `INFO`,
+as much as a `WARN`. Exempted findings arrive not at all, so they open
+nothing.
 
 Each conformance Issue names what was graded, against what and by what,
 where the row says: the application's version and commit (`repo_version`,

@@ -52,3 +52,28 @@ def test_a_finding_without_versions_has_no_evidence() -> None:
     )
     assert signal is not None
     assert signal.evidence == ()
+
+
+def test_every_severity_but_success_is_a_failing_signal() -> None:
+    for severity in ("INFO", "WARN", "ERROR", "CRITICAL"):
+        signal = conformance_signals.failing_signal(
+            repo=REPO,
+            source="conformance_deterministic",
+            severity=severity,
+            violation_id="LAYOUT-002",
+            finding="Not in the written layout for infrastructure.",
+            suggestion=None,
+        )
+        assert signal is not None, severity
+        assert signal.key == f"{REPO}/conformance_deterministic/LAYOUT-002"
+    assert (
+        conformance_signals.failing_signal(
+            repo=REPO,
+            source="conformance_deterministic",
+            severity="SUCCESS",
+            violation_id="STATUS",
+            finding="passed",
+            suggestion=None,
+        )
+        is None
+    )
