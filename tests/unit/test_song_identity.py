@@ -1,4 +1,5 @@
 from kaianolevine_api.services.song_identity import (
+    ascii_punctuation,
     catalog_artist,
     catalog_title_key,
     clean_genre,
@@ -127,3 +128,16 @@ def test_genre_spellings_read_one_way():
         assert clean_genre(junk) is None, junk
     assert clean_genre("Rap & Hip-Hop") == "Rap & Hip-Hop"
     assert clean_genre("R&B/Soul") == "R&B/Soul"
+
+
+def test_typographic_punctuation_becomes_ascii():
+    assert ascii_punctuation("Anne\u2010Marie") == "Anne-Marie"
+    assert ascii_punctuation("T\u2010Pain") == "T-Pain"
+    assert ascii_punctuation("19\u20132000") == "19-2000"
+    assert ascii_punctuation("5 O\u2019Clock") == "5 O'Clock"
+    assert ascii_punctuation("\u201cHi\u201d\u00a0there") == '"Hi" there'
+
+
+def test_ascii_punctuation_keeps_letters_and_plain_text():
+    assert ascii_punctuation("Beyonc\u00e9") == "Beyonc\u00e9"
+    assert ascii_punctuation("Plain - Text's") == "Plain - Text's"

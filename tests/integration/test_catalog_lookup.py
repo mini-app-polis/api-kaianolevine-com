@@ -145,6 +145,25 @@ async def test_the_most_played_of_several_owners_entries_wins(
     assert match["genre"] == "R&B"
 
 
+async def test_typographic_punctuation_finds_the_ascii_entry(client) -> None:
+    await _ingest(client, _track("2002", "Anne-Marie"), _track("5 O'Clock", "T-Pain"))
+    first, second = await _lookup(
+        client,
+        _track("2002", "Anne\u2010Marie"),
+        _track("5 O\u2019Clock", "T\u2010Pain"),
+    )
+    assert first is not None and first["artist"] == "Anne-Marie"
+    assert second is not None and second["title"] == "5 O'Clock"
+
+
+async def test_an_entry_filed_with_typographic_punctuation_still_matches(
+    client,
+) -> None:
+    await _ingest(client, _track("2002", "Anne\u2010Marie"))
+    (match,) = await _lookup(client, _track("2002", "Anne\u2010Marie"))
+    assert match is not None and match["artist"] == "Anne\u2010Marie"
+
+
 async def test_the_lookup_needs_the_ingest_scope(role_client) -> None:
     async with role_client("wcs-reader") as reader:
         response = await reader.post(

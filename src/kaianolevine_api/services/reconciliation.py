@@ -16,6 +16,7 @@ from ..models import TrackCatalog
 from ..schemas import IngestTrack
 from .normalization import normalize_for_matching
 from .song_identity import (
+    ascii_punctuation,
     catalog_artist,
     catalog_title_key,
     clean_genre,
@@ -273,18 +274,42 @@ async def lookup_catalog(
     change to an entry. A placeholder ("---SILENCE---") has no entry. Every
     owner's entries are searched: which key filed a play is not part of what
     the song is.
+
+    A track with no match as written is tried once more with its typographic
+    punctuation as plain ASCII (``ascii_punctuation``): a file tagged
+    "Anne‐Marie" finds the plays filed as "Anne-Marie". The track as written
+    is always tried first, so an entry filed with the typographic form still
+    matches it.
     """
-    items = [(t, track_keys(t)) for t in tracks]
+    items = [(t, track_keys(t), _ascii_variant(t)) for t in tracks]
     matcher = CatalogMatcher(session, None)
-    await matcher.prefetch(keys.pair for _, keys in items)
+    pairs = [keys.pair for _, keys, _ in items]
+    pairs += [alt[1].pair for _, _, alt in items if alt is not None]
+    await matcher.prefetch(pairs)
     out: list[TrackCatalog | None] = []
-    for track, keys in items:
+    for track, keys, alt in items:
         if is_placeholder(track.title):
             out.append(None)
             continue
         found, _, _ = await matcher.match(track, keys)
+        if found is None and alt is not None:
+            found, _, _ = await matcher.match(*alt)
         out.append(found)
     return out
+
+
+def _ascii_variant(track: IngestTrack) -> tuple[IngestTrack, TrackKeys] | None:
+    """The track with its punctuation as plain ASCII, and its keys, or None
+    when that changes nothing."""
+    fields = {
+        "title": ascii_punctuation(track.title),
+        "artist": ascii_punctuation(track.artist),
+        "remix": ascii_punctuation(track.remix) if track.remix else track.remix,
+    }
+    if all(getattr(track, k) == v for k, v in fields.items()):
+        return None
+    variant = track.model_copy(update=fields)
+    return variant, track_keys(variant)
 
 
 async def reconcile_set_tracks(

@@ -101,6 +101,33 @@ def _compact(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
+# Typographic punctuation MusicBrainz-tagged files carry ("Anne‐Marie",
+# "5 O’Clock", "19–2000") where set exports usually have plain ASCII.
+_ASCII_PUNCTUATION = str.maketrans(
+    {
+        "\u2010": "-",  # hyphen
+        "\u2011": "-",  # non-breaking hyphen
+        "\u2012": "-",  # figure dash
+        "\u2013": "-",  # en dash
+        "\u2014": "-",  # em dash
+        "\u2212": "-",  # minus sign
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201b": "'",
+        "\u2032": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u00a0": " ",  # no-break space
+    }
+)
+
+
+def ascii_punctuation(text: str) -> str:
+    """``text`` with typographic hyphens, dashes, quotes and no-break spaces
+    as their plain ASCII forms. Letters, accented ones included, are kept."""
+    return text.translate(_ASCII_PUNCTUATION)
+
+
 def is_release_label(text: str) -> bool:
     """True for a label or file tag that does not make a different recording."""
     text = text.strip()
