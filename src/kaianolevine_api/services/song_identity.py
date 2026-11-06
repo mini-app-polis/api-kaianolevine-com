@@ -147,10 +147,29 @@ def catalog_title_key(display: str) -> str:
     return display.lower()
 
 
+_TRAILING_FEAT = re.compile(r"\s+(feat\.?|ft\.?|featuring)\s+.*$", re.IGNORECASE)
+
+
+def _without_release_labels(text: str) -> str:
+    """``text`` without the parts that only label a release: bracketed or
+    " - " parts that are release labels ("[Clean]", "(feat. Nate Dogg)",
+    "- Radio Edit") and a trailing feat. credit. A version is kept."""
+    kept = _BRACKETED.sub(
+        lambda m: "" if is_release_label(m.group(1)) else m.group(0), text
+    )
+    dash = _DASH_SUFFIX.search(kept)
+    if dash and is_release_label(dash.group(1)):
+        kept = kept[: dash.start()]
+    kept = _TRAILING_FEAT.sub("", kept)
+    return kept if _compact(kept) else text
+
+
 def loose_title_key(text: str) -> str:
-    """Title (and version) ignoring case, punctuation and a trailing
-    "Version": "Cruel - Piano Acoustic" and "Cruel (Piano Acoustic)" match."""
-    return _compact(text).removesuffix("version")
+    """Title (and version) ignoring case, punctuation, release labels and a
+    trailing "Version": "Cruel - Piano Acoustic" and "Cruel (Piano
+    Acoustic)" match, and so do "21 Questions" and "21 Questions [Clean]
+    [feat. Nate Dogg]"."""
+    return _compact(_without_release_labels(text)).removesuffix("version")
 
 
 def main_artist_key(artist: str) -> str:

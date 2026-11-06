@@ -135,3 +135,16 @@ def test_loose_keys_ignore_spaces_and_symbols():
     assert loose_title_key("19\u20132000") == loose_title_key("19-2000")
     assert main_artist_key("Anne\u2010Marie") == main_artist_key("Anne-Marie")
     assert main_artist_key("Soulride, K-Rob") == main_artist_key("Soulride")
+
+
+def test_loose_keys_ignore_release_labels_but_keep_versions():
+    assert loose_title_key("21 Questions [Clean] [feat. Nate Dogg]") == (
+        loose_title_key("21 Questions")
+    )
+    assert loose_title_key("2Nite (Featuring K-Rob)") == loose_title_key("2Nite")
+    assert loose_title_key("Thong Song - Radio Edit") == loose_title_key("Thong Song")
+    assert loose_title_key("Can't Believe It feat. Lil Wayne") == (
+        loose_title_key("Can't Believe It")
+    )
+    assert loose_title_key("Temple (Niko The Kid Remix)") != loose_title_key("Temple")
+    assert loose_title_key("(Clean)") == "clean"
