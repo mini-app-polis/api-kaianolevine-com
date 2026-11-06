@@ -180,6 +180,7 @@ async def stats_top_tracks(
     """Return most-played tracks for the authenticated owner."""
 
     songs = song_ids()
+    # Plays only: a library entry never played has a play_count of 0.
     per_song = (
         select(
             songs.c.song_id.label("song_id"),
@@ -187,6 +188,7 @@ async def stats_top_tracks(
         )
         .join(DbCatalog, DbCatalog.id == songs.c.catalog_id)
         .group_by(songs.c.song_id)
+        .having(func.sum(DbCatalog.play_count) > 0)
         .subquery()
     )
     rows = (
@@ -210,9 +212,7 @@ async def stats_top_tracks(
         for shown in [render(row, rules)]
     ]
     total = (
-        await session.execute(
-            select(func.count(func.distinct(songs.c.song_id))).select_from(songs)
-        )
+        await session.execute(select(func.count()).select_from(per_song))
     ).scalar_one()
     return success_envelope(data, count=len(data), total=total)
 
