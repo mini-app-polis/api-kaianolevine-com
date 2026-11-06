@@ -1,3 +1,10 @@
+## [2.60.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.4...v2.60.5) (2026-11-06)
+
+
+### Bug Fixes
+
+* **catalog:** treat Super Clean as a release label ([6f4b575](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6f4b5753fdf294e0ddb24bb9031f6b48fd10ba7a))
+
 ## [2.60.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.3...v2.60.4) (2026-11-06)
 
 
