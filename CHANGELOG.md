@@ -1,3 +1,11 @@
+# [2.61.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.5...v2.61.0) (2026-11-06)
+
+
+### Features
+
+* **catalog:** store song parts and show every reader's title and artist through the display rules ([1142093](https://github.com/mini-app-polis/api-kaianolevine-com/commit/11420936452ec6bed6c65878c1e5f502bd53d9c9))
+* **signals:** every conformance finding opens an Issue, INFO included ([54293dc](https://github.com/mini-app-polis/api-kaianolevine-com/commit/54293dc79e2d9c33258d75da94ba6ce688f5222f))
+
 ## [2.60.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.4...v2.60.5) (2026-11-06)
 
 
