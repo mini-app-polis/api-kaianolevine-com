@@ -16,7 +16,6 @@ from ..models import TrackCatalog
 from ..schemas import IngestTrack
 from .normalization import normalize_for_matching
 from .song_identity import (
-    ascii_punctuation,
     catalog_artist,
     catalog_title_key,
     clean_genre,
@@ -184,7 +183,10 @@ class CatalogMatcher:
                         self._own_by_key[key] = c
         return self._version_index
 
-    async def _find_version(self, display: str, artist: str) -> TrackCatalog | None:
+    async def find_loose(self, display: str, artist: str) -> TrackCatalog | None:
+        """The entry whose title (with its version) and first credited artist
+        match ``display`` and ``artist`` with case, spaces and every symbol
+        ignored ("2AM" is "2 AM", "5:19" is "519"), or None."""
         matches = (await self._load_catalog()).get(
             (loose_title_key(display), main_artist_key(artist)), []
         )
@@ -252,7 +254,7 @@ class CatalogMatcher:
         if found is None:
             found = self.by_pair.get(keys.pair)
         if found is None and keys.is_version:
-            found = await self._find_version(keys.display, catalog_artist(track.artist))
+            found = await self.find_loose(keys.display, catalog_artist(track.artist))
         if (
             found is not None
             and self.owner_id is not None
@@ -275,41 +277,25 @@ async def lookup_catalog(
     owner's entries are searched: which key filed a play is not part of what
     the song is.
 
-    A track with no match as written is tried once more with its typographic
-    punctuation as plain ASCII (``ascii_punctuation``): a file tagged
-    "Anne‐Marie" finds the plays filed as "Anne-Marie". The track as written
-    is always tried first, so an entry filed with the typographic form still
-    matches it.
+    A track the ingest's matching does not find is then matched loosely
+    (``CatalogMatcher.find_loose``): title with its version, and first
+    credited artist, with case, spaces and every symbol ignored. So a file
+    tagged "2AM", "5:19" or "Anne‐Marie" finds the plays filed as "2 AM",
+    "519" or "Anne-Marie". The ingest itself does not match loosely.
     """
-    items = [(t, track_keys(t), _ascii_variant(t)) for t in tracks]
+    items = [(t, track_keys(t)) for t in tracks]
     matcher = CatalogMatcher(session, None)
-    pairs = [keys.pair for _, keys, _ in items]
-    pairs += [alt[1].pair for _, _, alt in items if alt is not None]
-    await matcher.prefetch(pairs)
+    await matcher.prefetch(keys.pair for _, keys in items)
     out: list[TrackCatalog | None] = []
-    for track, keys, alt in items:
+    for track, keys in items:
         if is_placeholder(track.title):
             out.append(None)
             continue
         found, _, _ = await matcher.match(track, keys)
-        if found is None and alt is not None:
-            found, _, _ = await matcher.match(*alt)
+        if found is None:
+            found = await matcher.find_loose(keys.display, catalog_artist(track.artist))
         out.append(found)
     return out
-
-
-def _ascii_variant(track: IngestTrack) -> tuple[IngestTrack, TrackKeys] | None:
-    """The track with its punctuation as plain ASCII, and its keys, or None
-    when that changes nothing."""
-    fields = {
-        "title": ascii_punctuation(track.title),
-        "artist": ascii_punctuation(track.artist),
-        "remix": ascii_punctuation(track.remix) if track.remix else track.remix,
-    }
-    if all(getattr(track, k) == v for k, v in fields.items()):
-        return None
-    variant = track.model_copy(update=fields)
-    return variant, track_keys(variant)
 
 
 async def reconcile_set_tracks(
