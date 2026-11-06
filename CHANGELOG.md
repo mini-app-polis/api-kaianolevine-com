@@ -1,3 +1,15 @@
+# [2.62.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.61.0...v2.62.0) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.2.0 ([4ead4cd](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4ead4cda94997183b2cf48115221acef54f77480))
+
+
+### Features
+
+* **catalog:** the music library registry and library-only catalog entries ([80970ff](https://github.com/mini-app-polis/api-kaianolevine-com/commit/80970ff32a4d46461a33ee2b81266f3d6ad41581))
+
 # [2.61.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.5...v2.61.0) (2026-11-06)
 
 
