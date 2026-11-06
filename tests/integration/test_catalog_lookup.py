@@ -57,7 +57,8 @@ async def test_a_track_resolves_to_the_entry_its_play_was_filed_under(client) ->
     (match,) = await _lookup(client, _track("Sundays", "Emotional Oranges"))
     assert match["title"] == "Sundays"
     assert match["artist"] == "Emotional Oranges"
-    assert match["genre"] == "R&B"
+    # The set import writes the genre onto the two-level vocabulary.
+    assert match["genre"] == "R&B/Soul"
     assert match["bpm"] == 98.0
     assert match["release_year"] == 2019
     assert set(match) == {

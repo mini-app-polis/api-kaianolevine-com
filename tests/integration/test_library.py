@@ -72,7 +72,7 @@ async def test_a_song_never_played_gets_a_library_entry_with_no_plays(
 
     assert made["created"] is True
     assert made["entry"]["title"] == "Temple"
-    assert made["entry"]["genre"] == "House"
+    assert made["entry"]["genre"] == "Dance/Electronic"
     maker = async_sessionmaker(async_engine, expire_on_commit=False)
     async with maker() as session:
         row = await session.get(DbCatalog, uuid.UUID(made["entry"]["id"]))

@@ -37,6 +37,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services.display import load_rules
+from ..services.genres import catalog_genre
 from ..services.reconciliation import lookup_catalog, track_keys
 from ..services.song_identity import catalog_artist, clean_genre
 from .catalog import catalog_match
@@ -243,6 +244,7 @@ async def create_library_entry(
 
     # The title and keys a first play of the song would give its entry.
     keys = track_keys(track)
+    genre, subgenre = catalog_genre(payload.genre)
     entry = DbCatalog(
         owner_id=principal.subject,
         title=keys.display,
@@ -252,7 +254,8 @@ async def create_library_entry(
         label=track.label,
         source="library",
         confidence="low",
-        genre=track.genre,
+        genre=genre,
+        subgenre=subgenre,
         bpm=track.bpm,
         release_year=track.release_year,
         play_count=0,

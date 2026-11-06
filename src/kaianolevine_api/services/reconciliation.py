@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import Track as DbTrack
 from ..models import TrackCatalog
 from ..schemas import IngestTrack
+from .genres import catalog_genre
 from .normalization import normalize_for_matching
 from .song_identity import (
     catalog_artist,
@@ -383,6 +384,7 @@ async def reconcile_set_tracks(
             catalog_by_pair[pair] = catalog
 
         if catalog is None:
+            genre, subgenre = catalog_genre(ingest_track.genre)
             catalog = TrackCatalog(
                 owner_id=owner_id,
                 title=new_title,
@@ -391,7 +393,8 @@ async def reconcile_set_tracks(
                 artist_normalized=new_keys[1],
                 source="play_history",
                 confidence="low",
-                genre=ingest_track.genre,
+                genre=genre,
+                subgenre=subgenre,
                 bpm=ingest_track.bpm,
                 release_year=ingest_track.release_year,
                 play_count=1,
@@ -429,8 +432,11 @@ async def reconcile_set_tracks(
 
         updated_any_metadata = False
         if ingest_track.genre is not None and catalog.genre is None:
-            catalog.genre = ingest_track.genre
-            updated_any_metadata = True
+            genre, subgenre = catalog_genre(ingest_track.genre)
+            if genre is not None:
+                catalog.genre = genre
+                catalog.subgenre = catalog.subgenre or subgenre
+                updated_any_metadata = True
         if ingest_track.bpm is not None and catalog.bpm is None:
             catalog.bpm = ingest_track.bpm
             updated_any_metadata = True

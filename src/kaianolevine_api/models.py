@@ -198,6 +198,26 @@ class DisplayRules(Base):
     )
 
 
+class CatalogRevision(Base):
+    """One clean-up change to a catalog entry, with its values before and
+    after, so it can be put back (migration 095)."""
+
+    __tablename__ = "catalog_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("track_catalog.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    before: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    after: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    applied_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class LibraryFile(Base):
     """One Drive file in the music library (migration 094).
 
