@@ -28,7 +28,7 @@ import sys
 import uuid
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CatalogRevision, TrackCatalog
@@ -149,6 +149,7 @@ async def apply(
         entry.version = p.version
         entry.main_artists = list(p.main_artists)
         entry.featured_artists = list(p.featured_artists)
+        entry.updated_at = func.now()
         session.add(
             CatalogRevision(
                 catalog_id=entry.id, kind=KIND, before=before, after=_parts_of(entry)

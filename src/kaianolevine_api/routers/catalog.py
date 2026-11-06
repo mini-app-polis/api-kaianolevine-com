@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from typing import Annotated
 
@@ -10,11 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
 from ..database import get_db_session
+from ..models import DisplayRules as DbDisplayRules
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
 from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
     CatalogDetail,
+    CatalogDisplay,
+    CatalogDisplayRequest,
+    CatalogFillUp,
+    CatalogFillUpResult,
     CatalogListItem,
     CatalogLookupRequest,
     CatalogMatch,
@@ -25,6 +31,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services.display import Rules, load_rules, render
+from ..services.genres import catalog_genre
 from ..services.reconciliation import lookup_catalog
 
 router = APIRouter()
@@ -141,6 +148,121 @@ async def lookup_catalog_entries(
     rules = await load_rules(session)
     data = [None if entry is None else catalog_match(entry, rules) for entry in found]
     return success_envelope(data, count=len(data), total=len(data))
+
+
+async def _rules_changed_at(session: AsyncSession) -> dt.datetime | None:
+    row = await session.get(DbDisplayRules, 1)
+    return None if row is None else row.changed_at
+
+
+def catalog_display(
+    entry: DbCatalog, rules: Rules, rules_changed_at: dt.datetime | None
+) -> CatalogDisplay:
+    """An entry's owned fields as a file should carry them."""
+    shown = render(entry, rules)
+    changed_at = entry.updated_at
+    if rules_changed_at is not None and rules_changed_at > changed_at:
+        changed_at = rules_changed_at
+    return CatalogDisplay(
+        id=entry.id,
+        title=shown.title,
+        artist=shown.artist,
+        release_year=entry.release_year,
+        genre=entry.genre,
+        subgenre=entry.subgenre,
+        bpm=shown.bpm,
+        label=entry.label,
+        changed_at=changed_at,
+    )
+
+
+@router.post(
+    "/catalog/display",
+    response_model=Envelope[list[CatalogDisplay | None]],
+    summary="Read entries' owned fields as files should carry them",
+    description=(
+        "For up to 200 catalog ids, each entry's title (with its version), "
+        "artist, year, genre, subgenre, BPM and label, written out by the "
+        "display rules, and when what is shown last changed; null for an id "
+        "the catalog does not have. Requires catalog.library.write."
+    ),
+)
+async def read_catalog_display(
+    payload: CatalogDisplayRequest,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[CatalogDisplay | None]]:
+    """The entries asked for, in order."""
+    rows = (
+        (await session.execute(select(DbCatalog).where(DbCatalog.id.in_(payload.ids))))
+        .scalars()
+        .all()
+    )
+    by_id = {row.id: row for row in rows}
+    rules = await load_rules(session)
+    rules_changed_at = await _rules_changed_at(session)
+    data: list[CatalogDisplay | None] = [
+        None
+        if (entry := by_id.get(entry_id)) is None
+        else catalog_display(entry, rules, rules_changed_at)
+        for entry_id in payload.ids
+    ]
+    return success_envelope(data, count=len(data), total=len(data))
+
+
+@router.post(
+    "/catalog/{id}/fill-up",
+    response_model=Envelope[CatalogFillUpResult],
+    summary="Fill an entry's empty fields from a library file",
+    description=(
+        "Sets only the fields the entry leaves empty (year, genre, BPM, "
+        "label) from the file's values; a value the catalog has is never "
+        "overwritten. A genre is placed on the catalog's vocabulary first. "
+        "An entry that gains a value is marked as coming from the library. "
+        "Requires catalog.library.write."
+    ),
+)
+async def fill_up_catalog_entry(
+    id: uuid.UUID,
+    payload: CatalogFillUp,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[CatalogFillUpResult]:
+    """Fill the entry's empty owned fields."""
+    entry = await session.get(DbCatalog, id)
+    if entry is None:
+        raise api_error(404, "not_found", "Catalog entry not found")
+
+    filled: list[str] = []
+    if entry.release_year is None and payload.release_year is not None:
+        entry.release_year = payload.release_year
+        filled.append("release_year")
+    if entry.genre is None and payload.genre is not None:
+        genre, subgenre = catalog_genre(payload.genre)
+        if genre is not None:
+            entry.genre = genre
+            filled.append("genre")
+            if entry.subgenre is None and subgenre is not None:
+                entry.subgenre = subgenre
+                filled.append("subgenre")
+    if entry.bpm is None and payload.bpm is not None:
+        entry.bpm = payload.bpm
+        filled.append("bpm")
+    if entry.label is None and payload.label and payload.label.strip():
+        entry.label = payload.label.strip()
+        filled.append("label")
+    if filled:
+        entry.source = "library"
+        entry.updated_at = func.now()
+        await session.commit()
+        await session.refresh(entry)
+
+    rules = await load_rules(session)
+    data = CatalogFillUpResult(
+        entry=catalog_display(entry, rules, await _rules_changed_at(session)),
+        filled=filled,
+    )
+    return success_envelope(data, count=1, total=1)
 
 
 @router.get(

@@ -25,7 +25,7 @@ import sys
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CatalogRevision, TrackCatalog
@@ -111,6 +111,7 @@ async def apply(session: AsyncSession, the_plan: Plan) -> int:
         entry.genre = change.after["genre"]
         entry.subgenre = change.after["subgenre"]
         entry.version = change.after["version"]
+        entry.updated_at = func.now()
         session.add(
             CatalogRevision(
                 catalog_id=entry.id,
