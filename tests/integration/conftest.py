@@ -432,6 +432,7 @@ _DEV_ROLES = {
         "catalog.tracks.write",
         "catalog.plays.write",
     ],
+    "catalog-library": ["catalog.library.write"],
     "wcs-writer": [
         "wcs.notes.read",
         "wcs.notes.write",

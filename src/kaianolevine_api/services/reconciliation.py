@@ -443,6 +443,9 @@ async def reconcile_set_tracks(
 
         catalog.play_count += 1
         catalog.last_played = set_date
+        # A library entry has no plays until its first one.
+        if catalog.first_played is None:
+            catalog.first_played = set_date
 
         catalog.confidence = _escalate_confidence(
             catalog.confidence,

@@ -33,6 +33,7 @@ from .routers import (
     github_status,
     identity_debug,
     ingest,
+    library,
     live_plays,
     notifications,
     resume,
@@ -329,6 +330,7 @@ def _build_app() -> FastAPI:
     # Routers (versioned under /v1)
     app.include_router(sets.router, prefix="/v1", tags=["sets"])
     app.include_router(tracks.router, prefix="/v1", tags=["tracks"])
+    app.include_router(library.router, prefix="/v1", tags=["catalog"])
     app.include_router(catalog.router, prefix="/v1", tags=["catalog"])
     app.include_router(evaluations.router, prefix="/v1", tags=["evaluations"])
     app.include_router(deejay_runs.router, prefix="/v1", tags=["deejay"])

@@ -113,8 +113,11 @@ MACHINES: tuple[Machine, ...] = (
     # embarrass the channel.
     Machine(
         name="deejay-cog",
-        roles=("catalog-ingest", "notifier"),
-        notes="POST /v1/ingest, /v1/live-plays, /v1/spotify/playlists.",
+        roles=("catalog-ingest", "catalog-library", "notifier"),
+        notes=(
+            "POST /v1/ingest, /v1/live-plays, /v1/spotify/playlists; "
+            "/v1/catalog/library/* (the library registry)."
+        ),
     ),
     Machine(
         name="transcription-cog",

@@ -198,6 +198,47 @@ class DisplayRules(Base):
     )
 
 
+class LibraryFile(Base):
+    """One Drive file in the music library (migration 094).
+
+    Registered by deejay-cog, keyed by its Drive id, and never deleted: a
+    file gone from the library is marked not present, keeping its link.
+    """
+
+    __tablename__ = "library_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    drive_file_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    library_root_id: Mapped[str] = mapped_column(String, nullable=False)
+    path: Mapped[str] = mapped_column(String, nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    md5: Mapped[str | None] = mapped_column(String, nullable=True)
+    duration_secs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    catalog_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("track_catalog.id"), nullable=True, index=True
+    )
+    edit_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    comment_backup: Mapped[str | None] = mapped_column(Text, nullable=True)
+    identification_status: Mapped[str] = mapped_column(String, nullable=False)
+    present: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    trash_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    first_seen: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_synced: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class PipelineEvaluation(Base):
     """Evaluation finding emitted by pipeline and conformance checks."""
 
