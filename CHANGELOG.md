@@ -1,3 +1,10 @@
+## [2.60.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.1...v2.60.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* **catalog:** match typographic punctuation in the catalog lookup ([d2f7bab](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d2f7bab0c75af34b7ddfbf4ab31bd3b5f175ed74))
+
 ## [2.60.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.0...v2.60.1) (2026-11-06)
 
 
