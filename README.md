@@ -18,7 +18,7 @@ Route groups:
 
 - `/v1/sets`, `/v1/sets/{id}`, `/v1/sets/{id}/tracks` — DJ sets and per-set tracks
 - `/v1/tracks`, `/v1/tracks/{id}` — track catalog
-- `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries
+- `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries. An entry stores a song's parts (base title, version, main and featured artists, genre, subgenre); every catalog reader (these, the lookup, stats, summaries and the collection) shows its title, artist and BPM written out from them by the one set of rules in `display_rules` (`services/display.py`), and an entry whose parts are not filled yet as its title and artist columns
 - `POST /v1/catalog/lookup` — each track's catalog entry for the caller, found by the set ingest's own matching; records nothing (`catalog.sets.write`, as the ingest)
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
