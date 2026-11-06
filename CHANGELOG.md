@@ -1,3 +1,10 @@
+## [2.60.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.3...v2.60.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **catalog:** ignore release labels and featured credits when matching loosely ([03d0b05](https://github.com/mini-app-polis/api-kaianolevine-com/commit/03d0b0569c8eb206d83d73e21feb81a5994c3ac9))
+
 ## [2.60.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.60.2...v2.60.3) (2026-11-06)
 
 
