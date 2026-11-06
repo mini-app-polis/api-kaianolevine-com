@@ -182,6 +182,12 @@ run.
   two-level vocabulary in `config_data/genre_map.yaml` (genre and subgenre;
   values that are not genres are cleared; Instrumental moves to the version).
   The set import and library entries write new genres the same way.
+- `python -m kaianolevine_api.cleanup.aliases` — records the spellings live
+  plays resolve under in `catalog_aliases`. Every spelling an entry has been
+  matched under (its plays, its own title and artist, its display, live
+  plays) is kept there, and matching uses them, so a change to how an entry
+  is shown never stops an earlier spelling matching it. Additive: it changes
+  no entry and refiles no play.
 
 ## Deployment Target
 

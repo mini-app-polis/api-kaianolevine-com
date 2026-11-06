@@ -9,10 +9,11 @@ from datetime import date as dt_date
 from mini_app_polis import logger as logger_mod
 from mini_app_polis.logger import LOG_START, LOG_SUCCESS
 from sqlalchemy import func, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models import CatalogAlias, TrackCatalog
 from ..models import Track as DbTrack
-from ..models import TrackCatalog
 from ..schemas import IngestTrack
 from .genres import catalog_genre
 from .normalization import normalize_for_matching
@@ -126,8 +127,9 @@ class CatalogMatcher:
     the catalog lookup both call :meth:`match`. In order, a row seen before
     (same title, artist and Remix column) is the song its earlier plays were
     filed under; then the owner's entry with the track's normalized title and
-    artist; then, for a version, the entry with the same title, version and
-    main artist. A match that is another owner's entry gives its title and
+    artist; then an entry that has been matched under the same spelling
+    before (``catalog_aliases``); then, for a version, the entry with the
+    same title, version and main artist. A match that is another owner's entry gives its title and
     keys, and the owner's own entry under those keys, if there is one.
     Reading only: nothing here writes.
 
@@ -145,6 +147,7 @@ class CatalogMatcher:
         self._version_index: dict[tuple[str, str], list[TrackCatalog]] | None = None
         self._own_by_key: dict[tuple[str, str], TrackCatalog] = {}
         self._precedent: dict[tuple[str, str, str], uuid.UUID] | None = None
+        self._aliases: dict[tuple[str, str, str], uuid.UUID] | None = None
 
     async def prefetch(self, pairs: Iterable[tuple[str, str]]) -> None:
         """Load the owner's entries under ``pairs`` in one query."""
@@ -245,6 +248,32 @@ class CatalogMatcher:
         )
         return await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
 
+    # Every spelling an entry has been matched under (catalog_aliases): its
+    # earlier plays, its live plays, its own title and artist, and its display
+    # written out from its parts. A spelling held by more than one entry is
+    # the most played one's. Loaded once, only when needed.
+    async def _find_alias(self, track: IngestTrack) -> TrackCatalog | None:
+        if self._aliases is None:
+            self._aliases = {}
+            rows = await self.session.execute(
+                select(
+                    CatalogAlias.key_title,
+                    CatalogAlias.key_artist,
+                    CatalogAlias.key_remix,
+                    CatalogAlias.catalog_id,
+                    TrackCatalog.play_count,
+                )
+                .join(TrackCatalog, TrackCatalog.id == CatalogAlias.catalog_id)
+                .order_by(TrackCatalog.play_count.asc(), CatalogAlias.catalog_id.desc())
+            )
+            # Most played last, so it is the one kept for its key.
+            for key_title, key_artist, key_remix, catalog_id, _ in rows.all():
+                self._aliases[(key_title, key_artist, key_remix)] = catalog_id
+        catalog_id = self._aliases.get(
+            self._row_key(track.title, track.artist, track.remix)
+        )
+        return await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
+
     async def match(
         self, track: IngestTrack, keys: TrackKeys
     ) -> tuple[TrackCatalog | None, str, tuple[str, str]]:
@@ -254,6 +283,8 @@ class CatalogMatcher:
         found = await self._find_precedent(track)
         if found is None:
             found = self.by_pair.get(keys.pair)
+        if found is None:
+            found = await self._find_alias(track)
         if found is None and keys.is_version:
             found = await self.find_loose(keys.display, catalog_artist(track.artist))
         if (
@@ -266,6 +297,39 @@ class CatalogMatcher:
             await self._load_catalog()
             found = self.by_pair.get(new_keys) or self._own_by_key.get(new_keys)
         return found, new_title, new_keys
+
+
+def alias_key(title: str, artist: str, remix: str | None) -> tuple[str, str, str]:
+    """A spelling as ``catalog_aliases`` keys it, and the matcher compares it."""
+    return CatalogMatcher._row_key(title, artist, remix)
+
+
+async def record_alias(
+    session: AsyncSession,
+    *,
+    catalog_id: uuid.UUID,
+    title: str,
+    artist: str,
+    remix: str | None,
+    source: str,
+) -> None:
+    """Remember that ``catalog_id`` was matched under this spelling. A
+    spelling the entry already has is left as it is."""
+    key_title, key_artist, key_remix = alias_key(title, artist, remix)
+    await session.execute(
+        pg_insert(CatalogAlias)
+        .values(
+            catalog_id=catalog_id,
+            title=title,
+            artist=artist,
+            remix=remix,
+            key_title=key_title,
+            key_artist=key_artist,
+            key_remix=key_remix,
+            source=source,
+        )
+        .on_conflict_do_nothing(constraint="uq_catalog_aliases_key_entry")
+    )
 
 
 async def lookup_catalog(
@@ -297,6 +361,19 @@ async def lookup_catalog(
             found = await matcher.find_loose(keys.display, catalog_artist(track.artist))
         out.append(found)
     return out
+
+
+async def _record_play_alias(
+    session: AsyncSession, catalog_id: uuid.UUID, track: IngestTrack
+) -> None:
+    await record_alias(
+        session,
+        catalog_id=catalog_id,
+        title=track.title,
+        artist=track.artist,
+        remix=track.remix,
+        source="play",
+    )
 
 
 async def reconcile_set_tracks(
@@ -416,11 +493,13 @@ async def reconcile_set_tracks(
             )
 
             db_track.catalog_id = catalog.id
+            await _record_play_alias(session, catalog.id, ingest_track)
             catalog_new += 1
             continue
 
         # Track is a play-unaltered ledger row; reconciliation links it to the best-known catalog.
         db_track.catalog_id = catalog.id
+        await _record_play_alias(session, catalog.id, ingest_track)
 
         before = (
             catalog.genre,

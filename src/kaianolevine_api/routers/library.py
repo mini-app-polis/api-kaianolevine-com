@@ -38,7 +38,7 @@ from ..schemas import (
 )
 from ..services.display import load_rules
 from ..services.genres import catalog_genre
-from ..services.reconciliation import lookup_catalog, track_keys
+from ..services.reconciliation import lookup_catalog, record_alias, track_keys
 from ..services.song_identity import catalog_artist, clean_genre
 from .catalog import catalog_match
 
@@ -264,6 +264,15 @@ async def create_library_entry(
     )
     session.add(entry)
     try:
+        await session.flush()
+        await record_alias(
+            session,
+            catalog_id=entry.id,
+            title=entry.title,
+            artist=entry.artist,
+            remix=None,
+            source="entry",
+        )
         await session.commit()
     except IntegrityError:
         # Another call made the same entry first: that one is the answer.
