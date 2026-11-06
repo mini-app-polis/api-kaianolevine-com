@@ -23,7 +23,7 @@ import re
 from .normalization import normalize_for_matching
 
 _RELEASE_LABEL = re.compile(
-    r"^(explicit|clean|dirty|edited|edit|album version|lp version|single version"
+    r"^(explicit|clean|super clean|dirty|edited|edit|album version|lp version|single version"
     r"|radio edit|original mix|main|mixed|no intro edit|bonus track|cover"
     r"|remaster(ed)?( \d{4})?|\d{4} (mix|remaster(ed)?)|\d+"
     r"|(feat|ft)\.? .*|featuring .*|with .*|prod\.? .*|from .*"

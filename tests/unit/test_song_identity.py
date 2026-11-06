@@ -40,6 +40,7 @@ def test_release_labels():
         "feat. Offset",
         "98",
         "Original Mix",
+        "Super Clean",
     ]:
         assert is_release_label(label), label
     for version in [
@@ -148,3 +149,6 @@ def test_loose_keys_ignore_release_labels_but_keep_versions():
     )
     assert loose_title_key("Temple (Niko The Kid Remix)") != loose_title_key("Temple")
     assert loose_title_key("(Clean)") == "clean"
+    assert loose_title_key("All In My Head (Flex) (Super Clean)") == (
+        loose_title_key("All In My Head (Flex) (Feat. Fetty Wap)")
+    )
