@@ -182,6 +182,13 @@ run.
   two-level vocabulary in `config_data/genre_map.yaml` (genre and subgenre;
   values that are not genres are cleared; Instrumental moves to the version).
   The set import and library entries write new genres the same way.
+- `python -m kaianolevine_api.cleanup.split` — proposes every entry's parts
+  (base title, version, main and featured artists) from its title, artist
+  and remix: clear splits as one approvable group, ambiguous ones entry by
+  entry. `--apply` writes the clear group, `--include ID` adds an ambiguous
+  entry as proposed; each entry's new display is kept as an alias. Release
+  labels (Clean, Radio Edit, No Intro Edit…) are not versions; Instrumental,
+  Cover, extended and club mixes are.
 - `python -m kaianolevine_api.cleanup.aliases` — records the spellings live
   plays resolve under in `catalog_aliases`. Every spelling an entry has been
   matched under (its plays, its own title and artist, its display, live
