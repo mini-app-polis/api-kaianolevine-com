@@ -163,6 +163,22 @@ async def test_spaces_and_symbols_are_ignored_when_nothing_matches_exactly(
     assert [m["title"] for m in found] == ["2 AM", "519", "2002"]
 
 
+async def test_release_labels_and_credits_are_ignored_when_nothing_matches_exactly(
+    client,
+) -> None:
+    await _ingest(
+        client,
+        _track("21 Questions [Clean] [feat. Nate Dogg]", "50 Cent and Nate Dogg"),
+        _track("2Nite (Featuring K-Rob)", "Soulride"),
+    )
+    found = await _lookup(
+        client,
+        _track("21 Questions", "50 Cent"),
+        _track("2Nite", "Soulride, K-Rob"),
+    )
+    assert all(m is not None for m in found)
+
+
 async def test_an_entry_filed_with_typographic_punctuation_still_matches(
     client,
 ) -> None:
