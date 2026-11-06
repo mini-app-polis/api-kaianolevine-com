@@ -198,6 +198,64 @@ class DisplayRules(Base):
     )
 
 
+class CatalogAlias(Base):
+    """A spelling a catalog entry has been matched under (migration 096).
+
+    ``key_*`` are the spelling as the matcher compares it: lower case, runs
+    of whitespace as one space, trimmed.
+    """
+
+    __tablename__ = "catalog_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "key_title",
+            "key_artist",
+            "key_remix",
+            "catalog_id",
+            name="uq_catalog_aliases_key_entry",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("track_catalog.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    artist: Mapped[str] = mapped_column(String, nullable=False)
+    remix: Mapped[str | None] = mapped_column(String, nullable=True)
+    key_title: Mapped[str] = mapped_column(String, nullable=False)
+    key_artist: Mapped[str] = mapped_column(String, nullable=False)
+    key_remix: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("''")
+    )
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    first_seen: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CatalogRevision(Base):
+    """One clean-up change to a catalog entry, with its values before and
+    after, so it can be put back (migration 095)."""
+
+    __tablename__ = "catalog_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("track_catalog.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    before: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    after: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    applied_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class LibraryFile(Base):
     """One Drive file in the music library (migration 094).
 

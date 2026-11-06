@@ -24,10 +24,10 @@ from .normalization import normalize_for_matching
 
 _RELEASE_LABEL = re.compile(
     r"^(explicit|clean|super clean|dirty|edited|edit|album version|lp version|single version"
-    r"|radio edit|original mix|main|mixed|no intro edit|bonus track|cover"
+    r"|radio edit|original mix|main|mixed|no intro edit|bonus track"
     r"|remaster(ed)?( \d{4})?|\d{4} (mix|remaster(ed)?)|\d+"
     r"|(feat|ft)\.? .*|featuring .*|with .*|prod\.? .*|from .*"
-    r"|pre release|explicit version|clean version|instrumental)$",
+    r"|pre release|explicit version|clean version)$",
     re.IGNORECASE,
 )
 # File tags left in the Remix column of routine music: a bitrate, a tempo,

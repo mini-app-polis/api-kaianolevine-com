@@ -1,0 +1,126 @@
+# The catalog's genre vocabulary, and where every genre value the catalog
+# has held goes in it. Agreed with the owner on 2026-11-05.
+#
+# Genre is two-level: a broad genre from `broad`, and an optional subgenre.
+# Each key under `map` is a genre value as clean_genre leaves it (matched
+# ignoring case, spaces and symbols); its value is one of:
+#   [Broad, Subgenre]  the genre and subgenre it becomes (Subgenre may be null)
+#   cleared            not a genre: the genre is cleared
+#   version            not a genre but a version: it moves to the version
+
+broad:
+  - Pop
+  - R&B/Soul
+  - Hip-Hop
+  - Dance/Electronic
+  - Alternative/Indie
+  - Rock
+  - Blues
+  - Country
+  - Folk & Acoustic
+  - Jazz
+  - Funk/Disco
+  - Latin & World
+  - Soundtrack & Seasonal
+
+map:
+  Pop: [Pop, null]
+  Electropop: [Pop, Electropop]
+  Synthpop: [Pop, Synthpop]
+  Dance/Pop: [Pop, Dance-Pop]
+  K-Pop: [Pop, K-Pop]
+  Pop Rock: [Pop, Pop Rock]
+  Pop Acoustic Instrumental: [Pop, null]
+
+  R&B: [R&B/Soul, null]
+  R&B/Soul: [R&B/Soul, null]
+  Soul and R&B: [R&B/Soul, null]
+  R&B/Soul/HipHop/Funk: [R&B/Soul, null]
+  Soul: [R&B/Soul, Soul]
+  Contemporary R&B: [R&B/Soul, Contemporary R&B]
+  Neo Funk Soul: [R&B/Soul, Neo-Soul]
+  R&B/Electronic: [R&B/Soul, Alternative R&B]
+  R&B/French Urban Pop: [R&B/Soul, French R&B]
+
+  Rap & Hip-Hop: [Hip-Hop, null]
+  Hip-Hop: [Hip-Hop, null]
+  Rap: [Hip-Hop, null]
+  Hip-Hop/Rap: [Hip-Hop, null]
+  R&B/Soul/Hip Hop/Rap: [Hip-Hop, null]
+  Alternative Hip Hop: [Hip-Hop, Alternative Hip-Hop]
+  Gangsta Rap: [Hip-Hop, Gangsta Rap]
+
+  Electronic: [Dance/Electronic, null]
+  Dance & DJ: [Dance/Electronic, null]
+  Dance: [Dance/Electronic, null]
+  Dance/Electronic: [Dance/Electronic, null]
+  Electronica: [Dance/Electronic, null]
+  Club: [Dance/Electronic, null]
+  House: [Dance/Electronic, House]
+  Edm: [Dance/Electronic, EDM]
+  Trance: [Dance/Electronic, Trance]
+  Eurodance: [Dance/Electronic, Eurodance]
+  Trip-Hop: [Dance/Electronic, Trip-Hop]
+  Ambient: [Dance/Electronic, Ambient]
+  Alternative/Indie Dance/Electronic: [Dance/Electronic, Indie Dance]
+
+  Alternative: [Alternative/Indie, null]
+  Alternative/Indie: [Alternative/Indie, null]
+  Indie: [Alternative/Indie, null]
+  Rock And Indie: [Alternative/Indie, null]
+  Alternative Rock: [Alternative/Indie, Alternative Rock]
+  Indie-Rock: [Alternative/Indie, Indie Rock]
+  Indie Pop: [Alternative/Indie, Indie Pop]
+  Alternative Pop: [Alternative/Indie, Alternative Pop]
+
+  Rock: [Rock, null]
+  Rock & Roll: [Rock, Rock & Roll]
+  Classic Rock: [Rock, Classic Rock]
+  Hard Rock: [Rock, Hard Rock]
+  Punk: [Rock, Punk]
+  Death Metal: [Rock, Metal]
+
+  Blues: [Blues, null]
+  Other Blues: [Blues, null]
+  Jazz/Blues: [Blues, null]
+  Blues Rock: [Blues, Blues Rock]
+
+  Country: [Country, null]
+  Contemporary Country: [Country, Contemporary Country]
+  Rock/Country: [Country, Country Rock]
+
+  Folk: [Folk & Acoustic, null]
+  Acoustic: [Folk & Acoustic, null]
+  Singer-Songwriter: [Folk & Acoustic, Singer-Songwriter]
+  Folk Pop: [Folk & Acoustic, Folk Pop]
+
+  Jazz: [Jazz, null]
+  Acid Jazz: [Jazz, Acid Jazz]
+  Jazz-funk: [Jazz, Jazz-Funk]
+
+  Funk: [Funk/Disco, null]
+  Soul / Funk: [Funk/Disco, null]
+  Disco: [Funk/Disco, Disco]
+  R&B/Disco: [Funk/Disco, Disco]
+
+  Latin Music: [Latin & World, null]
+  Latin: [Latin & World, null]
+  International: [Latin & World, null]
+  Salsa: [Latin & World, Salsa]
+  Reggae: [Latin & World, Reggae]
+  Chanson: [Latin & World, Chanson]
+  Pop / Zouk: [Latin & World, Zouk]
+  Nigerian R&B / Afropop: [Latin & World, Afropop]
+
+  Soundtrack: [Soundtrack & Seasonal, null]
+  Holiday: [Soundtrack & Seasonal, Holiday]
+  Christmas: [Soundtrack & Seasonal, Holiday]
+  Easy Listening: [Soundtrack & Seasonal, Easy Listening]
+  New Age: [Soundtrack & Seasonal, New Age]
+  Christian & Gospel: [Soundtrack & Seasonal, Christian & Gospel]
+  Oldies: [Soundtrack & Seasonal, Oldies]
+
+  Instrumental: version
+  Miscellaneous: cleared
+  Other: cleared
+  Music: cleared

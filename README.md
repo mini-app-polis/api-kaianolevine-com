@@ -20,6 +20,7 @@ Route groups:
 - `/v1/tracks`, `/v1/tracks/{id}` — track catalog
 - `/v1/catalog`, `/v1/catalog/{id}` — reconciled catalog entries. An entry stores a song's parts (base title, version, main and featured artists, genre, subgenre); every catalog reader (these, the lookup, stats, summaries and the collection) shows its title, artist and BPM written out from them by the one set of rules in `display_rules` (`services/display.py`), and an entry whose parts are not filled yet as its title and artist columns
 - `/v1/catalog/library/files`, `/v1/catalog/library/files/absent`, `/v1/catalog/library/entries` — the music library registry: deejay-cog registers each library file by its Drive id, marks the ones gone not present (rows are never deleted), lists them by entry, status, presence or root, and makes catalog entries (source `library`, no plays) for songs never played, which stats, summaries and the collection do not count (`catalog.library.write`)
+- `POST /v1/catalog/display`, `POST /v1/catalog/{id}/fill-up` — what deejay-cog's reconcile reads: up to 200 entries' owned fields as files should carry them (written out by the display rules) with when what is shown last changed; and a file's values for fields an entry leaves empty, never overwriting one it has (`catalog.library.write`)
 - `POST /v1/catalog/lookup` — each track's catalog entry for the caller, found by the set ingest's own matching; records nothing (`catalog.sets.write`, as the ingest)
 - `/v1/evaluations`, `/v1/evaluations/summary` — pipeline evaluation findings
 - `/v1/evaluations/runs`, `/v1/evaluations/introspection`, `/v1/evaluations/fleet` — enqueue evaluator-cog jobs (SQS)
@@ -168,6 +169,33 @@ Use flags for safe rollout and fast rollback without redeploying:
 - If regressions appear, rollback by patching the same flag back to `enabled: false` (or `true` for previously disabled flags).
 - Prefer changing ingest-related flags during low-traffic windows and monitor pipeline runs for 5-10 minutes after each change.
 - Record each production flag flip in deployment notes (flag name, old/new value, timestamp, operator).
+
+### Catalog clean-up commands
+
+Bulk changes to catalog entries run as commands against `DATABASE_URL`, in
+`src/kaianolevine_api/cleanup/`. Each one is a dry run by default: it lists
+what it would change and writes nothing. `--apply` writes the same changes,
+recording every entry's values before and after in `catalog_revisions`, so
+any change can be put back. Apply only after the owner has reviewed the dry
+run.
+
+- `python -m kaianolevine_api.cleanup.genres` — maps every genre onto the
+  two-level vocabulary in `config_data/genre_map.yaml` (genre and subgenre;
+  values that are not genres are cleared; Instrumental moves to the version).
+  The set import and library entries write new genres the same way.
+- `python -m kaianolevine_api.cleanup.split` — proposes every entry's parts
+  (base title, version, main and featured artists) from its title, artist
+  and remix: clear splits as one approvable group, ambiguous ones entry by
+  entry. `--apply` writes the clear group, `--include ID` adds an ambiguous
+  entry as proposed; each entry's new display is kept as an alias. Release
+  labels (Clean, Radio Edit, No Intro Edit…) are not versions; Instrumental,
+  Cover, extended and club mixes are.
+- `python -m kaianolevine_api.cleanup.aliases` — records the spellings live
+  plays resolve under in `catalog_aliases`. Every spelling an entry has been
+  matched under (its plays, its own title and artist, its display, live
+  plays) is kept there, and matching uses them, so a change to how an entry
+  is shown never stops an earlier spelling matching it. Additive: it changes
+  no entry and refiles no play.
 
 ## Deployment Target
 
