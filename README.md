@@ -211,6 +211,13 @@ run.
   catalog is one catalog: the set import files a play under the song's entry
   whichever key filed it, archived entries are never matched or listed, and
   any entry can be edited by a caller with `catalog.tracks.write`.
+- `python -m kaianolevine_api.cleanup.fixes` — owner-reviewed fixes to
+  entries from `config_data/catalog_fixes.yaml` (or `--fix JSON` in its
+  place): an artist renamed wherever it is credited, or one entry, found by
+  how it is shown, given new parts or fields. `--apply` writes them as the
+  catalog editor would (revision kind `owner_fix`, source manual, the new
+  display kept as an alias); a fix already applied matches nothing again.
+  `--show TEXT` prints the parts of entries whose title contains TEXT.
 
 ## Deployment Target
 
