@@ -104,6 +104,7 @@ async def _groups_out(
                 size_bytes=f.size_bytes if f else None,
                 duration_secs=f.duration_secs if f else None,
                 bitrate_kbps=m.bitrate_kbps,
+                edit_label=f.edit_label if f else None,
                 present=f.present if f else None,
                 trash_requested=f.trash_requested if f else False,
                 kept_on_purpose=m.kept_on_purpose,

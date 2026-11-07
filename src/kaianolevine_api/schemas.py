@@ -407,6 +407,9 @@ class DuplicateFileOut(BaseModel):
     size_bytes: int | None = Field(default=None, description="Its size in bytes.")
     duration_secs: float | None = Field(default=None, description="Its length.")
     bitrate_kbps: int | None = Field(default=None, description="Its bitrate.")
+    edit_label: str | None = Field(
+        default=None, description="Its release label (Clean, Radio Edit, …)."
+    )
     present: bool | None = Field(
         default=None, description="Whether it is still in the library."
     )
@@ -475,6 +478,38 @@ class DuplicateResolveResult(BaseModel):
     trash_requested: list[str] = Field(
         ..., description="The files marked for the trash."
     )
+
+
+class LibraryLink(BaseModel):
+    """The owner's identification of a library file: an existing catalog
+    entry, or the parts of a new library entry. Exactly one."""
+
+    catalog_id: uuid.UUID | None = Field(
+        default=None, description="The existing catalog entry the file is."
+    )
+    entry: LibraryEntryCreate | None = Field(
+        default=None,
+        description=(
+            "A new library entry for the song (or the catalog's entry for it, "
+            "when it has one)."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> LibraryLink:
+        if (self.catalog_id is None) == (self.entry is None):
+            raise ValueError("send exactly one of catalog_id and entry")
+        return self
+
+
+class LibraryLinked(BaseModel):
+    """The file, now identified, and the entry it is linked to."""
+
+    file: LibraryFile = Field(..., description="The registry row, now identified.")
+    entry: CatalogMatch = Field(..., description="The entry it is linked to.")
+    created: bool = Field(..., description="Whether a new library entry was made.")
 
 
 class CatalogPlayHistoryItem(BaseModel):

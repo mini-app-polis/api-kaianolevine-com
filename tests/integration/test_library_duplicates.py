@@ -90,6 +90,7 @@ async def test_a_report_stores_its_groups_with_their_files(client) -> None:
     assert files["f1"]["path"] == "House/f1.mp3"
     assert files["f1"]["title"] == "Temple"
     assert files["f1"]["bitrate_kbps"] == 320
+    assert files["f1"]["edit_label"] is None
 
 
 async def test_a_report_replaces_the_open_groups_of_its_root(client) -> None:
@@ -276,3 +277,19 @@ async def test_resolving_needs_the_editor_scope(role_client, client) -> None:
             f"{DUPLICATES}/{group['id']}/resolve", json={"keeper_drive_file_id": "a"}
         )
     assert response.status_code == 403
+
+
+async def test_trash_requested_files_can_be_listed(client) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "keep", a)
+    await _register(client, "copy", a)
+    await _report(client, _group("t", "keep", "copy"))
+    [group] = await _open(client)
+    await client.post(
+        f"{DUPLICATES}/{group['id']}/resolve", json={"keeper_drive_file_id": "keep"}
+    )
+
+    marked = await client.get(FILES, params={"trash_requested": "true"})
+    assert [f["drive_file_id"] for f in marked.json()["data"]] == ["copy"]
+    unmarked = await client.get(FILES, params={"trash_requested": "false"})
+    assert [f["drive_file_id"] for f in unmarked.json()["data"]] == ["keep"]
