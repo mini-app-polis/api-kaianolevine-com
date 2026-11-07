@@ -306,6 +306,54 @@ class LibraryFile(Base):
     )
 
 
+class LibraryDuplicateGroup(Base):
+    """Library files that look like copies of one song (migration 100).
+
+    deejay-cog's report replaces a root's open groups; a resolved group is
+    kept, with the keeper the owner picked.
+    """
+
+    __tablename__ = "library_duplicate_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    library_root_id: Mapped[str] = mapped_column(String, nullable=False)
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    reasons: Mapped[list[str]] = mapped_column(PgARRAY(String), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'open'")
+    )
+    keeper_drive_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    reported_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class LibraryDuplicateMember(Base):
+    """One file in a duplicate group (migration 100)."""
+
+    __tablename__ = "library_duplicate_members"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("library_duplicate_groups.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    drive_file_id: Mapped[str] = mapped_column(String, primary_key=True)
+    kept_on_purpose: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    why_kept: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bitrate_kbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class PipelineEvaluation(Base):
     """Evaluation finding emitted by pipeline and conformance checks."""
 

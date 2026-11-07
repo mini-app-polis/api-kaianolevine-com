@@ -25,6 +25,8 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     DeejayRunAccepted,
     DeejayRunRequest,
     DriveFileRef,
+    DuplicateReport,
+    DuplicateReportResult,
     Envelope,
     ErrorDetail,
     ErrorEnvelope,
@@ -393,6 +395,86 @@ class DisplayRulesOut(DisplayRulesBody):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+class DuplicateFileOut(BaseModel):
+    """One file in a duplicate group, as the owner's duplicates page shows it."""
+
+    drive_file_id: str = Field(..., description="The Drive file's id.")
+    path: str | None = Field(
+        default=None, description="Its path under the root; null if unregistered."
+    )
+    size_bytes: int | None = Field(default=None, description="Its size in bytes.")
+    duration_secs: float | None = Field(default=None, description="Its length.")
+    bitrate_kbps: int | None = Field(default=None, description="Its bitrate.")
+    present: bool | None = Field(
+        default=None, description="Whether it is still in the library."
+    )
+    trash_requested: bool = Field(
+        default=False, description="Whether it is marked for the trash."
+    )
+    kept_on_purpose: bool = Field(
+        ..., description="A different edit or label: never trashed via the group."
+    )
+    why_kept: str | None = Field(default=None, description="Why it is kept.")
+    catalog_id: uuid.UUID | None = Field(
+        default=None, description="The catalog entry it links to."
+    )
+    title: str | None = Field(default=None, description="That entry's title.")
+    artist: str | None = Field(default=None, description="That entry's artist.")
+    play_count: int | None = Field(default=None, description="That entry's plays.")
+
+
+class DuplicateGroupOut(BaseModel):
+    """A duplicate group: its files, why they were grouped, and its state."""
+
+    id: uuid.UUID = Field(..., description="The group's id.")
+    library_root_id: str = Field(..., description="The library root it is under.")
+    key: str = Field(..., description="The report's stable key for the group.")
+    reasons: list[str] = Field(..., description="Why the files were grouped.")
+    status: Literal["open", "resolved"] = Field(..., description="Open or resolved.")
+    keeper_drive_file_id: str | None = Field(
+        default=None, description="The file the owner kept, once resolved."
+    )
+    reported_at: dt.datetime = Field(..., description="When last reported.")
+    resolved_at: dt.datetime | None = Field(
+        default=None, description="When the owner resolved it."
+    )
+    files: list[DuplicateFileOut] = Field(..., description="The group's files.")
+
+
+class DuplicateResolve(BaseModel):
+    """The owner's choice for a duplicate group: the file to keep, and
+    which of the others go to the trash (every other file not kept on
+    purpose, when not given)."""
+
+    keeper_drive_file_id: str = Field(
+        ..., min_length=1, description="The file to keep."
+    )
+    trash_drive_file_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "The files to mark for the trash; each must be in the group, not "
+            "the keeper and not kept on purpose."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DuplicateResolveResult(BaseModel):
+    """What resolving a group did."""
+
+    group: DuplicateGroupOut = Field(..., description="The group, now resolved.")
+    keeper_catalog_id: uuid.UUID | None = Field(
+        default=None, description="The entry the others were merged into."
+    )
+    merged_catalog_ids: list[uuid.UUID] = Field(
+        ..., description="The entries merged into the keeper's and archived."
+    )
+    trash_requested: list[str] = Field(
+        ..., description="The files marked for the trash."
+    )
 
 
 class CatalogPlayHistoryItem(BaseModel):
