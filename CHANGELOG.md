@@ -1,3 +1,10 @@
+## [2.70.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.0...v2.70.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **catalog:** split bracketed and with credits cleanly, and ask about featured names that may be one act ([08e8ea8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/08e8ea8a8f92f8bfeba739a3893e6c9bd72e01cd))
+
 # [2.70.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.69.0...v2.70.0) (2026-11-07)
 
 
