@@ -1,3 +1,15 @@
+# [2.67.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.66.0...v2.67.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.4.0 ([6c7725a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6c7725aac6bf744290227d1d02c1b8cb51293889))
+
+
+### Features
+
+* **library:** list the library files that need a sync, and record when they are synced ([1b9ea1f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1b9ea1fb2e825bab959b49176a139b78e7e5bede))
+
 # [2.66.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.65.1...v2.66.0) (2026-11-07)
 
 
