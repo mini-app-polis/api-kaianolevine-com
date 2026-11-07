@@ -212,7 +212,8 @@ async def mark_library_files_absent(
     description=(
         "One page of the registry, oldest first, filtered by the catalog "
         "entry the files link to, their identification status, whether they "
-        "are present, or their library root. Requires catalog.library.write."
+        "are present, their library root, or whether the owner asked for "
+        "them to go to Drive's trash. Requires catalog.library.write."
     ),
 )
 async def list_library_files(
@@ -220,6 +221,7 @@ async def list_library_files(
     identification_status: Annotated[LibraryIdentification | None, Query()] = None,
     present: Annotated[bool | None, Query()] = None,
     library_root_id: Annotated[str | None, Query()] = None,
+    trash_requested: Annotated[bool | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     principal: Principal = Depends(require_scope("catalog.library.write")),
@@ -235,6 +237,8 @@ async def list_library_files(
         filters.append(DbLibraryFile.present.is_(present))
     if library_root_id is not None:
         filters.append(DbLibraryFile.library_root_id == library_root_id)
+    if trash_requested is not None:
+        filters.append(DbLibraryFile.trash_requested.is_(trash_requested))
 
     total = (
         await session.execute(
