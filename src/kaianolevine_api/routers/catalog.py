@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
 from ..database import get_db_session
+from ..models import CatalogRevision
 from ..models import DisplayRules as DbDisplayRules
 from ..models import Set as DbSet
 from ..models import Track as DbTrack
@@ -26,13 +28,16 @@ from ..schemas import (
     CatalogMatch,
     CatalogPatch,
     CatalogPlayHistoryItem,
+    CatalogPreview,
+    DisplayRulesBody,
+    DisplayRulesOut,
     Envelope,
     api_error,
     success_envelope,
 )
-from ..services.display import Rules, load_rules, render
+from ..services.display import DEFAULT_RULES, Rules, load_rules, render
 from ..services.genres import catalog_genre
-from ..services.reconciliation import lookup_catalog
+from ..services.reconciliation import lookup_catalog, record_alias
 
 router = APIRouter()
 
@@ -275,6 +280,81 @@ async def fill_up_catalog_entry(
     return success_envelope(data, count=1, total=1)
 
 
+def _rules_out(row: DbDisplayRules | None) -> DisplayRulesOut:
+    if row is None:
+        first = DEFAULT_RULES
+        return DisplayRulesOut(
+            featured_placement=first.featured_placement,
+            featured_word=first.featured_word,
+            artist_joiner=first.artist_joiner,
+            version_open=first.version_open,
+            version_close=first.version_close,
+            bpm_decimals=first.bpm_decimals,
+            case_style="as_styled",
+            changed_at=None,
+        )
+    return DisplayRulesOut(
+        featured_placement="title" if row.featured_placement == "title" else "artist",
+        featured_word=row.featured_word,
+        artist_joiner=row.artist_joiner,
+        version_open=row.version_open,
+        version_close=row.version_close,
+        bpm_decimals=row.bpm_decimals,
+        case_style="as_styled",
+        changed_at=row.changed_at,
+    )
+
+
+@router.get(
+    "/catalog/display-rules",
+    response_model=Envelope[DisplayRulesOut],
+    summary="Read the display rules",
+    description=(
+        "How every entry's parts are written out as the title and artist "
+        "shown, and when the rules last changed. Intentionally public, like "
+        "the catalog reads they render."
+    ),
+)
+async def get_display_rules(
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[DisplayRulesOut]:
+    """The stored rules, or the first rules when none are stored."""
+    return success_envelope(
+        _rules_out(await session.get(DbDisplayRules, 1)), count=1, total=1
+    )
+
+
+@router.put(
+    "/catalog/display-rules",
+    response_model=Envelope[DisplayRulesOut],
+    summary="Change the display rules",
+    description=(
+        "Replaces the display rules and records when they changed, so the "
+        "next sync writes the new display to every linked file. Requires "
+        "catalog.tracks.write."
+    ),
+)
+async def put_display_rules(
+    rules: DisplayRulesBody,
+    principal: Principal = Depends(require_scope("catalog.tracks.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[DisplayRulesOut]:
+    """Store the rules; a change moves changed_at, the same rules do not."""
+    del principal
+    row = await session.get(DbDisplayRules, 1)
+    values = rules.model_dump()
+    if row is None:
+        row = DbDisplayRules(id=1, **values)
+        session.add(row)
+    elif any(getattr(row, k) != v for k, v in values.items()):
+        for name, value in values.items():
+            setattr(row, name, value)
+        row.changed_at = func.now()
+    await session.commit()
+    await session.refresh(row)
+    return success_envelope(_rules_out(row), count=1, total=1)
+
+
 @router.get(
     "/catalog/{id}",
     response_model=Envelope[CatalogDetail],
@@ -331,44 +411,147 @@ async def get_catalog(
         first_played=catalog.first_played,
         last_played=catalog.last_played,
         play_history=play_history,
+        base_title=catalog.base_title,
+        version=catalog.version,
+        main_artists=list(catalog.main_artists or []),
+        featured_artists=list(catalog.featured_artists or []),
+        subgenre=catalog.subgenre,
+        label=catalog.label,
+        updated_at=catalog.updated_at,
     )
 
     return success_envelope(data, count=1, total=1)
 
 
+#: The fields an edit can change, as the entry stores them.
+_EDITABLE = (
+    "base_title",
+    "version",
+    "main_artists",
+    "featured_artists",
+    "genre",
+    "subgenre",
+    "bpm",
+    "release_year",
+    "label",
+)
+
+
+def _names(names: list[str] | None) -> list[str]:
+    return [n.strip() for n in (names or []) if n and n.strip()]
+
+
+def _cleaned(name: str, value: object) -> object:
+    if name in ("main_artists", "featured_artists"):
+        return _names(value)  # type: ignore[arg-type]
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
+def _edit_values(entry: DbCatalog) -> dict[str, object]:
+    values: dict[str, object] = {}
+    for name in _EDITABLE:
+        value = getattr(entry, name)
+        values[name] = list(value or []) if name.endswith("_artists") else value
+    return values
+
+
 @router.patch(
     "/catalog/{id}",
     response_model=Envelope[CatalogDetail],
-    summary="Patch catalog metadata",
-    description="Update catalog genre, bpm, and release year. Sets source to manual. Protected.",
+    summary="Edit a catalog entry's parts and owned fields",
+    description=(
+        "Sets the fields sent: base title, version, main and featured "
+        "artists, genre, subgenre, BPM, year and label; a field sent as null "
+        "is cleared. The title and artist shown are written out from the "
+        "parts by the display rules. Records when the entry changed and its "
+        "values before and after (catalog_revisions, kind edit), keeps the "
+        "new display as a spelling the entry matches under, and sets its "
+        "source to manual. Any entry, whichever key filed it. Requires "
+        "catalog.tracks.write."
+    ),
 )
 async def patch_catalog(
     id: uuid.UUID,
     patch: CatalogPatch,
-    owner_id_principal: Principal = Depends(require_scope("catalog.tracks.write")),
+    principal: Principal = Depends(require_scope("catalog.tracks.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[CatalogDetail]:
-    """Patch mutable catalog metadata fields for one track.
-
-    One catalog (migration 098): the scope decides who may edit, not which
-    key filed the entry.
-    """
-    del owner_id_principal
+    """Edit one entry; return it as the detail read shows it."""
     catalog = await session.get(DbCatalog, id)
     if catalog is None:
         raise api_error(404, "not_found", "Catalog entry not found")
 
-    if patch.genre is not None:
-        catalog.genre = patch.genre
-    if patch.bpm is not None:
-        catalog.bpm = patch.bpm
-    if patch.release_year is not None:
-        catalog.release_year = patch.release_year
+    before = _edit_values(catalog)
+    for name in patch.model_fields_set:
+        setattr(catalog, name, _cleaned(name, getattr(patch, name)))
+    after = _edit_values(catalog)
+    if after != before:
+        catalog.source = "manual"
+        catalog.updated_at = func.now()
+        session.add(
+            CatalogRevision(
+                catalog_id=catalog.id,
+                kind="edit",
+                before=before,
+                after={**after, "by": principal.subject},
+            )
+        )
+        shown = render(catalog, await load_rules(session))
+        await record_alias(
+            session,
+            catalog_id=catalog.id,
+            title=shown.title,
+            artist=shown.artist,
+            remix=shown.remix,
+            source="display",
+        )
+        await session.commit()
+        await session.refresh(catalog)
 
-    catalog.source = "manual"
-
-    await session.flush()
-    await session.commit()
-
-    # Re-use detail formatter by reloading via the getter logic.
     return await get_catalog(id=id, session=session)
+
+
+@router.get(
+    "/catalog/{id}/preview",
+    response_model=Envelope[CatalogPreview],
+    summary="Preview the title and artist an edit would show",
+    description=(
+        "The title and artist the entry would show under the display rules, "
+        "with any of its parts replaced by the query's (base_title, version, "
+        "main_artists and featured_artists, repeatable). Nothing is written. "
+        "Requires catalog.tracks.write."
+    ),
+)
+async def preview_catalog_edit(
+    id: uuid.UUID,
+    base_title: Annotated[str | None, Query()] = None,
+    version: Annotated[str | None, Query()] = None,
+    main_artists: Annotated[list[str] | None, Query()] = None,
+    featured_artists: Annotated[list[str] | None, Query()] = None,
+    principal: Principal = Depends(require_scope("catalog.tracks.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[CatalogPreview]:
+    """Render the entry's parts, with the query's in place of its own."""
+    catalog = await session.get(DbCatalog, id)
+    if catalog is None:
+        raise api_error(404, "not_found", "Catalog entry not found")
+    parts = SimpleNamespace(
+        title=catalog.title,
+        artist=catalog.artist,
+        remix=catalog.remix,
+        bpm=catalog.bpm,
+        base_title=catalog.base_title if base_title is None else base_title,
+        version=catalog.version if version is None else (version or None),
+        main_artists=list(catalog.main_artists or [])
+        if main_artists is None
+        else _names(main_artists),
+        featured_artists=list(catalog.featured_artists or [])
+        if featured_artists is None
+        else _names(featured_artists),
+    )
+    shown = render(parts, await load_rules(session))
+    title = shown.title + (f" ({shown.remix})" if shown.remix else "")
+    data = CatalogPreview(id=catalog.id, title=title, artist=shown.artist)
+    return success_envelope(data, count=1, total=1)

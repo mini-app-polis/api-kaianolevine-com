@@ -322,12 +322,72 @@ class CatalogListItem(BaseModel):
 
 
 class CatalogPatch(BaseModel):
-    """Mutable catalog fields accepted by patch operations."""
+    """An edit to an entry's owned fields: its parts and its metadata.
 
-    genre: str | None = Field(default=None, description="Semantic value for genre.")
-    bpm: float | None = Field(default=None, description="Semantic value for bpm.")
+    Only the fields sent change; a field sent as null is cleared. The title
+    and artist shown are written out from the parts by the display rules.
+    """
+
+    base_title: str | None = Field(
+        default=None, description="The song's title, without its version."
+    )
+    version: str | None = Field(
+        default=None, description="The version: a remix, live or acoustic take."
+    )
+    main_artists: list[str] | None = Field(
+        default=None, description="The main artists, in order."
+    )
+    featured_artists: list[str] | None = Field(
+        default=None, description="The featured artists, in order."
+    )
+    genre: str | None = Field(default=None, description="The broad genre.")
+    subgenre: str | None = Field(default=None, description="The subgenre.")
+    bpm: float | None = Field(default=None, gt=0, description="Beats per minute.")
     release_year: int | None = Field(
-        default=None, description="Semantic value for release year."
+        default=None, ge=1000, le=9999, description="The release year."
+    )
+    label: str | None = Field(default=None, description="The record label.")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CatalogPreview(BaseModel):
+    """The title and artist an entry would show, as the display rules write
+    them out, with its parts as they are or as an edit would set them."""
+
+    id: uuid.UUID = Field(..., description="The catalog entry's id.")
+    title: str = Field(..., description="The title, with its version.")
+    artist: str = Field(..., description="The artist, with any featured artists.")
+
+
+class DisplayRulesBody(BaseModel):
+    """The display rules: how every entry's parts are written out."""
+
+    featured_placement: Literal["artist", "title"] = Field(
+        ..., description="Where featured artists go: in the artist or the title."
+    )
+    featured_word: str = Field(
+        ..., min_length=1, description='The word before featured artists ("feat.").'
+    )
+    artist_joiner: str = Field(
+        ..., min_length=1, description='What joins several artists (", ").'
+    )
+    version_open: str = Field(..., description='What opens a version ("(").')
+    version_close: str = Field(..., description='What closes a version (")").')
+    bpm_decimals: int = Field(..., ge=0, le=3, description="Decimals BPM is shown to.")
+    case_style: Literal["as_styled"] = Field(
+        ..., description="Capitalisation: kept as the artist styles it."
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DisplayRulesOut(DisplayRulesBody):
+    """The display rules, and when they last changed."""
+
+    changed_at: dt.datetime | None = Field(
+        default=None,
+        description="When the rules last changed; null for the first rules.",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -385,6 +445,22 @@ class CatalogDetail(BaseModel):
 
     play_history: list[CatalogPlayHistoryItem] = Field(
         ..., description="Semantic value for play history."
+    )
+
+    base_title: str | None = Field(
+        default=None, description="The song's title, without its version."
+    )
+    version: str | None = Field(default=None, description="The version, if any.")
+    main_artists: list[str] = Field(
+        default_factory=list, description="The main artists, in order."
+    )
+    featured_artists: list[str] = Field(
+        default_factory=list, description="The featured artists, in order."
+    )
+    subgenre: str | None = Field(default=None, description="The subgenre.")
+    label: str | None = Field(default=None, description="The record label.")
+    updated_at: dt.datetime | None = Field(
+        default=None, description="When the entry last changed."
     )
 
 
