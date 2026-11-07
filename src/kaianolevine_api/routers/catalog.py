@@ -36,7 +36,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services.display import DEFAULT_RULES, Rules, load_rules, render
-from ..services.genres import catalog_genre
+from ..services.genres import vocabulary_genre
 from ..services.reconciliation import lookup_catalog, record_alias
 
 router = APIRouter()
@@ -232,7 +232,9 @@ async def read_catalog_display(
     description=(
         "Sets only the fields the entry leaves empty (year, genre, BPM, "
         "label) from the file's values; a value the catalog has is never "
-        "overwritten. A genre is placed on the catalog's vocabulary first. "
+        "overwritten. A genre is placed on the catalog's vocabulary first, and "
+        "one the vocabulary does not place is not taken; a label of a single "
+        "character (an explicit or clean marker) is not taken either. "
         "An entry that gains a value is marked as coming from the library. "
         "Requires catalog.library.write."
     ),
@@ -253,7 +255,7 @@ async def fill_up_catalog_entry(
         entry.release_year = payload.release_year
         filled.append("release_year")
     if entry.genre is None and payload.genre is not None:
-        genre, subgenre = catalog_genre(payload.genre)
+        genre, subgenre = vocabulary_genre(payload.genre)
         if genre is not None:
             entry.genre = genre
             filled.append("genre")
@@ -263,8 +265,9 @@ async def fill_up_catalog_entry(
     if entry.bpm is None and payload.bpm is not None:
         entry.bpm = payload.bpm
         filled.append("bpm")
-    if entry.label is None and payload.label and payload.label.strip():
-        entry.label = payload.label.strip()
+    label = (payload.label or "").strip()
+    if entry.label is None and len(label) > 1:
+        entry.label = label
         filled.append("label")
     if filled:
         entry.source = "library"
