@@ -1,3 +1,10 @@
+# [2.72.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.71.2...v2.72.0) (2026-11-07)
+
+
+### Features
+
+* **catalog:** cleanup.fixes can give another version of an entry its own entry ([9c22c0b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9c22c0b130285587462e4ff4597bb118d048a67e))
+
 ## [2.71.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.71.1...v2.71.2) (2026-11-07)
 
 
