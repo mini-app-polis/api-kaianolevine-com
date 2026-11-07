@@ -356,6 +356,41 @@ class LibraryDuplicateMember(Base):
     bitrate_kbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class LibraryReconcileDifference(Base):
+    """One field where a library file and its catalog entry differ, as the
+    reconcile last reported it (migration 102)."""
+
+    __tablename__ = "library_reconcile_differences"
+
+    drive_file_id: Mapped[str] = mapped_column(String, primary_key=True)
+    field: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    path: Mapped[str] = mapped_column(String, nullable=False)
+    file_value: Mapped[str] = mapped_column(String, nullable=False)
+    catalog_value: Mapped[str] = mapped_column(String, nullable=False)
+    run_id: Mapped[str] = mapped_column(String, nullable=False)
+    reported_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class LibraryReconcileApprovals(Base):
+    """The owner's approvals for the reconcile's write runs: one row
+    (migration 102)."""
+
+    __tablename__ = "library_reconcile_approvals"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    kinds: Mapped[list[str]] = mapped_column(
+        PgARRAY(String), nullable=False, default=list
+    )
+    files: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_by: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class PipelineEvaluation(Base):
     """Evaluation finding emitted by pipeline and conformance checks."""
 

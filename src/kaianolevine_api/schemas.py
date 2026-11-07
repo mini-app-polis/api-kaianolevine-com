@@ -52,6 +52,11 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     PipelineEvaluationCreate,
     PipelineEvaluationItem,
     PipelineEvaluationWriteResult,
+    ReconcileApprovals,
+    ReconcileApprovalsSet,
+    ReconcileDifference,
+    ReconcileReport,
+    ReconcileReportResult,
     RefiningBudgetSpentMarked,
     RefiningBudgetSpentRequest,
     RefiningClaimReleased,
@@ -445,6 +450,35 @@ class DuplicateGroupOut(BaseModel):
         default=None, description="When the owner resolved it."
     )
     files: list[DuplicateFileOut] = Field(..., description="The group's files.")
+
+
+class ReconcileDifferenceOut(ReconcileDifference):
+    """A reconcile difference as the owner's review page shows it."""
+
+    run_id: str = Field(..., description="The run that last reported it.")
+    reported_at: dt.datetime = Field(..., description="When it was last reported.")
+    catalog_id: uuid.UUID | None = Field(
+        default=None, description="The catalog entry the file links to."
+    )
+    approved: bool = Field(
+        ...,
+        description=(
+            "Whether the approvals cover it: its kind, or for 'other' its file "
+            "and field."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ReconcileReview(BaseModel):
+    """Everything the review page shows: the approvals, and the open
+    differences of files still in the library."""
+
+    approvals: ReconcileApprovals = Field(..., description="The approvals.")
+    differences: list[ReconcileDifferenceOut] = Field(
+        ..., description="The open differences, by kind, then path and field."
+    )
 
 
 class DuplicateResolve(BaseModel):
