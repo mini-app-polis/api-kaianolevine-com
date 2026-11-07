@@ -1,3 +1,10 @@
+## [2.72.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.72.0...v2.72.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **catalog:** DJ Don't credits Gerald Levert and Jaheim as two artists ([23a1ec3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/23a1ec3a4634ca8dfc174a5ec9e50755634edde8))
+
 # [2.72.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.71.2...v2.72.0) (2026-11-07)
 
 
