@@ -134,6 +134,7 @@ async def link_library_file(
         .values(
             catalog_id=catalog_id,
             identification_status="identified",
+            identify_note=None,
             last_synced=None,
         )
     )

@@ -114,3 +114,43 @@ async def test_the_owner_routes_need_the_editor_scope(role_client, client) -> No
         assert refused.status_code == 403
     async with role_client("catalog-editor") as editor:
         assert (await editor.get(UNIDENTIFIED)).status_code == 200
+
+
+async def test_an_unidentified_file_carries_its_tags_and_why(client) -> None:
+    await _register(
+        client,
+        "f1",
+        tags={"title": "Temple", "artist": "T. Gold", "bpm": "124"},
+        identify_note="fingerprint: no confident match (best: Temple — Thomas Gold, 0.62)",
+    )
+
+    [row] = (await client.get(UNIDENTIFIED)).json()["data"]
+
+    assert row["tags"] == {
+        "title": "Temple",
+        "artist": "T. Gold",
+        "genre": None,
+        "bpm": "124",
+        "year": None,
+        "label": None,
+    }
+    assert row["identify_note"].startswith("fingerprint: no confident match")
+
+
+async def test_a_registration_without_tags_keeps_the_ones_held(client) -> None:
+    await _register(client, "f1", tags={"title": "Temple"}, identify_note="why")
+    await _register(client, "f1", size_bytes=10)
+
+    [row] = (await client.get(UNIDENTIFIED)).json()["data"]
+    assert row["tags"]["title"] == "Temple" and row["identify_note"] == "why"
+
+
+async def test_linking_clears_why_it_was_unidentified(client) -> None:
+    entry = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "f1", tags={"title": "Temple"}, identify_note="why")
+
+    response = await client.post(f"{FILES}/f1/link", json={"catalog_id": entry})
+
+    linked = response.json()["data"]["file"]
+    assert linked["identify_note"] is None
+    assert linked["tags"]["title"] == "Temple"
