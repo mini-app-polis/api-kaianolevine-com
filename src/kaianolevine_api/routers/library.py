@@ -18,13 +18,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
 from ..database import get_db_session
+from ..models import DisplayRules as DbDisplayRules
 from ..models import LibraryFile as DbLibraryFile
 from ..models import Track as DbTrack
 from ..models import TrackCatalog as DbCatalog
@@ -37,6 +38,8 @@ from ..schemas import (
     LibraryFileRegister,
     LibraryFilesAbsentRequest,
     LibraryFilesAbsentResult,
+    LibraryFilesSynced,
+    LibraryFilesSyncedResult,
     LibraryIdentification,
     api_error,
     success_envelope,
@@ -253,6 +256,98 @@ async def list_library_files(
     )
     data = [_file_out(r) for r in rows]
     return success_envelope(data, count=len(data), total=total)
+
+
+@router.get(
+    "/catalog/library/files/needing-sync",
+    response_model=Envelope[list[LibraryFile]],
+    summary="List the library files that need the catalog's values written",
+    description=(
+        "One page of the present, linked files whose catalog entry or the "
+        "display rules changed after the catalog's values were last written "
+        "to them, or that never had them written; oldest first, optionally "
+        "under one library root. Requires catalog.library.write."
+    ),
+)
+async def list_library_files_needing_sync(
+    library_root_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[LibraryFile]]:
+    """The present, linked files a sync has not caught up with."""
+    rules_changed = (
+        select(DbDisplayRules.changed_at)
+        .where(DbDisplayRules.id == 1)
+        .scalar_subquery()
+    )
+    # What a file shows last changed: its entry, or the rules (if ever).
+    shown_changed = func.greatest(
+        DbCatalog.updated_at, func.coalesce(rules_changed, DbCatalog.updated_at)
+    )
+    filters = [
+        DbLibraryFile.present.is_(True),
+        DbLibraryFile.identification_status == "identified",
+        or_(
+            DbLibraryFile.last_synced.is_(None),
+            DbLibraryFile.last_synced < shown_changed,
+        ),
+    ]
+    if library_root_id is not None:
+        filters.append(DbLibraryFile.library_root_id == library_root_id)
+    joined = select(DbLibraryFile).join(
+        DbCatalog, DbCatalog.id == DbLibraryFile.catalog_id
+    )
+    total = (
+        await session.execute(
+            select(func.count())
+            .select_from(DbLibraryFile)
+            .join(DbCatalog, DbCatalog.id == DbLibraryFile.catalog_id)
+            .where(*filters)
+        )
+    ).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                joined.where(*filters)
+                .order_by(DbLibraryFile.first_seen, DbLibraryFile.id)
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    data = [_file_out(r) for r in rows]
+    return success_envelope(data, count=len(data), total=total)
+
+
+@router.post(
+    "/catalog/library/files/synced",
+    response_model=Envelope[LibraryFilesSyncedResult],
+    summary="Record that files now carry the catalog's values",
+    description=(
+        "Each registered file named gets synced_at as when the catalog's "
+        "values were last written to it. An id the registry does not hold "
+        "is ignored. Requires catalog.library.write."
+    ),
+)
+async def mark_library_files_synced(
+    payload: LibraryFilesSynced,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[LibraryFilesSyncedResult]:
+    """Set last_synced on the named files."""
+    result = await session.execute(
+        update(DbLibraryFile)
+        .where(DbLibraryFile.drive_file_id.in_(payload.drive_file_ids))
+        .values(last_synced=payload.synced_at)
+        .returning(DbLibraryFile.id)
+    )
+    marked = len(result.all())
+    await session.commit()
+    return success_envelope(LibraryFilesSyncedResult(marked=marked), count=1, total=1)
 
 
 @router.post(

@@ -7,6 +7,7 @@ their own, which stats, summaries and the collection do not count.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
 from sqlalchemy import select
@@ -18,6 +19,8 @@ from kaianolevine_api.models import TrackCatalog as DbCatalog
 FILES = "/v1/catalog/library/files"
 ABSENT = "/v1/catalog/library/files/absent"
 ENTRIES = "/v1/catalog/library/entries"
+NEEDING_SYNC = "/v1/catalog/library/files/needing-sync"
+SYNCED = "/v1/catalog/library/files/synced"
 
 
 async def _ingest(client, *tracks: dict, set_date: str = "2026-03-08") -> None:
@@ -332,6 +335,92 @@ async def test_listing_filters_by_root_and_pages(client) -> None:
     assert [r["drive_file_id"] for r in rest] == ["drive-2"]
 
 
+# ── What a sync has to write ──────────────────────────────────────────────
+
+
+async def _needing(client) -> list[str]:
+    response = await client.get(NEEDING_SYNC)
+    assert response.status_code == 200, response.text
+    return [r["drive_file_id"] for r in response.json()["data"]]
+
+
+async def _synced(client, *drive_ids: str) -> int:
+    response = await client.post(
+        SYNCED,
+        json={"drive_file_ids": list(drive_ids), "synced_at": "2030-01-01T00:00:00Z"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]["marked"]
+
+
+async def test_a_linked_file_never_synced_needs_a_sync_until_marked(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _register(client, _file("drive-2", None))  # unidentified: never listed
+
+    assert await _needing(client) == ["drive-1"]
+    assert await _synced(client, "drive-1", "never-registered") == 1
+    assert await _needing(client) == []
+
+
+async def test_an_entry_edit_puts_only_its_files_back_on_the_list(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    other = (await _entry(client, "Oops", "Tweet"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _register(client, _file("drive-2", other))
+    now = dt.datetime.now(dt.UTC).isoformat()
+    await client.post(
+        SYNCED, json={"drive_file_ids": ["drive-1", "drive-2"], "synced_at": now}
+    )
+    assert await _needing(client) == []
+
+    edit = await client.patch(f"/v1/catalog/{entry}", json={"genre": "House"})
+    assert edit.status_code == 200, edit.text
+
+    assert await _needing(client) == ["drive-1"]
+
+
+async def test_a_rule_change_puts_every_linked_file_on_the_list(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _register(client, _file("gone", entry))
+    await client.post(ABSENT, json={"drive_file_ids": ["gone"]})
+    now = dt.datetime.now(dt.UTC).isoformat()
+    await client.post(SYNCED, json={"drive_file_ids": ["drive-1"], "synced_at": now})
+    assert await _needing(client) == []
+
+    rules = (await client.get("/v1/catalog/display-rules")).json()["data"]
+    changed = await client.put(
+        "/v1/catalog/display-rules",
+        json={
+            **{k: v for k, v in rules.items() if k != "changed_at"},
+            "featured_word": "ft.",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+
+    # The present file needs the new display; the one gone does not.
+    assert await _needing(client) == ["drive-1"]
+
+
+async def test_the_sync_list_filters_by_root_and_pages(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    for n in range(3):
+        await _register(client, _file(f"drive-{n}", entry))
+    await _register(client, _file("other-root", entry, library_root_id="root-2"))
+
+    first = (
+        await client.get(NEEDING_SYNC, params={"library_root_id": "root-1", "limit": 2})
+    ).json()
+    rest = (
+        await client.get(
+            NEEDING_SYNC, params={"library_root_id": "root-1", "limit": 2, "offset": 2}
+        )
+    ).json()
+    assert first["meta"]["total"] == 3
+    assert len(first["data"]) == 2 and len(rest["data"]) == 1
+
+
 # ── Who may call ──────────────────────────────────────────────────────────
 
 
@@ -344,8 +433,16 @@ async def test_every_library_route_needs_the_library_scope(role_client) -> None:
             await ingest_only.post(
                 ENTRIES, json={"title": "Temple", "artist": "Thomas Gold"}
             ),
+            await ingest_only.get(NEEDING_SYNC),
+            await ingest_only.post(
+                SYNCED,
+                json={
+                    "drive_file_ids": ["drive-1"],
+                    "synced_at": "2030-01-01T00:00:00Z",
+                },
+            ),
         ]
-    assert [r.status_code for r in calls] == [403, 403, 403, 403]
+    assert [r.status_code for r in calls] == [403, 403, 403, 403, 403, 403]
 
 
 async def test_the_library_role_may_call_every_library_route(role_client) -> None:
@@ -359,5 +456,13 @@ async def test_the_library_role_may_call_every_library_route(role_client) -> Non
             await library.post(FILES, json=_file("drive-1", entry)),
             await library.post(ABSENT, json={"drive_file_ids": ["drive-1"]}),
             await library.get(FILES),
+            await library.get(NEEDING_SYNC),
+            await library.post(
+                SYNCED,
+                json={
+                    "drive_file_ids": ["drive-1"],
+                    "synced_at": "2030-01-01T00:00:00Z",
+                },
+            ),
         ]
-    assert [r.status_code for r in calls] == [200, 200, 200, 200]
+    assert [r.status_code for r in calls] == [200, 200, 200, 200, 200, 200]
