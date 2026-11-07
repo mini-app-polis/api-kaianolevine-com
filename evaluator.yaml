@@ -28,6 +28,11 @@ exemptions:
     models: [DisplayRules]
 
   - rule: API-006
+    reason: "Duplicate groups in the one music library, as deejay-cog's duplicate report finds them (migration 100): bookkeeping about Drive files in the library registry, which has no owner column either. They are written only by deejay-cog's machine under catalog.library.write, and listed and resolved only under catalog.tracks.write, the catalog-editor role the owner holds; there is no other owner to scope a row to (deejay-cog ADR-0008, decision 7)."
+    paths: [src/kaianolevine_api/models.py]
+    models: [LibraryDuplicateGroup, LibraryDuplicateMember]
+
+  - rule: API-006
     reason: "The shared WCS knowledge graph built from lesson sources: canonical people, entities, their aliases, definitions and relations, and the per-source extractions, attributions and references they come from. It is shared vocabulary rather than per-user content; access to what a source says is scoped through the source (wcs_sources.owner_id and its grants), not by a column on each derived row."
     paths: [src/kaianolevine_api/models.py]
     models: [WcsInstructor, WcsInstructorAlias, WcsSourceExtraction, WcsEntity, WcsEntityAlias, WcsEntityDefinition, WcsEntityRelation, WcsSourceAttribution, WcsSourceReference, WcsDrillPurpose, WcsTechniqueRequirement]
