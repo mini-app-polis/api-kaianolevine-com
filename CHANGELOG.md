@@ -1,3 +1,16 @@
+# [2.69.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.68.0...v2.69.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **library:** the unidentified-file routes' models and shared helpers, and the release label on duplicate files ([61d968e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/61d968e596947fc33432833a6d9867f4deafded0))
+
+
+### Features
+
+* **library:** duplicate groups and their resolution, unidentified files and linking them, and listing files by trash request ([28a6daf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/28a6daff9e519e9b13bda5c67e26dd426323da25))
+* **library:** duplicate groups, resolving a group by picking its keeper, and listing files by trash request ([f064b9e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f064b9e413371b9a1fb9cd5cc8cf7bead2eb35f0))
+
 # [2.68.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.67.0...v2.68.0) (2026-11-07)
 
 
