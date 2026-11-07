@@ -1,3 +1,15 @@
+# [2.73.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.72.1...v2.73.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.9.0 ([1d4edcf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1d4edcf8f1c0a7967b0d2ca9afa81eb8e872bab9))
+
+
+### Features
+
+* **catalog:** library reconcile differences, review and approvals endpoints ([57eae97](https://github.com/mini-app-polis/api-kaianolevine-com/commit/57eae9715f477fb5c62c2beb8a7981b214973149))
+
 ## [2.72.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.72.0...v2.72.1) (2026-11-07)
 
 
