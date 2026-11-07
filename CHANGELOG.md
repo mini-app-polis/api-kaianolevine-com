@@ -1,3 +1,10 @@
+# [2.66.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.65.1...v2.66.0) (2026-11-07)
+
+
+### Features
+
+* **catalog:** owner-only catalog edit for every owned field, display rules endpoints, and edit tracking ([3aa0d0c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3aa0d0c4c6b1cc671c66703bdd213a21fbb0ccdf))
+
 ## [2.65.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.65.0...v2.65.1) (2026-11-07)
 
 
