@@ -30,6 +30,7 @@ _FEAT = re.compile(r"\s*\b(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE)
 _BRACKETED_CREDIT = re.compile(
     r"\s*[\[(]\s*(feat\.?|ft\.?|featuring|with)\s+([^\])]*)[\])]", re.IGNORECASE
 )
+_LEADING_CREDIT = re.compile(r"(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE)
 _CREDIT_SPLIT = re.compile(
     r"\s*,?\s*\b(?:feat\.?|ft\.?|featuring|with)\s+|\s*,\s*", re.IGNORECASE
 )
@@ -112,17 +113,19 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
                 ambiguous.append(f"{part!r} (featured): one artist, or several?")
             featured.extend(_names(part, _AMBIGUOUS_JOINER))
 
-    # Title: its credits, then bracketed parts, then a " - " part.
-    text = credits(title.strip())
-    trailing = _FEAT.split(text, maxsplit=1)
-    if len(trailing) == 2 and trailing[0].strip():
-        text = trailing[0]
-        take_featured(trailing[1])
-
     def keep_or_take(part: str) -> bool:
         """Whether ``part`` stays in the base title."""
         if not part.strip():
             return False
+        credit = _LEADING_CREDIT.match(part.strip())
+        if credit:
+            take_featured(part.strip()[credit.end() :])
+            return False
+        inner = _FEAT.split(part, maxsplit=1)
+        if len(inner) == 2 and inner[0].strip():
+            # "(Dawin Remix feat. X)": the version, and a credit after it.
+            take_featured(inner[1])
+            part = inner[0]
         if is_release_label(part):
             notes.append("release_label")
             return False
@@ -132,12 +135,19 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
         ambiguous.append(f"{part.strip()!r} in the title names no version")
         return True
 
+    # Title: its bracketed credits, then bracketed parts, then a " - " part,
+    # then a trailing credit ("Song ft. X (Remix)" keeps its remix).
+    text = credits(title.strip())
     text = _BRACKETED.sub(
         lambda m: m.group(0) if keep_or_take(m.group(1)) else "", text
     )
     dash = _DASH_SUFFIX.search(text)
     if dash and not keep_or_take(dash.group(1)):
         text = text[: dash.start()]
+    trailing = _FEAT.split(text, maxsplit=1)
+    if len(trailing) == 2 and trailing[0].strip():
+        text = trailing[0]
+        take_featured(trailing[1])
     base = " ".join(text.split())
 
     if remix and remix.strip():

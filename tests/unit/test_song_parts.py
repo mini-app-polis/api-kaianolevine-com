@@ -176,3 +176,28 @@ def test_a_featured_artist_who_is_also_a_main_artist_is_asked_about() -> None:
         "Left and Right (Feat. Jung Kook of BTS)", "Charlie Puth, Jung Kook, BTS"
     )
     assert "'Jung Kook of BTS' is featured and also a main artist" in p.ambiguous
+
+
+def test_a_trailing_credit_leaves_the_version_in_brackets_after_it() -> None:
+    p = propose("Let You Go ft. Great Good Fine Ok (A-Trak Remix)", "The Chainsmokers")
+    assert p.parts == Parts(
+        "Let You Go", "A-Trak Remix", ("The Chainsmokers",), ("Great Good Fine Ok",)
+    )
+    assert p.clear
+
+    q = propose("Regulate Ft. Nate Dogg (Le Boeuf Remix)", "Warren G")
+    assert q.parts.version == "Le Boeuf Remix"
+    assert q.parts.featured_artists == ("Nate Dogg",)
+
+
+def test_a_credit_after_a_dash_is_featured_not_dropped() -> None:
+    p = propose("Paris - feat. Emily Warren", "The Chainsmokers")
+    assert p.parts.base_title == "Paris"
+    assert p.parts.featured_artists == ("Emily Warren",)
+
+
+def test_a_credit_inside_a_version_s_brackets_is_featured() -> None:
+    p = propose("Twerk It Like Miley (Dawin Remix feat. Christopher)", "Brandon Beal")
+    assert p.parts.base_title == "Twerk It Like Miley"
+    assert p.parts.version == "Dawin Remix"
+    assert p.parts.featured_artists == ("Christopher",)
