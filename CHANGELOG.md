@@ -1,3 +1,11 @@
+# [2.74.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.73.0...v2.74.0) (2026-11-07)
+
+
+### Features
+
+* **library:** preview a library entry without saving it, and refuse a preview when linking a file ([154acc5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/154acc5fc6ae5ccdfbb368b717ae445ddeaa1970))
+* **library:** preview a library entry without saving it, and refuse a preview when linking a file ([5186f37](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5186f37d5a1464c5a47fdcbefc08bfccca80baa5))
+
 # [2.73.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.72.1...v2.73.0) (2026-11-07)
 
 
