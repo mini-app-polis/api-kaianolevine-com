@@ -41,6 +41,7 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     LibraryFilesAbsentResult,
     LibraryFilesSynced,
     LibraryFilesSyncedResult,
+    LibraryFileTags,
     LibraryIdentification,
     LivePlayIngest,
     LivePlaysIngest,

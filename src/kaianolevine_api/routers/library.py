@@ -40,6 +40,7 @@ from ..schemas import (
     LibraryFilesAbsentResult,
     LibraryFilesSynced,
     LibraryFilesSyncedResult,
+    LibraryFileTags,
     LibraryIdentification,
     api_error,
     success_envelope,
@@ -61,6 +62,7 @@ _OPTIONAL_FIELDS = (
     "duration_secs",
     "edit_label",
     "comment_backup",
+    "identify_note",
 )
 
 
@@ -83,6 +85,8 @@ def file_out(row: DbLibraryFile) -> LibraryFile:
         first_seen=row.first_seen,
         last_seen=row.last_seen,
         last_synced=row.last_synced,
+        tags=LibraryFileTags(**row.tags) if row.tags else None,
+        identify_note=row.identify_note,
     )
 
 
@@ -122,6 +126,10 @@ async def register_library_file(
             values[name] = getattr(payload, name)
     if "synced_at" in sent:
         values["last_synced"] = payload.synced_at
+    if "tags" in sent:
+        values["tags"] = (
+            payload.tags.model_dump(exclude_none=True) if payload.tags else None
+        )
 
     insert_stmt = insert(DbLibraryFile).values(**values)
     stmt = insert_stmt.on_conflict_do_update(

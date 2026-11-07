@@ -304,6 +304,8 @@ class LibraryFile(Base):
     last_synced: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    tags: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    identify_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class LibraryDuplicateGroup(Base):
