@@ -1,3 +1,10 @@
+## [2.74.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.74.0...v2.74.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **cors:** allow PUT across origins, so the reconcile page can save its approvals ([b6bb83e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b6bb83e4d4f4e0e6cad09c1d670ca62377cbf1d6))
+
 # [2.74.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.73.0...v2.74.0) (2026-11-07)
 
 
