@@ -1,3 +1,10 @@
+## [2.70.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.1...v2.70.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **catalog:** a trailing credit leaves the version after it, and a credit inside a version's brackets is featured ([f126fee](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f126fee5f658c99ad9cb47eeaf7b090971249657))
+
 ## [2.70.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.0...v2.70.1) (2026-11-07)
 
 
