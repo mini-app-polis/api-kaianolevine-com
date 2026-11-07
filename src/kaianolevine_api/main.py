@@ -35,6 +35,7 @@ from .routers import (
     ingest,
     library,
     library_duplicates,
+    library_reconcile,
     library_unidentified,
     live_plays,
     notifications,
@@ -334,6 +335,7 @@ def _build_app() -> FastAPI:
     app.include_router(tracks.router, prefix="/v1", tags=["tracks"])
     app.include_router(library.router, prefix="/v1", tags=["catalog"])
     app.include_router(library_duplicates.router, prefix="/v1", tags=["catalog"])
+    app.include_router(library_reconcile.router, prefix="/v1", tags=["catalog"])
     app.include_router(library_unidentified.router, prefix="/v1", tags=["catalog"])
     app.include_router(catalog.router, prefix="/v1", tags=["catalog"])
     app.include_router(evaluations.router, prefix="/v1", tags=["evaluations"])
