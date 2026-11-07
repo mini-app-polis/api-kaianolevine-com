@@ -85,6 +85,42 @@ async def test_a_song_never_played_gets_a_library_entry_with_no_plays(
     assert row.first_played is None and row.last_played is None
 
 
+async def test_a_preview_answers_with_the_entry_it_would_make_and_saves_nothing(
+    client, async_engine
+) -> None:
+    previewed = await _entry(
+        client,
+        "Temple",
+        "Thomas Gold feat. Jem Cooke",
+        genre="House",
+        preview=True,
+    )
+
+    assert previewed["previewed"] is True
+    assert previewed["created"] is False
+    assert previewed["entry"]["title"] == "Temple"
+    assert previewed["entry"]["genre"] == "Dance/Electronic"
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        row = await session.get(DbCatalog, uuid.UUID(previewed["entry"]["id"]))
+    assert row is None
+
+    made = await _entry(client, "Temple", "Thomas Gold feat. Jem Cooke", genre="House")
+    assert made["created"] is True
+    assert made["previewed"] is False
+    assert made["entry"]["title"] == previewed["entry"]["title"]
+    assert made["entry"]["artist"] == previewed["entry"]["artist"]
+
+
+async def test_a_preview_of_a_song_the_catalog_has_is_its_entry(client) -> None:
+    await _ingest(client, {"title": "Sundays", "artist": "Emotional Oranges"})
+
+    found = await _entry(client, "Sundays", "Emotional Oranges", preview=True)
+
+    assert found["previewed"] is False
+    assert found["created"] is False
+
+
 async def test_a_song_the_catalog_has_is_answered_with_its_entry(client) -> None:
     await _ingest(client, {"title": "Sundays", "artist": "Emotional Oranges"})
 

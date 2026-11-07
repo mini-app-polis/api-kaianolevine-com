@@ -372,7 +372,10 @@ async def mark_library_files_synced(
         "summaries and the collection do not count it. When the catalog "
         "already has the entry a play of the song would be filed under (the "
         "set import's own matching, across every owner), that entry is the "
-        "answer and nothing is made. Requires catalog.library.write."
+        "answer and nothing is made. With preview, nothing is saved: a song "
+        "the catalog lacks comes back as the entry the call would make "
+        "(previewed true, its id not a real catalog id). Requires "
+        "catalog.library.write."
     ),
 )
 async def create_library_entry(
@@ -381,15 +384,25 @@ async def create_library_entry(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryEntryCreated]:
     """The song's entry, made from the library when the catalog lacks it."""
-    data = await make_library_entry(session, payload, owner_id=principal.subject)
+    data = await make_library_entry(
+        session, payload, owner_id=principal.subject, preview=payload.preview
+    )
     return success_envelope(data, count=1, total=1)
 
 
 async def make_library_entry(
-    session: AsyncSession, payload: LibraryEntryCreate, *, owner_id: str
+    session: AsyncSession,
+    payload: LibraryEntryCreate,
+    *,
+    owner_id: str,
+    preview: bool = False,
 ) -> LibraryEntryCreated:
     """The catalog's entry for the song, or a new library entry (no plays)
-    when it has none; commits a new entry."""
+    when it has none; commits a new entry.
+
+    With ``preview``, the new entry is made and written out exactly as it
+    would be, then rolled back: nothing is saved.
+    """
     track = IngestTrack(
         title=payload.title,
         artist=payload.artist,
@@ -436,6 +449,11 @@ async def make_library_entry(
             remix=None,
             source="entry",
         )
+        if preview:
+            await session.refresh(entry)
+            would_be = catalog_match(entry, await load_rules(session))
+            await session.rollback()
+            return LibraryEntryCreated(entry=would_be, created=False, previewed=True)
         await session.commit()
     except IntegrityError:
         # Another call made the same entry first: that one is the answer.
