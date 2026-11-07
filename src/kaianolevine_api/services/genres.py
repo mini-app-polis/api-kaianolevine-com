@@ -9,7 +9,9 @@ case, spaces and symbols.
 The set import and library entries use :func:`catalog_genre` when they write
 a catalog entry's genre, so a new value lands where the clean-up put the old
 ones. A value the map does not know is kept as it is, with no subgenre, for
-the owner to place.
+the owner to place. A value filled up from a library file is taken only when
+the map places it (:func:`vocabulary_genre`), so a file's tag never brings a
+new genre into the catalog.
 """
 
 from __future__ import annotations
@@ -105,5 +107,15 @@ def catalog_genre(value: str | None) -> tuple[str | None, str | None]:
     """
     place = place_genre(value)
     if place is None or place.action in ("cleared", "version"):
+        return None, None
+    return place.genre, place.subgenre
+
+
+def vocabulary_genre(value: str | None) -> tuple[str | None, str | None]:
+    """The genre and subgenre for ``value`` when the vocabulary places it:
+    a broad genre or a mapped value. Anything else, a value the map does not
+    know included, gives no genre."""
+    place = place_genre(value)
+    if place is None or place.action != "mapped":
         return None, None
     return place.genre, place.subgenre

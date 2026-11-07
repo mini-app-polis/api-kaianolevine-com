@@ -162,6 +162,23 @@ async def test_fill_up_with_a_value_that_is_not_a_genre_fills_nothing(client) ->
     assert response.json()["data"]["filled"] == []
 
 
+async def test_fill_up_takes_no_genre_the_vocabulary_does_not_place(client) -> None:
+    entry_id = await _entry(client, "Temple", "Thomas Gold")
+    response = await _fill(client, entry_id, genre="Girl Group", bpm=124.0)
+    data = response.json()["data"]
+    assert data["filled"] == ["bpm"]
+    assert data["entry"]["genre"] is None
+
+
+async def test_fill_up_takes_no_single_character_label(client) -> None:
+    entry_id = await _entry(client, "Temple", "Thomas Gold")
+    for marker in ("E", " C "):
+        response = await _fill(client, entry_id, label=marker)
+        assert response.json()["data"]["filled"] == []
+    response = await _fill(client, entry_id, label="Armada")
+    assert response.json()["data"]["filled"] == ["label"]
+
+
 async def test_fill_up_of_an_unknown_entry_is_404(client) -> None:
     response = await _fill(client, str(uuid.uuid4()), bpm=120.0)
     assert response.status_code == 404

@@ -15,6 +15,7 @@ from kaianolevine_api.services.genres import (
     genre_key,
     load_map,
     place_genre,
+    vocabulary_genre,
 )
 
 BROAD = (
@@ -172,3 +173,12 @@ def test_what_a_catalog_entry_is_written_with() -> None:
 def test_a_value_the_map_does_not_know_is_kept_as_it_is() -> None:
     assert place_genre("Sea Shanty") == GenrePlace("unmapped", "Sea Shanty")
     assert catalog_genre("Sea Shanty") == ("Sea Shanty", None)
+
+
+def test_only_a_value_the_vocabulary_places_is_a_vocabulary_genre() -> None:
+    assert vocabulary_genre("Soul") == ("R&B/Soul", "Soul")
+    assert vocabulary_genre("Pop") == ("Pop", None)
+    assert vocabulary_genre("Sea Shanty") == (None, None)
+    assert vocabulary_genre("Instrumental") == (None, None)
+    assert vocabulary_genre("Miscellaneous") == (None, None)
+    assert vocabulary_genre(None) == (None, None)
