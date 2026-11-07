@@ -24,11 +24,6 @@ def test_a_plain_song_is_its_own_parts() -> None:
         ("At My Worst (feat. Kehlani)", "Pink Sweat$", ("Kehlani",)),
         ("At My Worst [ft. Kehlani]", "Pink Sweat$", ("Kehlani",)),
         ("At My Worst feat. Kehlani", "Pink Sweat$", ("Kehlani",)),
-        (
-            "Ambition",
-            "Wale feat. Usher, Rick Ross & Big Sean",
-            ("Usher", "Rick Ross", "Big Sean"),
-        ),
     ],
 )
 def test_featured_artists_come_out_of_the_title_or_the_artist(
@@ -140,3 +135,44 @@ def test_the_split_renders_back_to_the_agreed_display() -> None:
         "Attention (Lash Remix)",
         "Charlie Puth feat. Kehlani",
     )
+
+
+def test_featured_names_joined_by_and_are_split_but_asked_about() -> None:
+    p = propose("Ambition", "Wale feat. Usher, Rick Ross & Big Sean")
+    assert p.parts.featured_artists == ("Usher", "Rick Ross", "Big Sean")
+    assert p.ambiguous == (
+        "'Rick Ross & Big Sean' (featured): one artist, or several?",
+    )
+
+    duo = propose("That's Not How This Works (Feat. Dan & Shay)", "Charlie Puth")
+    assert not duo.clear  # Dan & Shay is one act
+
+
+def test_a_credit_in_brackets_in_the_artist_is_taken_out() -> None:
+    p = propose("Feel the Same", "Basic Tape (feat. Ed Prosek)")
+    assert p.parts == Parts("Feel the Same", None, ("Basic Tape",), ("Ed Prosek",))
+    assert p.clear
+
+    both = propose(
+        "Boxing Underwater (feat. Cailin Russo)", "Golding (feat. Cailin Russo)"
+    )
+    assert both.parts.main_artists == ("Golding",)
+    assert both.parts.featured_artists == ("Cailin Russo",)
+
+
+def test_a_with_credit_is_kept_as_featured_and_asked_about() -> None:
+    p = propose("Walk That Walk (With Nic Hanson)", "Bakermat")
+    assert p.parts.base_title == "Walk That Walk"
+    assert p.parts.featured_artists == ("Nic Hanson",)
+    assert not p.clear
+
+    both = propose("Starving (With Grey, Feat. Zedd)", "Hailee Steinfeld")
+    assert both.parts.base_title == "Starving"
+    assert both.parts.featured_artists == ("Grey", "Zedd")
+
+
+def test_a_featured_artist_who_is_also_a_main_artist_is_asked_about() -> None:
+    p = propose(
+        "Left and Right (Feat. Jung Kook of BTS)", "Charlie Puth, Jung Kook, BTS"
+    )
+    assert "'Jung Kook of BTS' is featured and also a main artist" in p.ambiguous

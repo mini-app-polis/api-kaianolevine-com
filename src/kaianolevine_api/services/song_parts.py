@@ -10,9 +10,11 @@ entry, and each file keeps its own label in the library registry.
 
 A proposal is *clear* when nothing in it needs a person's judgement. It is
 *ambiguous*, with the reasons, when the text could be read more than one way:
-" & ", " and " or " x " between artists (a duo's name, or two artists?),
-a bracketed or " - " part that names no version and is not a release label,
-or more than one version.
+" & ", " and " or " x " between artists, main or featured (a duo's name, or
+two artists?), a "(with X)" credit (featured, or a main artist?), a featured
+artist who is also a main artist, a bracketed or " - " part that names no
+version and is not a release label, or more than one version. Credits in
+brackets are taken out of the artist as well as the title.
 """
 
 from __future__ import annotations
@@ -23,8 +25,13 @@ import re
 from .song_identity import is_release_label
 
 _FEAT = re.compile(r"\s*\b(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE)
-_BRACKETED_FEAT = re.compile(
-    r"\s*[\[(]\s*(?:feat\.?|ft\.?|featuring)\s+([^\])]*)[\])]", re.IGNORECASE
+#: A bracketed credit: "(feat. X)", "[ft. X]", "(featuring X)" or "(with X)",
+#: whose names may themselves carry a further credit ("with X, feat. Y").
+_BRACKETED_CREDIT = re.compile(
+    r"\s*[\[(]\s*(feat\.?|ft\.?|featuring|with)\s+([^\])]*)[\])]", re.IGNORECASE
+)
+_CREDIT_SPLIT = re.compile(
+    r"\s*,?\s*\b(?:feat\.?|ft\.?|featuring|with)\s+|\s*,\s*", re.IGNORECASE
 )
 _BRACKETED = re.compile(r"\s*[\[(]([^\])]*)[\])]")
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
@@ -87,15 +94,30 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
     featured: list[str] = []
     versions: list[str] = []
 
-    # Title: a featured credit, then bracketed parts, then a " - " part.
-    text = title.strip()
-    for credit in _BRACKETED_FEAT.findall(text):
-        featured += _names(credit, _ANY_JOINER)
-    text = _BRACKETED_FEAT.sub("", text)
+    def credits(text: str) -> str:
+        """Take the bracketed credits out of ``text`` into ``featured``."""
+        for word, credit in _BRACKETED_CREDIT.findall(text):
+            take_featured(credit)
+            if word.lower() == "with":
+                ambiguous.append(
+                    f"{credit.strip()!r} (with): featured, or a main artist?"
+                )
+        return _BRACKETED_CREDIT.sub("", text)
+
+    def take_featured(credit: str) -> None:
+        """Add a credit's names to ``featured``; names joined by & / and / x
+        may be one act ("Dan & Shay"), so a person decides."""
+        for part in _names(credit, _CREDIT_SPLIT):
+            if _AMBIGUOUS_JOINER.search(part):
+                ambiguous.append(f"{part!r} (featured): one artist, or several?")
+            featured.extend(_names(part, _AMBIGUOUS_JOINER))
+
+    # Title: its credits, then bracketed parts, then a " - " part.
+    text = credits(title.strip())
     trailing = _FEAT.split(text, maxsplit=1)
     if len(trailing) == 2 and trailing[0].strip():
         text = trailing[0]
-        featured += _names(trailing[1], _ANY_JOINER)
+        take_featured(trailing[1])
 
     def keep_or_take(part: str) -> bool:
         """Whether ``part`` stays in the base title."""
@@ -124,10 +146,10 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
         elif not any(remix.strip().lower() == v.lower() for v in versions):
             versions.append(remix.strip())
 
-    # Artist: a featured credit, then the main artists.
-    head, *credit_tail = _FEAT.split(artist.strip(), maxsplit=1)
+    # Artist: its bracketed credits, a featured credit, then the main artists.
+    head, *credit_tail = _FEAT.split(credits(artist.strip()), maxsplit=1)
     if credit_tail:
-        featured += _names(credit_tail[0], _ANY_JOINER)
+        take_featured(credit_tail[0])
     main = _names(head, _COMMA)
     if len(main) > 1:
         notes.append("co_artists")
@@ -137,6 +159,11 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
             ambiguous.append(f"{name!r}: one artist, or several?")
         split_main.append(name)
 
+    mains = [m.lower() for m in split_main]
+    for name in _unique(featured):
+        lowered = name.lower()
+        if any(m in lowered or lowered in m for m in mains):
+            ambiguous.append(f"{name!r} is featured and also a main artist")
     if featured:
         notes.append("featured")
     if versions:
