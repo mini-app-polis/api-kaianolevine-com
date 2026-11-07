@@ -1,3 +1,10 @@
+## [2.65.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.65.0...v2.65.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **library:** literal scope on the library routes; cleanup commands log their report; docstrings ([bf9f3d6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bf9f3d6e21411b8807e5b741c1c4da14db058c84))
+
 # [2.65.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.64.0...v2.65.0) (2026-11-07)
 
 
