@@ -1,3 +1,10 @@
+# [2.71.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.4...v2.71.0) (2026-11-07)
+
+
+### Features
+
+* **catalog:** cleanup.fixes applies owner-reviewed fixes to entries as the editor would ([3ff1eca](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3ff1ecabc68f97097c2214aacb275aa97758a7d6))
+
 ## [2.70.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.3...v2.70.4) (2026-11-07)
 
 
