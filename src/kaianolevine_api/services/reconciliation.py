@@ -133,9 +133,12 @@ class CatalogMatcher:
     keys, and the owner's own entry under those keys, if there is one.
     Reading only: nothing here writes.
 
-    With no ``owner_id`` (the catalog lookup), every owner's entries count as
-    the caller's: which key filed a play does not change what the song is,
-    and among entries under the same key the most played one is the song.
+    With no ``owner_id`` (the catalog lookup, and the set ingest since the
+    catalog became one catalog, migration 098), every owner's entries count
+    as the caller's: which key filed a play does not change what the song
+    is, and among entries under the same key the most played one is the
+    song. An archived entry (merged into another, or a library entry left
+    with no files) is never matched.
     """
 
     def __init__(self, session: AsyncSession, owner_id: str | None) -> None:
@@ -157,7 +160,8 @@ class CatalogMatcher:
         stmt = select(TrackCatalog).where(
             tuple_(TrackCatalog.title_normalized, TrackCatalog.artist_normalized).in_(
                 wanted
-            )
+            ),
+            TrackCatalog.archived_at.is_(None),
         )
         if self.owner_id is not None:
             stmt = stmt.where(TrackCatalog.owner_id == self.owner_id)
@@ -174,7 +178,8 @@ class CatalogMatcher:
     async def _load_catalog(self) -> dict[tuple[str, str], list[TrackCatalog]]:
         if self._version_index is None:
             self._version_index = {}
-            for c in (await self.session.execute(select(TrackCatalog))).scalars():
+            live = select(TrackCatalog).where(TrackCatalog.archived_at.is_(None))
+            for c in (await self.session.execute(live)).scalars():
                 key = (
                     loose_title_key(c.title + (f" {c.remix}" if c.remix else "")),
                     main_artist_key(c.artist),
@@ -246,7 +251,8 @@ class CatalogMatcher:
         catalog_id = self._precedent.get(
             self._row_key(track.title, track.artist, track.remix)
         )
-        return await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
+        found = await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
+        return found if found is not None and found.archived_at is None else None
 
     # Every spelling an entry has been matched under (catalog_aliases): its
     # earlier plays, its live plays, its own title and artist, and its display
@@ -264,6 +270,7 @@ class CatalogMatcher:
                     TrackCatalog.play_count,
                 )
                 .join(TrackCatalog, TrackCatalog.id == CatalogAlias.catalog_id)
+                .where(TrackCatalog.archived_at.is_(None))
                 .order_by(TrackCatalog.play_count.asc(), CatalogAlias.catalog_id.desc())
             )
             # Most played last, so it is the one kept for its key.
@@ -411,7 +418,9 @@ async def reconcile_set_tracks(
         )
         existing_play_orders = {row[0] for row in po_result.all()}
 
-    matcher = CatalogMatcher(session, owner_id)
+    # One catalog: a play is filed under the song's entry whichever key
+    # filed the entry (migration 098). New entries still record their owner.
+    matcher = CatalogMatcher(session, None)
     await matcher.prefetch(keys.pair for _, keys in work_items)
     catalog_by_pair = matcher.by_pair
 

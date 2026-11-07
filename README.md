@@ -196,6 +196,17 @@ run.
   plays) is kept there, and matching uses them, so a change to how an entry
   is shown never stops an earlier spelling matching it. Additive: it changes
   no entry and refiles no play.
+- `python -m kaianolevine_api.cleanup.merge` — groups entries that are one
+  song (the same title and artist as shown, or the same matching keys, across
+  every owner), each under its most-played entry. `--apply --group ID`
+  (repeatable) or `--apply --all` merges groups into their keepers: empty
+  fields fill from the others, every play and library file is repointed, play
+  counts and first and last played are recombined, every spelling becomes an
+  alias, and the others are archived, never deleted. Once no duplicates are
+  left, the catalog's keys become unique across owners (migration 098). The
+  catalog is one catalog: the set import files a play under the song's entry
+  whichever key filed it, archived entries are never matched or listed, and
+  any entry can be edited by a caller with `catalog.tracks.write`.
 
 ## Deployment Target
 

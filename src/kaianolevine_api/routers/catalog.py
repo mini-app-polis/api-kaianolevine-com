@@ -71,10 +71,16 @@ async def list_catalog(
 ) -> Envelope[list[CatalogListItem]]:
     """TODO: describe this function."""
 
-    stmt = select(DbCatalog).order_by(
-        DbCatalog.play_count.desc(),
-        DbCatalog.last_played.desc().nullslast(),
-        DbCatalog.id,
+    # Archived entries (merged into another, or library entries left with
+    # no files) are kept, but not listed.
+    stmt = (
+        select(DbCatalog)
+        .where(DbCatalog.archived_at.is_(None))
+        .order_by(
+            DbCatalog.play_count.desc(),
+            DbCatalog.last_played.desc().nullslast(),
+            DbCatalog.id,
+        )
     )
 
     if artist:
@@ -86,7 +92,11 @@ async def list_catalog(
     if min_play_count is not None:
         stmt = stmt.where(DbCatalog.play_count >= min_play_count)
 
-    total_stmt = select(func.count()).select_from(DbCatalog)
+    total_stmt = (
+        select(func.count())
+        .select_from(DbCatalog)
+        .where(DbCatalog.archived_at.is_(None))
+    )
     if artist:
         total_stmt = total_stmt.where(
             func.lower(DbCatalog.artist).like(f"%{artist.lower()}%")
@@ -338,12 +348,13 @@ async def patch_catalog(
     owner_id_principal: Principal = Depends(require_scope("catalog.tracks.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[CatalogDetail]:
-    """Patch mutable catalog metadata fields for one track."""
-    owner_id = owner_id_principal.subject
-    catalog_stmt = select(DbCatalog).where(
-        DbCatalog.id == id, DbCatalog.owner_id == owner_id
-    )
-    catalog = (await session.execute(catalog_stmt)).scalar_one_or_none()
+    """Patch mutable catalog metadata fields for one track.
+
+    One catalog (migration 098): the scope decides who may edit, not which
+    key filed the entry.
+    """
+    del owner_id_principal
+    catalog = await session.get(DbCatalog, id)
     if catalog is None:
         raise api_error(404, "not_found", "Catalog entry not found")
 
