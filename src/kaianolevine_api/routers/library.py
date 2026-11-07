@@ -64,7 +64,8 @@ _OPTIONAL_FIELDS = (
 )
 
 
-def _file_out(row: DbLibraryFile) -> LibraryFile:
+def file_out(row: DbLibraryFile) -> LibraryFile:
+    """A registry row as the API answers it."""
     return LibraryFile(
         id=row.id,
         drive_file_id=row.drive_file_id,
@@ -138,7 +139,7 @@ async def register_library_file(
         )
     await session.commit()
     await session.refresh(row)
-    return success_envelope(_file_out(row), count=1, total=1)
+    return success_envelope(file_out(row), count=1, total=1)
 
 
 async def _archive_unplayed_without_files(
@@ -258,7 +259,7 @@ async def list_library_files(
         .scalars()
         .all()
     )
-    data = [_file_out(r) for r in rows]
+    data = [file_out(r) for r in rows]
     return success_envelope(data, count=len(data), total=total)
 
 
@@ -323,7 +324,7 @@ async def list_library_files_needing_sync(
         .scalars()
         .all()
     )
-    data = [_file_out(r) for r in rows]
+    data = [file_out(r) for r in rows]
     return success_envelope(data, count=len(data), total=total)
 
 
@@ -372,6 +373,15 @@ async def create_library_entry(
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryEntryCreated]:
     """The song's entry, made from the library when the catalog lacks it."""
+    data = await make_library_entry(session, payload, owner_id=principal.subject)
+    return success_envelope(data, count=1, total=1)
+
+
+async def make_library_entry(
+    session: AsyncSession, payload: LibraryEntryCreate, *, owner_id: str
+) -> LibraryEntryCreated:
+    """The catalog's entry for the song, or a new library entry (no plays)
+    when it has none; commits a new entry."""
     track = IngestTrack(
         title=payload.title,
         artist=payload.artist,
@@ -383,16 +393,15 @@ async def create_library_entry(
     )
     (found,) = await lookup_catalog(session=session, tracks=[track])
     if found is not None:
-        data = LibraryEntryCreated(
+        return LibraryEntryCreated(
             entry=catalog_match(found, await load_rules(session)), created=False
         )
-        return success_envelope(data, count=1, total=1)
 
     # The title and keys a first play of the song would give its entry.
     keys = track_keys(track)
     genre, subgenre = catalog_genre(payload.genre)
     entry = DbCatalog(
-        owner_id=principal.subject,
+        owner_id=owner_id,
         title=keys.display,
         artist=catalog_artist(track.artist),
         title_normalized=keys.pair[0],
@@ -426,12 +435,10 @@ async def create_library_entry(
         (found,) = await lookup_catalog(session=session, tracks=[track])
         if found is None:
             raise
-        data = LibraryEntryCreated(
+        return LibraryEntryCreated(
             entry=catalog_match(found, await load_rules(session)), created=False
         )
-        return success_envelope(data, count=1, total=1)
     await session.refresh(entry)
-    data = LibraryEntryCreated(
+    return LibraryEntryCreated(
         entry=catalog_match(entry, await load_rules(session)), created=True
     )
-    return success_envelope(data, count=1, total=1)

@@ -90,6 +90,7 @@ async def test_a_report_stores_its_groups_with_their_files(client) -> None:
     assert files["f1"]["path"] == "House/f1.mp3"
     assert files["f1"]["title"] == "Temple"
     assert files["f1"]["bitrate_kbps"] == 320
+    assert files["f1"]["edit_label"] is None
 
 
 async def test_a_report_replaces_the_open_groups_of_its_root(client) -> None:
