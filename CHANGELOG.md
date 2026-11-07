@@ -1,3 +1,10 @@
+# [2.64.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.63.0...v2.64.0) (2026-11-07)
+
+
+### Features
+
+* **library:** archive an entry left with no plays and no present file, and bring it back when a file links to it ([8980d00](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8980d004c3736e72d92eefae4974162c09753048))
+
 # [2.63.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.62.0...v2.63.0) (2026-11-06)
 
 
