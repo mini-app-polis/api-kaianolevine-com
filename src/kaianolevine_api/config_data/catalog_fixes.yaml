@@ -79,3 +79,9 @@
     of: {title: "DJ Don't", artist: Gerald Levert}
     version: Remix
     files: [1EaNQrJ2B4bHFQMc6wizn3F6NMbI95D2f]
+
+# Two artists stored as one name.
+- find: {title: "DJ Don't", artist: Gerald Levert}
+  set: {main_artists: [Gerald Levert, Jaheim]}
+- find: {title: "DJ Don't (Remix)", artist: Gerald Levert}
+  set: {main_artists: [Gerald Levert, Jaheim]}
