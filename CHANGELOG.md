@@ -1,3 +1,10 @@
+## [2.70.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.2...v2.70.3) (2026-11-07)
+
+
+### Bug Fixes
+
+* **catalog:** fill-up takes only genres the vocabulary places and no single-character labels ([d8ac0a6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d8ac0a69e7ca4a5083cbe60c311102a0a49201af))
+
 ## [2.70.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.1...v2.70.2) (2026-11-07)
 
 
