@@ -123,6 +123,10 @@ async def link_library_file(
         catalog_id = entry.id
     else:
         assert payload.entry is not None
+        if payload.entry.preview:
+            raise api_error(
+                422, "preview_not_linkable", "A previewed entry cannot be linked"
+            )
         made = await make_library_entry(
             session, payload.entry, owner_id=principal.subject
         )

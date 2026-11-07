@@ -87,6 +87,23 @@ async def test_new_parts_the_catalog_knows_reuse_its_entry(client) -> None:
     assert data["created"] is False and data["entry"]["id"] == entry
 
 
+async def test_a_previewed_entry_cannot_be_linked(client) -> None:
+    await _register(client, "f1")
+
+    response = await client.post(
+        f"{FILES}/f1/link",
+        json={
+            "entry": {
+                "title": "Brand New Song",
+                "artist": "Nobody Yet",
+                "preview": True,
+            }
+        },
+    )
+
+    assert response.status_code == 422
+
+
 async def test_a_link_needs_exactly_one_of_entry_and_parts(client) -> None:
     await _register(client, "f1")
     assert (await client.post(f"{FILES}/f1/link", json={})).status_code == 422
