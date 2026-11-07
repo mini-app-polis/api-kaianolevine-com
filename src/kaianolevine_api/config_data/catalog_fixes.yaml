@@ -47,3 +47,28 @@
   set: {base_title: 21 Questions, version: null, main_artists: [50 Cent], featured_artists: [Nate Dogg]}
 - find: {title: Beautiful People (Feat. Khalid), artist: Ed Sheeran}
   set: {base_title: Beautiful People, version: null, main_artists: [Ed Sheeran], featured_artists: [Khalid]}
+
+# Entries the parts split left for the owner (featured artists listed as
+# main artists, or no parts at all).
+- find: {title: Twerk It Like Miley, artist: Brandon Beal}
+  set: {base_title: Twerk It Like Miley, main_artists: [Brandon Beal], featured_artists: [Christopher]}
+- find: {title: Twerk It Like Miley (Dawin Remix feat. Christopher & Dawin), artist: Brandon Beal}
+  set: {base_title: Twerk It Like Miley, version: Dawin Remix, main_artists: [Brandon Beal], featured_artists: [Christopher]}
+- find: {title: Neon Moon (with Kacey Musgraves), artist: Brooks & Dunn}
+  set: {base_title: Neon Moon, main_artists: [Brooks & Dunn], featured_artists: [Kacey Musgraves]}
+- find: {title: Left and Right (Feat. Jung Kook of BTS), artist: Charlie Puth}
+  set: {base_title: Left and Right, main_artists: [Charlie Puth], featured_artists: [Jung Kook]}
+- find: {title: Bang My Head (Feat. Sia & Fetty Wap), artist: David Guetta}
+  set: {base_title: Bang My Head, main_artists: [David Guetta], featured_artists: [Sia, Fetty Wap]}
+- find: {title: Kiss Me More (feat. SZA), artist: Doja Cat}
+  set: {base_title: Kiss Me More, main_artists: [Doja Cat], featured_artists: [SZA]}
+- find: {title: "Coast [feat. Anderson .Paak]", artist: Hailee Steinfeld}
+  set: {base_title: Coast, main_artists: [Hailee Steinfeld], featured_artists: [Anderson .Paak]}
+- find: {title: Big (feat. Gunna), artist: Rita Ora}
+  set: {base_title: Big, main_artists: [Rita Ora, David Guetta, Imanbek], featured_artists: [Gunna]}
+- find: {title: Lean On (Remix) (Taylor Swift Cover), artist: Mike Tompkins}
+  set: {base_title: Lean On, version: Cover, main_artists: [Mike Tompkins]}
+- find: {title: Candace Wessinger - Mustang Sally (2007 Remaster), artist: Wilson Pickett}
+  set: {base_title: Mustang Sally, main_artists: [Wilson Pickett]}
+- find: {title: Butterflies, artist: Max & Ali Gatie}
+  set: {base_title: Butterflies, main_artists: [MAX], featured_artists: [Ali Gatie]}

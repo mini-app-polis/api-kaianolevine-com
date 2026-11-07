@@ -185,3 +185,8 @@ def test_show_lists_the_parts_of_matching_entries() -> None:
     text = fixes.show_text([entry], "neon", DEFAULT_RULES)
     assert "Neon Moon — Kacey Musgraves, Brooks & Dunn" in text
     assert "main ['Kacey Musgraves', 'Brooks & Dunn']" in text
+
+
+def test_show_also_finds_entries_by_artist() -> None:
+    entry = _Entry(base_title="Tequila", main_artists=["Dan", "Shay"])
+    assert "Tequila — Dan, Shay" in fixes.show_text([entry], "shay", DEFAULT_RULES)

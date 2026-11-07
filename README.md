@@ -215,9 +215,9 @@ run.
   entries from `config_data/catalog_fixes.yaml` (or `--fix JSON` in its
   place): an artist renamed wherever it is credited, or one entry, found by
   how it is shown, given new parts or fields. `--apply` writes them as the
-  catalog editor would (revision kind `owner_fix`, source manual, the new
+  catalog editor would (revision kind `edit`, by `cleanup.fixes`, source manual, the new
   display kept as an alias); a fix already applied matches nothing again.
-  `--show TEXT` prints the parts of entries whose title contains TEXT.
+  `--show TEXT` prints the parts of entries whose title or artist contains TEXT.
 
 ## Deployment Target
 

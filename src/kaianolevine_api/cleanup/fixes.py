@@ -22,7 +22,7 @@ A dry run lists every entry a fix changes, with how it is shown before and
 after, and every fix that matches nothing or too much (skipped). ``--apply``
 writes the same changes the way an edit in the editor is written: the
 entry's values before and after go to ``catalog_revisions`` (kind
-``owner_fix``), its source becomes manual and its new display is kept as a
+``edit``, by ``cleanup.fixes``), its source becomes manual and its new display is kept as a
 spelling it matches under. A fix already applied matches nothing the next
 time, so running the list twice changes nothing more. ``--show TEXT`` prints
 the parts of every entry whose shown title contains TEXT, and writes
@@ -53,7 +53,9 @@ from ..services.reconciliation import record_alias
 
 log = logger_mod.get_logger()
 
-KIND = "owner_fix"
+#: The revision kind the catalog editor writes; a fix is an edit made from a
+#: reviewed list rather than the form ("by" says which).
+KIND = "edit"
 FIXES_PATH = (
     Path(__file__).resolve().parent.parent / "config_data" / "catalog_fixes.yaml"
 )
