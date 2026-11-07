@@ -1,3 +1,15 @@
+# [2.70.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.69.0...v2.70.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.6.0 ([b6acc9b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b6acc9b45d2a4d0270f426f1b2fd3a5f54d92904))
+
+
+### Features
+
+* **library:** keep each file's own tags and why it is unidentified ([b044b09](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b044b0972b8cea57c923378f04e3deb9c0e0ef56))
+
 # [2.69.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.68.0...v2.69.0) (2026-11-07)
 
 
