@@ -1,3 +1,10 @@
+# [2.65.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.64.0...v2.65.0) (2026-11-07)
+
+
+### Features
+
+* **catalog:** merge duplicate entries into one catalog with a reviewable clean-up command ([d9ced09](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d9ced09c64d444f9bd38dcc6882562ee204d33ce))
+
 # [2.64.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.63.0...v2.64.0) (2026-11-07)
 
 
