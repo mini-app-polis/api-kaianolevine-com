@@ -1,0 +1,49 @@
+# Owner-reviewed fixes to catalog entries, applied by
+# `python -m kaianolevine_api.cleanup.fixes` (dry run first, then --apply).
+# A fix already applied matches nothing the next time, so the list can stay.
+# Kinds and fields: see the command's docstring.
+
+# Artist names as the artist styles them (the catalog's copies from play
+# history had flattened their capitals).
+- rename: {from: Jp Cooper, to: JP Cooper}
+- rename: {from: Astr, to: ASTR}
+- rename: {from: Haevn, to: HAEVN}
+- rename: {from: Frenship, to: FRENSHIP}
+- rename: {from: R.Lum.R, to: R.LUM.R}
+- rename: {from: Emeline, to: EMELINE}
+- rename: {from: Ezi, to: EZI}
+- rename: {from: Max, to: MAX}
+- rename: {from: They., to: THEY.}
+- rename: {from: Inna, to: INNA}
+
+# Titles and versions.
+- find: {title: Drugs, artist: Tai Verdes}
+  set: {base_title: DRUGS, main_artists: [Tai Verdes]}
+- find: {title: Cheap Thrills (Rac Remix), artist: Sia}
+  set: {base_title: Cheap Thrills, version: RAC Remix, main_artists: [Sia]}
+- find: {title: Clothes Off (Great Good Fine Ok Remix), artist: Ria Mae}
+  set: {base_title: Clothes Off, version: Great Good Fine OK Remix, main_artists: [Ria Mae]}
+- find: {title: Be As You Are (Jordanxl Remix), artist: Mike Posner}
+  set: {base_title: Be As You Are, version: JordanXL Remix, main_artists: [Mike Posner]}
+- find: {title: ConfettI, artist: Charlotte Cardin}
+  set: {base_title: Confetti, main_artists: [Charlotte Cardin]}
+- find: {title: "519", artist: Matt Wertz}
+  set: {base_title: "5:19", main_artists: [Matt Wertz]}
+- find: {title: Bodie, artist: Bryce Fox}
+  set: {base_title: Bodies, main_artists: [Bryce Fox]}
+
+# Credits.
+- find: {title: Beg, artist: Jack}
+  set: {base_title: Beg, main_artists: [Jack & Jack], featured_artists: []}
+- find: {title: Cold Water, artist: Major Lazer}
+  set: {base_title: Cold Water, main_artists: [Major Lazer], featured_artists: [Justin Bieber, MØ]}
+- find: {title: Drugs, artist: Upsahl}
+  set: {base_title: Drugs, main_artists: [UPSAHL], featured_artists: [Two Feet]}
+- find: {title: Body Language, artist: Kid Ink}
+  set: {base_title: Body Language, main_artists: [Kid Ink], featured_artists: [Usher, Tinashe]}
+- find: {title: 9 to 5, artist: Kelly Clarkson}
+  set: {base_title: 9 to 5, main_artists: [Kelly Clarkson, Dolly Parton], featured_artists: []}
+- find: {title: "21 Questions [Clean] [feat. Nate Dogg]", artist: 50 Cent}
+  set: {base_title: 21 Questions, version: null, main_artists: [50 Cent], featured_artists: [Nate Dogg]}
+- find: {title: Beautiful People (Feat. Khalid), artist: Ed Sheeran}
+  set: {base_title: Beautiful People, version: null, main_artists: [Ed Sheeran], featured_artists: [Khalid]}
