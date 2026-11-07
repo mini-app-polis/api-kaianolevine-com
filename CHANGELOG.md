@@ -1,3 +1,15 @@
+# [2.68.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.67.0...v2.68.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.5.0 ([6355af4](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6355af4cdbf04a152e7f392a67a95f34ef2bc614))
+
+
+### Features
+
+* **library:** duplicate groups, and resolving a group by picking its keeper ([fad9164](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fad9164a3a4cb823c844296bfea117b0700005e2))
+
 # [2.67.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.66.0...v2.67.0) (2026-11-07)
 
 
