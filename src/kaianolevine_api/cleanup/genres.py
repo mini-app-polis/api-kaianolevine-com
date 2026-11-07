@@ -25,17 +25,22 @@ import sys
 import uuid
 from collections import defaultdict
 
+from mini_app_polis import logger as logger_mod
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CatalogRevision, TrackCatalog
 from ..services.genres import load_map, place_genre
 
+log = logger_mod.get_logger()
+
 KIND = "genre_map"
 
 
 @dataclasses.dataclass(frozen=True)
 class Change:
+    """One entry's genre and subgenre, before and after the mapping."""
+
     catalog_id: uuid.UUID
     title: str
     artist: str
@@ -46,6 +51,8 @@ class Change:
 
 @dataclasses.dataclass
 class Plan:
+    """Every entry the mapping changes, and the values it does not know."""
+
     changes: list[Change] = dataclasses.field(default_factory=list)
     #: Genre value -> entries the map does not know, left as they are.
     unmapped: dict[str, int] = dataclasses.field(default_factory=dict)
@@ -152,6 +159,7 @@ def report(the_plan: Plan) -> str:
 
 
 async def run(apply_changes: bool) -> str:
+    """Plan against DATABASE_URL, apply when asked, and return the report."""
     from ..config import get_settings
     from ..database import get_sessionmaker
 
@@ -168,12 +176,13 @@ async def run(apply_changes: bool) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """The command line: a dry run, or ``--apply``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--apply", action="store_true", help="write the changes (default: dry run)"
     )
     args = parser.parse_args(argv)
-    print(asyncio.run(run(args.apply)))
+    log.info("%s", asyncio.run(run(args.apply)))
     return 0
 
 

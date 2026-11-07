@@ -40,6 +40,8 @@ _ANY_JOINER = re.compile(r"\s*,\s*|\s+(?:&|and|x)\s+", re.IGNORECASE)
 
 @dataclasses.dataclass(frozen=True)
 class Parts:
+    """A song's parts: base title, version, main and featured artists."""
+
     base_title: str
     version: str | None
     main_artists: tuple[str, ...]
@@ -48,6 +50,9 @@ class Parts:
 
 @dataclasses.dataclass(frozen=True)
 class Proposal:
+    """Parts proposed for an entry, what the split did, and why a person
+    must look at it, if anything."""
+
     parts: Parts
     #: What the split did: featured, co_artists, version, release_label.
     notes: tuple[str, ...]
@@ -56,6 +61,7 @@ class Proposal:
 
     @property
     def clear(self) -> bool:
+        """Whether nothing about the split needs a person."""
         return not self.ambiguous
 
 

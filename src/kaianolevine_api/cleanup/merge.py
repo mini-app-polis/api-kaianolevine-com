@@ -46,6 +46,7 @@ import sys
 import uuid
 from typing import Any
 
+from mini_app_polis import logger as logger_mod
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +54,8 @@ from ..models import CatalogAlias, CatalogRevision, LibraryFile, TrackCatalog
 from ..models import Track as DbTrack
 from ..services.display import Rules, load_rules, render
 from ..services.reconciliation import record_alias
+
+log = logger_mod.get_logger()
 
 KIND = "merge"
 
@@ -98,6 +101,9 @@ def _keeper_order(entry: TrackCatalog) -> tuple[int, Any, str]:
 
 @dataclasses.dataclass
 class Group:
+    """Entries that are one song: the keeper, the others, how each is
+    shown, and why they were grouped."""
+
     keeper: TrackCatalog
     others: list[TrackCatalog]
     shown: dict[uuid.UUID, tuple[str, str]]
@@ -105,6 +111,7 @@ class Group:
 
     @property
     def id(self) -> uuid.UUID:
+        """The group's name: its keeper's id."""
         return self.keeper.id
 
     def fills(self) -> dict[str, tuple[Any, uuid.UUID]]:
@@ -364,6 +371,7 @@ def report(groups: list[Group]) -> str:
 
 
 async def run(apply_changes: bool, chosen: set[uuid.UUID] | None) -> str:
+    """Plan against DATABASE_URL, apply when asked, and return the report."""
     from ..config import get_settings
     from ..database import get_sessionmaker
 
@@ -386,6 +394,7 @@ async def run(apply_changes: bool, chosen: set[uuid.UUID] | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """The command line: a dry run, ``--apply --group ID`` or ``--apply --all``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--apply", action="store_true", help="merge (default: dry run)")
     parser.add_argument(
@@ -403,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.apply and not args.all and not args.group:
         parser.error("--apply needs --group ID (repeatable) or --all")
     chosen = None if args.all else set(args.group)
-    print(asyncio.run(run(args.apply, chosen)))
+    log.info("%s", asyncio.run(run(args.apply, chosen)))
     return 0
 
 

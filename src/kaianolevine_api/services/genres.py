@@ -40,6 +40,8 @@ class GenrePlace:
 
 @dataclasses.dataclass(frozen=True)
 class GenreMap:
+    """The broad genres, and where every known genre value goes."""
+
     broad: tuple[str, ...]
     places: dict[str, GenrePlace]
 
