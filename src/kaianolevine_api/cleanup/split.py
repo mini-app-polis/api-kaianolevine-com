@@ -28,6 +28,7 @@ import sys
 import uuid
 from collections import Counter
 
+from mini_app_polis import logger as logger_mod
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,11 +37,15 @@ from ..services.display import Rules, load_rules, render
 from ..services.reconciliation import record_alias
 from ..services.song_parts import Proposal, propose
 
+log = logger_mod.get_logger()
+
 KIND = "split_parts"
 
 
 @dataclasses.dataclass(frozen=True)
 class Item:
+    """One entry, its proposed parts, and the title and artist they show."""
+
     catalog_id: uuid.UUID
     title: str
     artist: str
@@ -50,11 +55,14 @@ class Item:
 
     @property
     def display_changes(self) -> bool:
+        """Whether the parts would show the entry differently."""
         return self.shown != (self.title, self.artist)
 
 
 @dataclasses.dataclass
 class Plan:
+    """The proposals: the clear group, and the ambiguous ones."""
+
     clear: list[Item] = dataclasses.field(default_factory=list)
     ambiguous: list[Item] = dataclasses.field(default_factory=list)
 
@@ -194,6 +202,7 @@ def report(the_plan: Plan) -> str:
 
 
 async def run(apply_changes: bool, include: set[uuid.UUID] | None = None) -> str:
+    """Plan against DATABASE_URL, apply when asked, and return the report."""
     from ..config import get_settings
     from ..database import get_sessionmaker
 
@@ -209,6 +218,7 @@ async def run(apply_changes: bool, include: set[uuid.UUID] | None = None) -> str
 
 
 def main(argv: list[str] | None = None) -> int:
+    """The command line: a dry run, ``--apply``, and ``--include ID``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--apply", action="store_true", help="write the parts (default: dry run)"
@@ -222,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         help="an ambiguous entry to write as proposed (repeatable; with --apply)",
     )
     args = parser.parse_args(argv)
-    print(asyncio.run(run(args.apply, set(args.include))))
+    log.info("%s", asyncio.run(run(args.apply, set(args.include))))
     return 0
 
 

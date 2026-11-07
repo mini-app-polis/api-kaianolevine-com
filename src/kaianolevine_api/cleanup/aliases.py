@@ -20,6 +20,7 @@ import dataclasses
 import sys
 import uuid
 
+from mini_app_polis import logger as logger_mod
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,12 +28,16 @@ from ..models import LivePlay
 from ..schemas import IngestTrack
 from ..services.reconciliation import lookup_catalog, record_alias
 
+log = logger_mod.get_logger()
+
 #: Distinct spellings resolved per lookup call.
 BATCH = 200
 
 
 @dataclasses.dataclass
 class Plan:
+    """The live-play spellings that resolve to an entry, and how many do not."""
+
     found: list[tuple[str, str, uuid.UUID]] = dataclasses.field(default_factory=list)
     not_found: int = 0
 
@@ -65,6 +70,7 @@ async def plan(session: AsyncSession) -> Plan:
 
 
 async def apply(session: AsyncSession, the_plan: Plan) -> int:
+    """Record each resolved spelling as an alias of its entry."""
     for title, artist, catalog_id in the_plan.found:
         await record_alias(
             session,
@@ -79,6 +85,7 @@ async def apply(session: AsyncSession, the_plan: Plan) -> int:
 
 
 def report(the_plan: Plan) -> str:
+    """The dry run: how many spellings resolve, and how many do not."""
     return (
         f"{len(the_plan.found)} live-play spellings resolve to an entry; "
         f"{the_plan.not_found} resolve to none and are left alone."
@@ -86,6 +93,7 @@ def report(the_plan: Plan) -> str:
 
 
 async def run(apply_changes: bool) -> str:
+    """Plan against DATABASE_URL, apply when asked, and return the report."""
     from ..config import get_settings
     from ..database import get_sessionmaker
 
@@ -101,12 +109,13 @@ async def run(apply_changes: bool) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """The command line: a dry run, or ``--apply``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--apply", action="store_true", help="record the aliases (default: dry run)"
     )
     args = parser.parse_args(argv)
-    print(asyncio.run(run(args.apply)))
+    log.info("%s", asyncio.run(run(args.apply)))
     return 0
 
 

@@ -23,6 +23,11 @@ exemptions:
     models: [DispatchClaim, SpotifyTokenReminder, SignalStreak, StandardsCatalog]
 
   - rule: API-006
+    reason: "DisplayRules is the catalog's one set of display rules (a single row, id 1): how every entry's parts are written out as the title and artist shown, for every reader. It is configuration of the whole catalog, not anyone's content, so there is no owner to scope a row to. Writing it needs the catalog write scope at the route; reading it is public, like the catalog it renders (deejay-cog ADR-0008, decision 11)."
+    paths: [src/kaianolevine_api/models.py]
+    models: [DisplayRules]
+
+  - rule: API-006
     reason: "The shared WCS knowledge graph built from lesson sources: canonical people, entities, their aliases, definitions and relations, and the per-source extractions, attributions and references they come from. It is shared vocabulary rather than per-user content; access to what a source says is scoped through the source (wcs_sources.owner_id and its grants), not by a column on each derived row."
     paths: [src/kaianolevine_api/models.py]
     models: [WcsInstructor, WcsInstructorAlias, WcsSourceExtraction, WcsEntity, WcsEntityAlias, WcsEntityDefinition, WcsEntityRelation, WcsSourceAttribution, WcsSourceReference, WcsDrillPurpose, WcsTechniqueRequirement]

@@ -49,7 +49,6 @@ from .catalog import catalog_match
 
 router = APIRouter()
 
-SCOPE = "catalog.library.write"
 
 #: Optional registration fields: a later registration writes only those it
 #: sends, so a value deejay-cog does not have this time keeps the old one.
@@ -96,7 +95,7 @@ def _file_out(row: DbLibraryFile) -> LibraryFile:
 )
 async def register_library_file(
     payload: LibraryFileRegister,
-    principal: Principal = Depends(require_scope(SCOPE)),
+    principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryFile]:
     """Upsert one registry row by its Drive id."""
@@ -180,7 +179,7 @@ async def _archive_unplayed_without_files(
 )
 async def mark_library_files_absent(
     payload: LibraryFilesAbsentRequest,
-    principal: Principal = Depends(require_scope(SCOPE)),
+    principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryFilesAbsentResult]:
     """Mark the named files not present, then archive any entry they leave
@@ -220,7 +219,7 @@ async def list_library_files(
     library_root_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-    principal: Principal = Depends(require_scope(SCOPE)),
+    principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[LibraryFile]]:
     """List registry rows."""
@@ -270,7 +269,7 @@ async def list_library_files(
 )
 async def create_library_entry(
     payload: LibraryEntryCreate,
-    principal: Principal = Depends(require_scope(SCOPE)),
+    principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryEntryCreated]:
     """The song's entry, made from the library when the catalog lacks it."""
