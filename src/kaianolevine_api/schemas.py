@@ -407,6 +407,9 @@ class DuplicateFileOut(BaseModel):
     size_bytes: int | None = Field(default=None, description="Its size in bytes.")
     duration_secs: float | None = Field(default=None, description="Its length.")
     bitrate_kbps: int | None = Field(default=None, description="Its bitrate.")
+    edit_label: str | None = Field(
+        default=None, description="Its release label (Clean, Radio Edit, …)."
+    )
     present: bool | None = Field(
         default=None, description="Whether it is still in the library."
     )
