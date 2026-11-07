@@ -17,6 +17,13 @@ Reads DATABASE_URL. The list is ``config_data/catalog_fixes.yaml``; each
   entry, or every match with ``"all": true``. ``set`` takes the editor's
   fields: base_title, version, main_artists, featured_artists, genre,
   subgenre, bpm, release_year and label; null clears one.
+- **new version**: ``{"new_version": {"of": {"title": ..., "artist": ...},
+  "version": "Remix", "files": [drive file ids]}}``, a library file that is
+  another version of the entry found (as an entry fix finds it) gets an
+  entry of its own: the found entry's parts and owned fields with that
+  version and no BPM (the file's fills it), and no plays. The files are
+  linked to it. When an entry is already shown that way, the files are
+  linked to that one and nothing is made.
 
 A dry run lists every entry a fix changes, with how it is shown before and
 after, and every fix that matches nothing or too much (skipped). ``--apply``
@@ -26,7 +33,9 @@ entry's values before and after go to ``catalog_revisions`` (kind
 spelling it matches under. A fix already applied matches nothing the next
 time, so running the list twice changes nothing more. ``--show TEXT`` prints
 the parts of every entry whose shown title or artist contains TEXT, and
-writes nothing. Run ``--apply`` only after the owner has reviewed the dry run.
+writes nothing. A new version's entry records its values (``before`` empty),
+the entry it was made from and the files moved to it, in the same
+revision kind. Run ``--apply`` only after the owner has reviewed the dry run.
 """
 
 from __future__ import annotations
@@ -44,12 +53,12 @@ from typing import Any
 
 import yaml
 from mini_app_polis import logger as logger_mod
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import CatalogRevision, TrackCatalog
+from ..models import CatalogRevision, LibraryFile, TrackCatalog
 from ..services.display import Rules, load_rules, render
-from ..services.reconciliation import record_alias
+from ..services.reconciliation import IngestTrack, record_alias, track_keys
 
 log = logger_mod.get_logger()
 
@@ -108,7 +117,24 @@ def values_of(entry: Any) -> dict[str, Any]:
 
 
 def check(fix: Mapping[str, Any]) -> None:
-    """Raise :class:`FixError` when ``fix`` is not a rename or an entry fix."""
+    """Raise :class:`FixError` when ``fix`` is not a rename, an entry fix or
+    a new version."""
+    if "new_version" in fix:
+        spec = fix["new_version"]
+        if not isinstance(spec, Mapping):
+            raise FixError(f"new_version needs of, version and files: {dict(fix)}")
+        of, files = spec.get("of"), spec.get("files")
+        if not isinstance(of, Mapping) or not of.get("title"):
+            raise FixError(f"new_version needs of.title: {dict(fix)}")
+        if not str(spec.get("version") or "").strip():
+            raise FixError(f"new_version needs a version: {dict(fix)}")
+        if (
+            not isinstance(files, list)
+            or not files
+            or not all(isinstance(f, str) and f.strip() for f in files)
+        ):
+            raise FixError(f"new_version needs files (Drive ids): {dict(fix)}")
+        return
     if "rename" in fix:
         rename = fix["rename"]
         if (
@@ -141,16 +167,33 @@ class Change:
 
 
 @dataclasses.dataclass
+class NewVersion:
+    """Library files to link to another version of an entry: an entry made
+    for them, or ``existing_id`` when one is already shown that way."""
+
+    source_id: uuid.UUID
+    shown_source: tuple[str, str]
+    values: dict[str, Any]
+    shown: tuple[str, str]
+    files: dict[str, uuid.UUID | None]
+    existing_id: uuid.UUID | None = None
+
+
+@dataclasses.dataclass
 class Plan:
     """What the fixes change, and the fixes that were skipped."""
 
     changes: list[Change] = dataclasses.field(default_factory=list)
     skipped: list[str] = dataclasses.field(default_factory=list)
+    versions: list[NewVersion] = dataclasses.field(default_factory=list)
 
 
 def _label(fix: Mapping[str, Any]) -> str:
     if "rename" in fix:
         return f"rename {fix['rename']['from']!r} -> {fix['rename']['to']!r}"
+    if "new_version" in fix:
+        spec = fix["new_version"]
+        return f"{_label({'find': spec['of']})} as {spec['version']!r}"
     find = fix["find"]
     artist = f" by {find['artist']!r}" if find.get("artist") else ""
     return f"{find['title']!r}{artist}"
@@ -173,11 +216,81 @@ def _shown(entry: Any, values: Mapping[str, Any], rules: Rules) -> tuple[str, st
     return shown.title, shown.artist
 
 
+def _matching(
+    rows: Sequence[Any], shown: Mapping[uuid.UUID, tuple[str, str]], find: Any
+) -> list[Any]:
+    title, artist = fold(find["title"]), fold(find.get("artist"))
+    return [
+        e
+        for e in rows
+        if fold(shown[e.id][0]) == title and artist in fold(shown[e.id][1])
+    ]
+
+
+def _plan_version(
+    rows: Sequence[Any],
+    shown: Mapping[uuid.UUID, tuple[str, str]],
+    fix: Mapping[str, Any],
+    files: Mapping[str, Any],
+    rules: Rules,
+    out: Plan,
+) -> None:
+    spec, label = fix["new_version"], _label(fix)
+    live = [e for e in rows if getattr(e, "archived_at", None) is None]
+    matches = _matching(live, shown, spec["of"])
+    if len(matches) != 1:
+        out.skipped.append(f"{label}: matches {len(matches)} entries, not one")
+        return
+    [source] = matches
+    values = {**values_of(source), "version": str(spec["version"]).strip()}
+    values["bpm"] = None
+    if values["base_title"] is None or not values["main_artists"]:
+        out.skipped.append(f"{label}: the entry has no parts to make a version of")
+        return
+    target = _shown(source, values, rules)
+    existing = next(
+        (
+            e
+            for e in live
+            if e.id != source.id
+            and tuple(fold(x) for x in shown[e.id]) == tuple(fold(x) for x in target)
+        ),
+        None,
+    )
+    moving: dict[str, uuid.UUID | None] = {}
+    for drive_id in (f.strip() for f in spec["files"]):
+        row = files.get(drive_id)
+        if row is None:
+            out.skipped.append(f"{label}: file {drive_id} is not in the library")
+            continue
+        if existing is None or row.catalog_id != existing.id:
+            moving[drive_id] = row.catalog_id
+    if existing is not None and not moving:
+        return  # already made, and its files linked
+    if not moving:
+        out.skipped.append(f"{label}: none of its files are in the library")
+        return
+    out.versions.append(
+        NewVersion(
+            source_id=source.id,
+            shown_source=shown[source.id],
+            values=values,
+            shown=target,
+            files=moving,
+            existing_id=existing.id if existing is not None else None,
+        )
+    )
+
+
 def plan_fixes(
-    entries: Iterable[Any], fixes: Sequence[Mapping[str, Any]], rules: Rules
+    entries: Iterable[Any],
+    fixes: Sequence[Mapping[str, Any]],
+    rules: Rules,
+    files: Mapping[str, Any] | None = None,
 ) -> Plan:
     """Apply ``fixes`` in order to copies of ``entries``; find entries by how
-    they are shown before any fix."""
+    they are shown before any fix. ``files`` are the library files a new
+    version names, by Drive id."""
     rows = list(entries)
     shown = {e.id: _shown(e, values_of(e), rules) for e in rows}
     work: dict[uuid.UUID, dict[str, Any]] = {}
@@ -204,13 +317,10 @@ def plan_fixes(
             if not hit:
                 out.skipped.append(f"{label}: no entry has that artist")
             continue
-        find = fix["find"]
-        title, artist = fold(find["title"]), fold(find.get("artist"))
-        matches = [
-            e
-            for e in rows
-            if fold(shown[e.id][0]) == title and artist in fold(shown[e.id][1])
-        ]
+        if "new_version" in fix:
+            _plan_version(rows, shown, fix, files or {}, rules, out)
+            continue
+        matches = _matching(rows, shown, fix["find"])
         if not matches:
             out.skipped.append(f"{label}: matches no entry")
             continue
@@ -257,6 +367,21 @@ def report(the_plan: Plan) -> str:
         for name in EDITABLE:
             if c.before[name] != c.after[name]:
                 lines.append(f"    {name}: {c.before[name]!r} -> {c.after[name]!r}")
+    lines.append(f"{len(the_plan.versions)} new versions:")
+    for v in the_plan.versions:
+        made = (
+            f"link to the existing {v.existing_id}"
+            if v.existing_id
+            else "a new entry, no plays"
+        )
+        lines.append(
+            f"  {v.shown[0]} — {v.shown[1]}  ({made}), from {v.source_id}"
+            f"  {v.shown_source[0]} — {v.shown_source[1]}"
+        )
+        if v.existing_id is None:
+            lines.append("    " + ", ".join(f"{k} {v.values[k]!r}" for k in EDITABLE))
+        for drive_id, old in v.files.items():
+            lines.append(f"    file {drive_id}: linked to {old} -> this entry")
     lines.append(f"{len(the_plan.skipped)} fixes skipped:")
     lines += [f"  {s}" for s in the_plan.skipped]
     return "\n".join(lines)
@@ -308,8 +433,77 @@ async def apply(session: AsyncSession, the_plan: Plan) -> int:
             source="display",
         )
         written += 1
+    for version in the_plan.versions:
+        written += await _apply_version(session, version, rules)
     await session.commit()
     return written
+
+
+async def _apply_version(
+    session: AsyncSession, version: NewVersion, rules: Rules
+) -> int:
+    """Make the version's entry (unless it exists) and link its files."""
+    source = await session.get(TrackCatalog, version.source_id)
+    if source is None:
+        return 0
+    moved = [
+        {"drive_file_id": drive_id, "from": str(old) if old else None}
+        for drive_id, old in version.files.items()
+    ]
+    if version.existing_id is not None:
+        entry = await session.get(TrackCatalog, version.existing_id)
+        if entry is None:
+            return 0
+        before = values_of(entry)
+        after: dict[str, Any] = {**before, "by": "cleanup.fixes"}
+    else:
+        title, artist = version.shown
+        keys = track_keys(IngestTrack(title=title, artist=artist))
+        entry = TrackCatalog(
+            owner_id=source.owner_id,
+            title=title,
+            artist=artist,
+            title_normalized=keys.pair[0],
+            artist_normalized=keys.pair[1],
+            source="manual",
+            confidence=source.confidence,
+            play_count=0,
+            first_played=None,
+            last_played=None,
+            **version.values,
+        )
+        session.add(entry)
+        await session.flush()
+        before = {}
+        after = {
+            **version.values,
+            "by": "cleanup.fixes",
+            "made_from": str(source.id),
+        }
+        shown = render(entry, rules)
+        await record_alias(
+            session,
+            catalog_id=entry.id,
+            title=shown.title,
+            artist=shown.artist,
+            remix=shown.remix,
+            source="display",
+        )
+    await session.execute(
+        update(LibraryFile)
+        .where(LibraryFile.drive_file_id.in_(list(version.files)))
+        .values(catalog_id=entry.id)
+    )
+    entry.archived_at = None
+    session.add(
+        CatalogRevision(
+            catalog_id=entry.id,
+            kind=KIND,
+            before=before,
+            after={**after, "library_files_moved": moved},
+        )
+    )
+    return 1
 
 
 def load_fixes(
@@ -338,7 +532,19 @@ async def run(apply_changes: bool, fixes: list[dict[str, Any]], show: str = "") 
         entries = (await session.execute(select(TrackCatalog))).scalars().all()
         if show:
             return show_text(entries, show, rules)
-        the_plan = plan_fixes(entries, fixes, rules)
+        wanted = [
+            f.strip()
+            for fix in fixes
+            if "new_version" in fix
+            for f in fix["new_version"]["files"]
+        ]
+        files = {}
+        if wanted:
+            rows = await session.execute(
+                select(LibraryFile).where(LibraryFile.drive_file_id.in_(wanted))
+            )
+            files = {r.drive_file_id: r for r in rows.scalars().all()}
+        the_plan = plan_fixes(entries, fixes, rules, files)
         text = report(the_plan)
         if apply_changes:
             text += f"\nApplied: {await apply(session, the_plan)} entries."

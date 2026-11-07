@@ -72,3 +72,10 @@
   set: {base_title: Mustang Sally, main_artists: [Wilson Pickett]}
 - find: {title: Butterflies, artist: Max & Ali Gatie}
   set: {base_title: Butterflies, main_artists: [MAX], featured_artists: [Ali Gatie]}
+
+# A library file that is another version of an entry, given an entry of
+# its own.
+- new_version:
+    of: {title: "DJ Don't", artist: Gerald Levert}
+    version: Remix
+    files: [1EaNQrJ2B4bHFQMc6wizn3F6NMbI95D2f]
