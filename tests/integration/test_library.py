@@ -273,6 +273,47 @@ async def test_files_gone_are_marked_not_present_and_come_back_when_seen(
     assert back["present"] is True
 
 
+async def _archived_at(async_engine, catalog_id: str):
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        row = await session.get(DbCatalog, uuid.UUID(catalog_id))
+        assert row is not None
+        return row.archived_at
+
+
+async def test_an_unplayed_entry_whose_last_file_goes_is_archived_and_comes_back(
+    client, async_engine
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _register(client, _file("drive-2", entry))
+
+    await client.post(ABSENT, json={"drive_file_ids": ["drive-1"]})
+    assert await _archived_at(async_engine, entry) is None  # drive-2 is still there
+
+    await client.post(ABSENT, json={"drive_file_ids": ["drive-2"]})
+    assert await _archived_at(async_engine, entry) is not None
+
+    await _register(client, _file("drive-2", entry))
+    assert await _archived_at(async_engine, entry) is None
+
+
+async def test_a_played_entry_is_not_archived_when_its_files_go(
+    client, async_engine
+) -> None:
+    await _ingest(client, {"title": "Boogie 2Nite", "artist": "Tweet"})
+    match = (
+        await client.post(
+            "/v1/catalog/lookup",
+            json={"tracks": [{"title": "Boogie 2Nite", "artist": "Tweet"}]},
+        )
+    ).json()["data"][0]
+    await _register(client, _file("drive-1", match["id"]))
+
+    await client.post(ABSENT, json={"drive_file_ids": ["drive-1"]})
+    assert await _archived_at(async_engine, match["id"]) is None
+
+
 async def test_listing_filters_by_root_and_pages(client) -> None:
     for n in range(3):
         await _register(client, _file(f"drive-{n}", None))
