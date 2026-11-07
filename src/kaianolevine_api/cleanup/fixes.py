@@ -25,8 +25,8 @@ entry's values before and after go to ``catalog_revisions`` (kind
 ``edit``, by ``cleanup.fixes``), its source becomes manual and its new display is kept as a
 spelling it matches under. A fix already applied matches nothing the next
 time, so running the list twice changes nothing more. ``--show TEXT`` prints
-the parts of every entry whose shown title contains TEXT, and writes
-nothing. Run ``--apply`` only after the owner has reviewed the dry run.
+the parts of every entry whose shown title or artist contains TEXT, and
+writes nothing. Run ``--apply`` only after the owner has reviewed the dry run.
 """
 
 from __future__ import annotations
@@ -263,19 +263,19 @@ def report(the_plan: Plan) -> str:
 
 
 def show_text(entries: Iterable[Any], text: str, rules: Rules) -> str:
-    """The parts of every entry whose shown title contains ``text``."""
+    """The parts of every entry whose shown title or artist contains ``text``."""
     needle = fold(text)
     lines = []
     for e in entries:
         title, artist = _shown(e, values_of(e), rules)
-        if needle in fold(title):
+        if needle in fold(title) or needle in fold(artist):
             v = values_of(e)
             lines.append(f"{e.id}  {title} — {artist}")
             lines.append(
                 f"    base_title {v['base_title']!r}, version {v['version']!r}, "
                 f"main {v['main_artists']}, featured {v['featured_artists']}"
             )
-    return "\n".join(lines) or f"no entry shown with {text!r} in its title"
+    return "\n".join(lines) or f"no entry shown with {text!r} in its title or artist"
 
 
 async def apply(session: AsyncSession, the_plan: Plan) -> int:
