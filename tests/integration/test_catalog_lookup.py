@@ -134,16 +134,20 @@ async def test_an_entry_filed_under_another_key_is_found(client, async_engine) -
     assert match["title"] == "Thong Song (Radio Edit)"
 
 
-async def test_the_most_played_of_several_owners_entries_wins(
-    client, async_engine
-) -> None:
+async def test_an_archived_entry_is_never_matched(client, async_engine) -> None:
+    # One catalog (migration 098): a merged-away entry keeps its keys but is
+    # archived, and the live entry under the same keys is the song.
+    import datetime as dt
+
     maker = async_sessionmaker(async_engine, expire_on_commit=False)
     async with maker() as session:
-        session.add(_entry("fleet-shared-secret", "R&B", 29))
+        merged = _entry("fleet-shared-secret", "R&B", 29)
+        merged.archived_at = dt.datetime(2026, 11, 6, tzinfo=dt.UTC)
+        session.add(merged)
         session.add(_entry("deejay-cog", "Pop", 2))
         await session.commit()
     (match,) = await _lookup(client, _track("Thong Song", "Amber Mack"))
-    assert match["genre"] == "R&B"
+    assert match["genre"] == "Pop"
 
 
 async def test_spaces_and_symbols_are_ignored_when_nothing_matches_exactly(

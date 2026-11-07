@@ -92,7 +92,9 @@ async def test_version_joins_its_existing_entry_under_another_spelling(client) -
     assert await _songs(client) == {"Cruel - Piano Acoustic": 2, "Cruel": 1}
 
 
-async def test_version_held_by_another_owner_gets_its_keys(async_engine) -> None:
+async def test_version_held_by_another_owner_is_the_same_entry(async_engine) -> None:
+    # One catalog (migration 098): the play is filed under the entry another
+    # owner's key made, not a new entry of the caller's own.
     sessionmaker = async_sessionmaker(
         async_engine, expire_on_commit=False, autoflush=False
     )
@@ -131,15 +133,10 @@ async def test_version_held_by_another_owner_gets_its_keys(async_engine) -> None
         await session.flush()
 
         track = (await session.execute(select(DbTrack))).scalars().one()
-        ours = await session.get(DbCatalog, track.catalog_id)
-        assert ours is not None and ours.owner_id == "dev-owner"
-        assert (ours.title, ours.title_normalized, ours.artist_normalized) == (
-            "Cruel - Piano Acoustic",
-            "cruel - piano acoustic",
-            "oli fox",
-        )
-        await session.refresh(theirs)
-        assert theirs.play_count == 3
+        assert track.catalog_id == theirs.id
+        entries = (await session.execute(select(DbCatalog))).scalars().all()
+        assert [e.id for e in entries] == [theirs.id]
+        assert theirs.play_count == 4
 
 
 async def test_a_row_seen_before_files_where_it_did_before(async_engine) -> None:

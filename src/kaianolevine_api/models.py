@@ -175,12 +175,15 @@ class TrackCatalog(Base):
         nullable=False,
     )
 
+    # One catalog (migration 098): a song's keys are unique among live
+    # entries, whichever owner filed it; archived entries keep theirs.
     __table_args__ = (
-        UniqueConstraint(
-            "owner_id",
+        Index(
+            "ux_track_catalog_norm_title_artist",
             "title_normalized",
             "artist_normalized",
-            name="uq_track_catalog_owner_norm_title_artist",
+            unique=True,
+            postgresql_where=text("archived_at IS NULL"),
         ),
     )
 

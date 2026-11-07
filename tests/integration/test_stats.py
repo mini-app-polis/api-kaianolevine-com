@@ -363,9 +363,10 @@ async def test_collection_empty_db(client) -> None:
 
 
 async def test_one_song_under_two_owners_is_one_song(client, db_session) -> None:
-    # Owner on machine-written rows changed at the identity cutovers, so the
-    # same song can have one catalog entry per owner. Simulate that: ingest,
-    # move what's on record to the old owner, then ingest again.
+    # Owner on machine-written rows changed at the identity cutovers. With
+    # one catalog (migration 098) a later play under the new owner is filed
+    # under the old owner's entry, so the song keeps one entry. Simulate it:
+    # ingest, move what's on record to the old owner, then ingest again.
     from sqlalchemy import text
 
     await _ingest(client, "2024-06-01", [_track("Song A", "Artist X")])
@@ -380,7 +381,7 @@ async def test_one_song_under_two_owners_is_one_song(client, db_session) -> None
     catalog_rows = (
         await db_session.execute(text("SELECT count(*) FROM track_catalog"))
     ).scalar_one()
-    assert catalog_rows == 3
+    assert catalog_rows == 2  # Song A's one entry, and Song B
 
     collection = (await client.get("/v1/stats/collection")).json()
     assert collection["meta"]["total"] == 2
