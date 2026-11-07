@@ -159,6 +159,12 @@ class TrackCatalog(Base):
     first_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     last_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
 
+    # Set when the entry is left with no plays and no present library file
+    # (migration 097); cleared when a present file links to it again.
+    archived_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
