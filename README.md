@@ -214,7 +214,9 @@ run.
 - `python -m kaianolevine_api.cleanup.fixes` — owner-reviewed fixes to
   entries from `config_data/catalog_fixes.yaml` (or `--fix JSON` in its
   place): an artist renamed wherever it is credited, or one entry, found by
-  how it is shown, given new parts or fields. `--apply` writes them as the
+  how it is shown, given new parts or fields, or a library file that is
+  another version of an entry given an entry of its own (linked to it, no
+  plays). `--apply` writes them as the
   catalog editor would (revision kind `edit`, by `cleanup.fixes`, source manual, the new
   display kept as an alias); a fix already applied matches nothing again.
   `--show TEXT` prints the parts of entries whose title or artist contains TEXT.

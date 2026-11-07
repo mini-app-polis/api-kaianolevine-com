@@ -190,3 +190,97 @@ def test_show_lists_the_parts_of_matching_entries() -> None:
 def test_show_also_finds_entries_by_artist() -> None:
     entry = _Entry(base_title="Tequila", main_artists=["Dan", "Shay"])
     assert "Tequila — Dan, Shay" in fixes.show_text([entry], "shay", DEFAULT_RULES)
+
+
+@dataclasses.dataclass
+class _File:
+    catalog_id: uuid.UUID | None
+
+
+def _version_fix(files=("drive-1",), title="DJ Don't"):
+    return {
+        "new_version": {
+            "of": {"title": title, "artist": "Gerald Levert"},
+            "version": "Remix",
+            "files": list(files),
+        }
+    }
+
+
+def test_a_new_version_copies_the_entry_with_the_version_and_moves_its_file() -> None:
+    song = _Entry(
+        base_title="DJ Don't",
+        main_artists=["Gerald Levert"],
+        genre="R&B",
+        bpm=96.0,
+        release_year=2004,
+    )
+    plan = fixes.plan_fixes(
+        [song], [_version_fix()], DEFAULT_RULES, {"drive-1": _File(song.id)}
+    )
+
+    [made] = plan.versions
+    assert made.existing_id is None
+    assert made.source_id == song.id
+    assert made.shown == ("DJ Don't (Remix)", "Gerald Levert")
+    assert made.values["version"] == "Remix"
+    assert made.values["genre"] == "R&B"
+    assert made.values["release_year"] == 2004
+    assert made.values["bpm"] is None
+    assert made.files == {"drive-1": song.id}
+    assert plan.changes == [] and plan.skipped == []
+
+
+def test_a_new_version_already_shown_links_the_file_to_that_entry() -> None:
+    song = _Entry(base_title="DJ Don't", main_artists=["Gerald Levert"])
+    remix = _Entry(
+        base_title="DJ Don't", version="Remix", main_artists=["Gerald Levert"]
+    )
+    plan = fixes.plan_fixes(
+        [song, remix], [_version_fix()], DEFAULT_RULES, {"drive-1": _File(song.id)}
+    )
+
+    [made] = plan.versions
+    assert made.existing_id == remix.id
+
+
+def test_a_new_version_already_made_and_linked_changes_nothing() -> None:
+    song = _Entry(base_title="DJ Don't", main_artists=["Gerald Levert"])
+    remix = _Entry(
+        base_title="DJ Don't", version="Remix", main_artists=["Gerald Levert"]
+    )
+    plan = fixes.plan_fixes(
+        [song, remix], [_version_fix()], DEFAULT_RULES, {"drive-1": _File(remix.id)}
+    )
+
+    assert plan.versions == [] and plan.skipped == []
+
+
+def test_a_new_version_skips_a_file_not_in_the_library() -> None:
+    song = _Entry(base_title="DJ Don't", main_artists=["Gerald Levert"])
+    plan = fixes.plan_fixes([song], [_version_fix()], DEFAULT_RULES, {})
+
+    assert plan.versions == []
+    assert len(plan.skipped) == 2
+    assert "not in the library" in plan.skipped[0]
+
+
+def test_a_new_version_of_no_entry_is_skipped() -> None:
+    plan = fixes.plan_fixes(
+        [], [_version_fix(title="Missing")], DEFAULT_RULES, {"drive-1": _File(None)}
+    )
+    assert plan.versions == []
+    assert "matches 0 entries" in plan.skipped[0]
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        {"of": {"artist": "A"}, "version": "Remix", "files": ["x"]},
+        {"of": {"title": "T"}, "version": " ", "files": ["x"]},
+        {"of": {"title": "T"}, "version": "Remix", "files": []},
+    ],
+)
+def test_a_new_version_written_wrong_is_refused(spec) -> None:
+    with pytest.raises(fixes.FixError):
+        fixes.check({"new_version": spec})
