@@ -1,3 +1,11 @@
+## [2.71.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.71.0...v2.71.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **catalog:** cleanup.fixes --show also finds entries by artist ([5e109c7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5e109c770f07d8b1ebccd50049b56acdde34801e))
+* **catalog:** cleanup.fixes records revisions as edits, finds entries by artist, and fixes the split's left-out entries ([489e073](https://github.com/mini-app-polis/api-kaianolevine-com/commit/489e073d2b6de8f3776b692081a7aa853aed5902))
+
 # [2.71.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.70.4...v2.71.0) (2026-11-07)
 
 
