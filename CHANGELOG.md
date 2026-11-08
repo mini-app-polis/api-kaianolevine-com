@@ -1,3 +1,10 @@
+## [2.75.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.4...v2.75.5) (2026-11-08)
+
+
+### Bug Fixes
+
+* **catalog:** keep a version that follows a feat. credit, so a cover or remix never matches the plain song ([e4fb78d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e4fb78ddccb9061aafee6ca0ae840af259be3fa3))
+
 ## [2.75.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.3...v2.75.4) (2026-11-08)
 
 
