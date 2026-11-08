@@ -60,7 +60,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.14
 
       # CD-020. `uv sync` without --locked silently re-resolves when the
       # lockfile and pyproject.toml disagree, so a stale lock passes CI and
