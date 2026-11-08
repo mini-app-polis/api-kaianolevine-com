@@ -1,3 +1,15 @@
+# [2.75.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.74.1...v2.75.0) (2026-11-08)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 8.10.1 ([b56a417](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b56a417a994d4c2530489dd7f94d84babe294211))
+
+
+### Features
+
+* run on Python 3.14 ([8960a42](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8960a42a85c7050729a09ea8c60330435cc3c6cd))
+
 ## [2.74.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.74.0...v2.74.1) (2026-11-07)
 
 
