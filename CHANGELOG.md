@@ -1,3 +1,10 @@
+## [2.75.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.3...v2.75.4) (2026-11-08)
+
+
+### Bug Fixes
+
+* **ci-signals:** re-run a dependency audit that failed before scanning, and dispatch dependency-fix only for repositories it can re-lock ([6daf77e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6daf77e895a8abeb7a6aa7dd616401b1b7a75826))
+
 ## [2.75.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.2...v2.75.3) (2026-11-08)
 
 
