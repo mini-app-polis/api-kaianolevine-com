@@ -150,6 +150,7 @@ jobs:
             website-astro-software
             website-astro-wcsmn
             ecosystem-standards
+            infra
           permission-contents: write
 
       - name: Run the contract suites against the new API
@@ -158,7 +159,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SHA: ${{ github.event.deployment.sha }}
         run: |
-          for repo in common-python-utils website-astro-wcs website-astro-software website-astro-wcsmn ecosystem-standards; do
+          for repo in common-python-utils website-astro-wcs website-astro-software website-astro-wcsmn ecosystem-standards infra; do
             gh api "repos/mini-app-polis/$repo/dispatches" \
               -f event_type=dev-api-deployed \
               -f "client_payload[api_sha]=$SHA"
