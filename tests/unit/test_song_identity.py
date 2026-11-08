@@ -152,3 +152,21 @@ def test_loose_keys_ignore_release_labels_but_keep_versions():
     assert loose_title_key("All In My Head (Flex) (Super Clean)") == (
         loose_title_key("All In My Head (Flex) (Feat. Fetty Wap)")
     )
+
+
+def test_loose_keys_keep_a_version_that_follows_a_feat_credit():
+    # The credit goes; the version after it stays, so a cover or remix never
+    # keys as the plain song.
+    assert loose_title_key("Starboy ft. Daft Punk (Alex Aiono Cover)") == (
+        loose_title_key("Starboy (Alex Aiono Cover)")
+    )
+    assert loose_title_key("Starboy ft. Daft Punk (Alex Aiono Cover)") != (
+        loose_title_key("Starboy")
+    )
+    assert loose_title_key("Song ft. X (Lash Remix)") == "songlashremix"
+    assert loose_title_key("Song feat. X - Lash Remix") == loose_title_key(
+        "Song (Lash Remix)"
+    )
+    # A release label after the credit is still dropped.
+    assert loose_title_key("Song ft. X (Radio Edit)") == loose_title_key("Song")
+    assert loose_title_key("Starboy ft. Daft Punk") == loose_title_key("Starboy")
