@@ -33,6 +33,11 @@ exemptions:
     models: [LibraryDuplicateGroup, LibraryDuplicateMember]
 
   - rule: API-006
+    reason: "The library reconcile's review state (migration 102): the differences deejay-cog's last run reported between each library file and its catalog entry, keyed by Drive file like the library registry, which has no owner column either; and the single row of approvals its write runs apply. Differences are reported, and approvals read and seeded, only by deejay-cog's machine under catalog.library.write; they are reviewed and approvals set only under catalog.tracks.write, the catalog-editor role the owner holds. There is no other owner to scope a row to."
+    paths: [src/kaianolevine_api/models.py]
+    models: [LibraryReconcileDifference, LibraryReconcileApprovals]
+
+  - rule: API-006
     reason: "The shared WCS knowledge graph built from lesson sources: canonical people, entities, their aliases, definitions and relations, and the per-source extractions, attributions and references they come from. It is shared vocabulary rather than per-user content; access to what a source says is scoped through the source (wcs_sources.owner_id and its grants), not by a column on each derived row."
     paths: [src/kaianolevine_api/models.py]
     models: [WcsInstructor, WcsInstructorAlias, WcsSourceExtraction, WcsEntity, WcsEntityAlias, WcsEntityDefinition, WcsEntityRelation, WcsSourceAttribution, WcsSourceReference, WcsDrillPurpose, WcsTechniqueRequirement]
