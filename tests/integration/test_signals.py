@@ -573,6 +573,7 @@ GH = "https://api.github.com/repos/mini-app-polis"
 JOBS = f"{GH}/infra/actions/runs/99/jobs"
 RERUN = f"{GH}/infra/actions/runs/99/rerun-failed-jobs"
 DISPATCH = f"{GH}/.github/actions/workflows/dependency-fix.yml/dispatches"
+CONTENTS = f"{GH}/infra/contents/"
 
 
 @pytest.fixture
@@ -616,6 +617,7 @@ async def test_a_failed_dependency_audit_dispatches_the_fix_instead(token) -> No
     respx.get(url__startswith=JOBS).mock(
         return_value=_jobs("security / dependency audit (python)")
     )
+    respx.get(url__startswith=CONTENTS).mock(return_value=Response(200))
     rerun = respx.post(RERUN).mock(return_value=Response(201))
     dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
 
@@ -643,6 +645,7 @@ async def test_a_refused_remedy_reports_that_none_started(token) -> None:
     respx.get(url__startswith=JOBS).mock(
         return_value=_jobs("security / dependency audit (python)")
     )
+    respx.get(url__startswith=CONTENTS).mock(return_value=Response(200))
     respx.post(DISPATCH).mock(return_value=Response(403))
 
     assert await ci_signals.remediate(_failing_signal(), get_settings()) is False
@@ -668,6 +671,7 @@ async def test_a_failed_audit_on_dev_dispatches_the_fix_without_a_signal(
     respx.get(url__startswith=JOBS).mock(
         return_value=_jobs("security / dependency audit (python)")
     )
+    respx.get(url__startswith=CONTENTS).mock(return_value=Response(200))
     dispatch = respx.post(DISPATCH).mock(return_value=Response(204))
 
     resp = await _post(client, _run("failure", branch="dev"))
