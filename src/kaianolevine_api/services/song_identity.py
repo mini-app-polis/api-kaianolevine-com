@@ -147,13 +147,18 @@ def catalog_title_key(display: str) -> str:
     return display.lower()
 
 
-_TRAILING_FEAT = re.compile(r"\s+(feat\.?|ft\.?|featuring)\s+.*$", re.IGNORECASE)
+#: A feat. credit outside brackets, up to the version that may follow it
+#: ("Starboy ft. Daft Punk (Alex Aiono Cover)" keeps its cover).
+_TRAILING_FEAT = re.compile(
+    r"\s+(feat\.?|ft\.?|featuring)\s+.*?(?=\s*[\[(]|\s+-\s+|$)", re.IGNORECASE
+)
 
 
 def _without_release_labels(text: str) -> str:
     """``text`` without the parts that only label a release: bracketed or
     " - " parts that are release labels ("[Clean]", "(feat. Nate Dogg)",
-    "- Radio Edit") and a trailing feat. credit. A version is kept."""
+    "- Radio Edit") and an unbracketed feat. credit. A version is kept, also
+    one that follows the credit."""
     kept = _BRACKETED.sub(
         lambda m: "" if is_release_label(m.group(1)) else m.group(0), text
     )
