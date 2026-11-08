@@ -12,11 +12,15 @@ its own streak, and none could ever recover.
 ``failure`` and ``timed_out`` are failing and remediable, once per streak,
 by :func:`remediate`, which picks the remedy from the jobs that failed:
 
-- the dependency audit: dispatch the fleet's ``dependency-fix`` workflow for
-  the repository, which re-locks what the advisory flagged and opens a
-  ``fix(deps)`` pull request into ``dev``. Re-running would fail the same way.
-  A failed audit on any other branch dispatches the same fix, without a
-  streak (:func:`fix_audit_off_signal_branches`).
+- the dependency audit, failed on a finding: dispatch the fleet's
+  ``dependency-fix`` workflow for the repository, which re-locks what the
+  advisory flagged and opens a ``fix(deps)`` pull request into ``dev``.
+  Re-running would fail the same way. A failed audit on any other branch
+  dispatches the same fix, without a streak
+  (:func:`fix_audit_off_signal_branches`). An audit job that failed before
+  it audited anything (the scanner would not install) is not a finding and
+  is re-run like any other failure. A repository with no lock the fixer
+  re-locks has no remedy to dispatch, and escalates.
 - anything else: re-run the failed jobs, which clears the common case of a
   dependency not yet published. ``action_required`` is failing but not
 remediable, since a re-run would wait for the same approval. ``success``
@@ -52,6 +56,17 @@ DEPENDENCY_AUDIT_JOB = "dependency audit"
 #: a ``repository`` input naming the one repository to fix.
 DEPENDENCY_FIX_WORKFLOW = "dependency-fix.yml"
 DEPENDENCY_FIX_REF = "main"
+
+#: The steps of the audit job that report findings: the scan itself
+#: ("Audit Python dependencies") and the advisory-database check ("Check Node
+#: dependencies against GitHub's advisory database"). A failure in any other
+#: step of that job, such as installing the scanner, found nothing.
+AUDIT_FINDING_STEPS = ("Audit ", "Check ")
+
+#: The locks the fixer re-locks, read on the branch it fixes. A repository
+#: with neither (an npm ``package-lock.json``) is one it cannot fix.
+DEPENDENCY_FIX_LOCKS = ("uv.lock", "pnpm-lock.yaml")
+DEPENDENCY_FIX_BASE = "dev"
 
 #: The job number Dependabot appends to each update run's name.
 _DEPENDABOT_JOB = re.compile(r" - Update #\d+$")
@@ -142,10 +157,10 @@ async def _github(
         return None
 
 
-async def failed_job_names(
+async def failed_jobs(
     repo: str, run_id: int, *, token: str, settings: Settings
-) -> list[str] | None:
-    """The names of the run's failed jobs, or None if they could not be read."""
+) -> list[dict[str, Any]] | None:
+    """The run's failed jobs, with their steps, or None if they could not be read."""
     response = await _github(
         "GET",
         f"/repos/{repo}/actions/runs/{run_id}/jobs?filter=latest&per_page=100",
@@ -156,10 +171,50 @@ async def failed_job_names(
         return None
     jobs = response.json().get("jobs") or []
     return [
-        str(job.get("name") or "")
+        job
         for job in jobs
         if isinstance(job, dict) and job.get("conclusion") in _REMEDIABLE
     ]
+
+
+def audit_found_something(jobs: list[dict[str, Any]]) -> bool:
+    """Whether a failed dependency audit among the jobs failed on a finding.
+
+    A failed audit job that lists no steps is taken as a finding, as every
+    failed audit was before its steps were read.
+    """
+    for job in jobs:
+        if DEPENDENCY_AUDIT_JOB not in str(job.get("name") or ""):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list) or not steps:
+            return True
+        for step in steps:
+            if (
+                isinstance(step, dict)
+                and step.get("conclusion") in _REMEDIABLE
+                and str(step.get("name") or "").startswith(AUDIT_FINDING_STEPS)
+            ):
+                return True
+    return False
+
+
+async def dependency_fix_covers(repo: str, *, token: str, settings: Settings) -> bool:
+    """Whether the fixer can re-lock the repository: a lock it knows on its base.
+
+    When a lock's presence cannot be read, the dispatch goes ahead and the
+    fixer decides, as before the locks were checked.
+    """
+    for lock in DEPENDENCY_FIX_LOCKS:
+        response = await _github(
+            "GET",
+            f"/repos/{repo}/contents/{lock}?ref={DEPENDENCY_FIX_BASE}",
+            token=token,
+            settings=settings,
+        )
+        if response is None or response.status_code != 404:
+            return True
+    return False
 
 
 async def rerun_failed_jobs(
@@ -218,8 +273,15 @@ async def remediate(signal: Signal, settings: Settings) -> bool:
         logger.warning("ci signals: cannot remediate %s (no token or run)", signal.key)
         return False
 
-    failed = await failed_job_names(repo, run_id, token=token, settings=settings)
-    if failed and any(DEPENDENCY_AUDIT_JOB in name for name in failed):
+    failed = await failed_jobs(repo, run_id, token=token, settings=settings)
+    if failed and audit_found_something(failed):
+        if not await dependency_fix_covers(repo, token=token, settings=settings):
+            logger.info(
+                "ci signals: %s failed its dependency audit, but dependency-fix "
+                "cannot re-lock it",
+                signal.key,
+            )
+            return False
         logger.info(
             "ci signals: %s failed its dependency audit; dispatching the fix",
             signal.key,
@@ -269,8 +331,16 @@ async def fix_audit_off_signal_branches(
     if not token or not isinstance(run_id, int):
         return False
 
-    failed = await failed_job_names(full_name, run_id, token=token, settings=settings)
-    if not failed or not any(DEPENDENCY_AUDIT_JOB in job for job in failed):
+    failed = await failed_jobs(full_name, run_id, token=token, settings=settings)
+    if not failed or not audit_found_something(failed):
+        return False
+    if not await dependency_fix_covers(full_name, token=token, settings=settings):
+        logger.info(
+            "ci signals: %s failed its dependency audit on %s, but dependency-fix "
+            "cannot re-lock it",
+            full_name,
+            branch,
+        )
         return False
     logger.info(
         "ci signals: %s failed its dependency audit on %s; dispatching the fix",
