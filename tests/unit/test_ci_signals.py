@@ -1,7 +1,8 @@
 """The CI detector: its streak key, and which remedy a failed run gets.
 
-Dependabot names every update run after its job, so two failing runs of
-the same update would be two workflows unless the job number is dropped.
+Dependabot names every run after its job, so two failing runs of the same
+update or graph refresh would be two workflows unless the job number is
+dropped.
 """
 
 from __future__ import annotations
@@ -59,6 +60,16 @@ def test_a_later_dependabot_success_recovers_the_streak() -> None:
     failed = _signal("failure", "uv in /. for virtualenv - Update #1648979896")
     passed = _signal("success", "uv in /. for virtualenv - Update #1649999999")
 
+    assert passed.state == "recovered"
+    assert passed.key == failed.key
+
+
+def test_a_later_dependabot_graph_update_recovers_the_streak() -> None:
+    failed = _signal("failure", "Graph Update: uv in /. #1691021664")
+    passed = _signal("success", "Graph Update: uv in /. #1691103717")
+
+    assert failed.key == "mini-app-polis/db-ops/Graph Update: uv in /.@main"
+    assert failed.title == "db-ops: Graph Update: uv in /. failing on main"
     assert passed.state == "recovered"
     assert passed.key == failed.key
 

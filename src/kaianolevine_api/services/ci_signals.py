@@ -4,10 +4,11 @@ The detector reads the ``workflow_run`` deliveries the org webhook already
 brings (routers/notifications.py), independently of what is announced on
 Discord. A run in a listed org on a listed branch is a signal, keyed by
 repo, workflow and branch, so one workflow failing on one branch is one
-streak however many runs fail. Dependabot names each update run after its
-job ("uv in /. for virtualenv - Update #1648979896"), so the job number is
-dropped from the workflow name first: without that, every run would open
-its own streak, and none could ever recover.
+streak however many runs fail. Dependabot names each of its runs after its
+job, an update ("uv in /. for virtualenv - Update #1648979896") or a
+dependency-graph refresh ("Graph Update: uv in /. #1691021664"), so the job
+number is dropped from the workflow name first: without that, every run would
+open its own streak, and none could ever recover.
 
 ``failure`` and ``timed_out`` are failing and remediable, once per streak,
 by :func:`remediate`, which picks the remedy from the jobs that failed:
@@ -68,8 +69,9 @@ AUDIT_FINDING_STEPS = ("Audit ", "Check ")
 DEPENDENCY_FIX_LOCKS = ("uv.lock", "pnpm-lock.yaml")
 DEPENDENCY_FIX_BASE = "dev"
 
-#: The job number Dependabot appends to each update run's name.
-_DEPENDABOT_JOB = re.compile(r" - Update #\d+$")
+#: The job number Dependabot appends to each run's name: " - Update #N" on
+#: an update, " #N" on a dependency-graph refresh.
+_DEPENDABOT_JOB = re.compile(r"(?: - Update)? #\d+$")
 
 
 def workflow_name(name: str) -> str:
