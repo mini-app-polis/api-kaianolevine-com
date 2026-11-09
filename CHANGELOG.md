@@ -1,3 +1,10 @@
+## [2.76.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.76.0...v2.76.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **reconcile:** drop fill-up differences the catalog would refuse ([81f6161](https://github.com/mini-app-polis/api-kaianolevine-com/commit/81f6161ef29ec2ed8b5a9df4aadfc43221d68263))
+
 # [2.76.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.6...v2.76.0) (2026-11-09)
 
 
