@@ -371,6 +371,32 @@ async def test_listing_filters_by_root_and_pages(client) -> None:
     assert [r["drive_file_id"] for r in rest] == ["drive-2"]
 
 
+async def test_paging_after_a_row_neither_repeats_nor_skips_a_file(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("early", None))
+    for n in range(3):
+        await _register(client, _file(f"drive-{n}", entry))
+    identified = {"identification_status": "identified", "limit": 2}
+
+    first = (await client.get(FILES, params=identified)).json()["data"]
+    assert [r["drive_file_id"] for r in first] == ["drive-0", "drive-1"]
+
+    # Linked between pages: it was first seen before them all, so an offset
+    # would now land one row back and repeat drive-1.
+    await _register(client, _file("early", entry))
+    rest = (
+        await client.get(FILES, params={**identified, "after": first[-1]["id"]})
+    ).json()["data"]
+    assert [r["drive_file_id"] for r in rest] == ["drive-2"]
+
+
+async def test_paging_after_an_unknown_row_is_not_found(client) -> None:
+    response = await client.get(
+        FILES, params={"after": "00000000-0000-0000-0000-000000000000"}
+    )
+    assert response.status_code == 404, response.text
+
+
 # ── What a sync has to write ──────────────────────────────────────────────
 
 
