@@ -1,3 +1,10 @@
+# [2.77.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.76.1...v2.77.0) (2026-11-09)
+
+
+### Features
+
+* **identity:** the owner-console key holds the catalog-editor role, for catalog corrections the owner runs ([685da43](https://github.com/mini-app-polis/api-kaianolevine-com/commit/685da433671f48015933392e6543b083f8366c4d))
+
 ## [2.76.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.76.0...v2.76.1) (2026-11-09)
 
 
