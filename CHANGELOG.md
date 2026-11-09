@@ -1,3 +1,15 @@
+# [2.76.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.6...v2.76.0) (2026-11-09)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.1.0 ([24afaad](https://github.com/mini-app-polis/api-kaianolevine-com/commit/24afaad26b6ad1479351ea73d72d933c374caaf9))
+
+
+### Features
+
+* **library:** page the library files after a row, so files linked or gone earlier in the order neither repeat nor skip one ([c46d99c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/c46d99c696bd37f44e5437002f9b41d7a53ef444))
+
 ## [2.75.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.5...v2.75.6) (2026-11-09)
 
 
