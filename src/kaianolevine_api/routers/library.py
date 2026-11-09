@@ -18,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
-from sqlalchemy import func, literal, or_, select, tuple_, update
+from sqlalchemy import func, literal, null, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +86,11 @@ def file_out(row: DbLibraryFile) -> LibraryFile:
         last_seen=row.last_seen,
         last_synced=row.last_synced,
         tags=LibraryFileTags(**row.tags) if row.tags else None,
+        synced=(
+            LibraryFileTags(**row.synced_values)
+            if row.synced_values is not None
+            else None
+        ),
         identify_note=row.identify_note,
     )
 
@@ -126,6 +131,10 @@ async def register_library_file(
             values[name] = getattr(payload, name)
     if "synced_at" in sent:
         values["last_synced"] = payload.synced_at
+        # Identify or the reconcile wrote to the file: the next library sync
+        # records its values afresh before it writes anything. SQL NULL, not
+        # JSON null, so the sync list finds it.
+        values["synced_values"] = null()
     if "tags" in sent:
         values["tags"] = (
             payload.tags.model_dump(exclude_none=True) if payload.tags else None
@@ -293,8 +302,9 @@ async def list_library_files(
     description=(
         "One page of the present, linked files whose catalog entry or the "
         "display rules changed after the catalog's values were last written "
-        "to them, or that never had them written; oldest first, optionally "
-        "under one library root. Requires catalog.library.write."
+        "to them, that never had them written, or whose synced values are "
+        "not recorded; oldest first, optionally under one library root. "
+        "Requires catalog.library.write."
     ),
 )
 async def list_library_files_needing_sync(
@@ -319,6 +329,7 @@ async def list_library_files_needing_sync(
         DbLibraryFile.identification_status == "identified",
         or_(
             DbLibraryFile.last_synced.is_(None),
+            DbLibraryFile.synced_values.is_(None),
             DbLibraryFile.last_synced < shown_changed,
         ),
     ]
@@ -357,8 +368,9 @@ async def list_library_files_needing_sync(
     summary="Record that files now carry the catalog's values",
     description=(
         "Each registered file named gets synced_at as when the catalog's "
-        "values were last written to it. An id the registry does not hold "
-        "is ignored. Requires catalog.library.write."
+        "values were last written to it, and its synced values from values "
+        "when they name it. An id the registry does not hold is ignored. "
+        "Requires catalog.library.write."
     ),
 )
 async def mark_library_files_synced(
@@ -366,7 +378,7 @@ async def mark_library_files_synced(
     principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryFilesSyncedResult]:
-    """Set last_synced on the named files."""
+    """Set last_synced on the named files, and the synced values sent."""
     result = await session.execute(
         update(DbLibraryFile)
         .where(DbLibraryFile.drive_file_id.in_(payload.drive_file_ids))
@@ -374,6 +386,14 @@ async def mark_library_files_synced(
         .returning(DbLibraryFile.id)
     )
     marked = len(result.all())
+    named = set(payload.drive_file_ids)
+    for drive_file_id, values in payload.values.items():
+        if drive_file_id in named:
+            await session.execute(
+                update(DbLibraryFile)
+                .where(DbLibraryFile.drive_file_id == drive_file_id)
+                .values(synced_values=values.model_dump())
+            )
     await session.commit()
     return success_envelope(LibraryFilesSyncedResult(marked=marked), count=1, total=1)
 

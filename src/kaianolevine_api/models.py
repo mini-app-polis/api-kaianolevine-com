@@ -306,6 +306,9 @@ class LibraryFile(Base):
     )
     tags: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     identify_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The owned fields as the catalog showed them at the last library sync
+    #: (migration 106).
+    synced_values: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class LibraryDuplicateGroup(Base):
