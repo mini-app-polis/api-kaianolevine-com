@@ -18,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -222,7 +222,10 @@ async def mark_library_files_absent(
         "One page of the registry, oldest first, filtered by the catalog "
         "entry the files link to, their identification status, whether they "
         "are present, their library root, or whether the owner asked for "
-        "them to go to Drive's trash. Requires catalog.library.write."
+        "them to go to Drive's trash. Page with `offset`, or with `after`: "
+        "the id of the last row of the page before, so rows that join or "
+        "leave the filter earlier in the order neither repeat nor skip a "
+        "row. Requires catalog.library.write."
     ),
 )
 async def list_library_files(
@@ -233,11 +236,22 @@ async def list_library_files(
     trash_requested: Annotated[bool | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    after: Annotated[uuid.UUID | None, Query()] = None,
     principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[list[LibraryFile]]:
     """List registry rows."""
     filters = []
+    after_filter = None
+    if after is not None:
+        last = await session.get(DbLibraryFile, after)
+        if last is None:
+            raise api_error(404, "not_found", "Library file not found")
+        # Rows are never deleted (a file gone from Drive is marked absent),
+        # so the row a page ended on is always there to resume after.
+        after_filter = tuple_(DbLibraryFile.first_seen, DbLibraryFile.id) > tuple_(
+            literal(last.first_seen), literal(last.id)
+        )
     if catalog_id is not None:
         filters.append(DbLibraryFile.catalog_id == catalog_id)
     if identification_status is not None:
@@ -259,6 +273,7 @@ async def list_library_files(
             await session.execute(
                 select(DbLibraryFile)
                 .where(*filters)
+                .where(*([] if after_filter is None else [after_filter]))
                 .order_by(DbLibraryFile.first_seen, DbLibraryFile.id)
                 .limit(limit)
                 .offset(offset)
