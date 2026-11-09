@@ -1,3 +1,11 @@
+# [2.79.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.78.1...v2.79.0) (2026-11-09)
+
+
+### Features
+
+* **library:** record the owned fields each library file was last synced with ([3f7afc2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3f7afc27c5d8112c30d40cff39efbf7bdbcfba32))
+* **library:** record the owned fields each library file was last synced with ([fbcffbc](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fbcffbc3487049d938c9e85965674f5003456513))
+
 ## [2.78.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.78.0...v2.78.1) (2026-11-09)
 
 
