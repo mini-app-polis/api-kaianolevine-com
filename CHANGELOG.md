@@ -1,3 +1,10 @@
+## [2.78.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.78.0...v2.78.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **ci-signals:** drop the job number from Dependabot graph-update run names so a later pass recovers the streak ([52d3562](https://github.com/mini-app-polis/api-kaianolevine-com/commit/52d3562a7fb2e9978f9c817a77c9e19e21f6355c))
+
 # [2.78.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.77.1...v2.78.0) (2026-11-09)
 
 
