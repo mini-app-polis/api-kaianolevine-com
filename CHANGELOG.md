@@ -1,3 +1,10 @@
+## [2.77.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.77.0...v2.77.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **sets:** venue names keep the apostrophe their set file wrote as an underscore ([6c6a888](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6c6a8888a6e9a33c4e154732b52b5f7ae0530dc2))
+
 # [2.77.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.76.1...v2.77.0) (2026-11-09)
 
 
