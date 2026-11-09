@@ -25,7 +25,10 @@ dependencies = [
   "pyyaml>=6.0,<7.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+# Installed by every `uv sync` and `uv run` (uv's default group), so a
+# rebuilt .venv always has the pre-commit hook's tools; deploys leave it
+# out with --no-dev.
 dev = [
   "pytest>=9.0.3,<10.0",
   "pytest-asyncio>=1.0,<2.0",
