@@ -307,17 +307,19 @@ MACHINES: tuple[Machine, ...] = (
     # The key the owner's local scripts use: rotator-cog's rotate.py, run by
     # hand for a rotation the owner does himself, records that rotation here;
     # and a reviewed catalog correction, run by the owner, edits entries as
-    # his catalog editor does. It holds those two roles and nothing else, not
-    # even notifier: a script on the owner's machine has no run report to
-    # post, and a key that leaves the fleet's hosts should be able to do as
-    # little as its jobs need.
+    # his catalog editor does; and the owner asks deejay-cog for a run now
+    # instead of waiting for its schedule. It holds those three roles and
+    # nothing else, not even notifier: a script on the owner's machine has no
+    # run report to post, and a key that leaves the fleet's hosts should be
+    # able to do as little as its jobs need.
     Machine(
         name="owner-console",
-        roles=("secrets-rotator", "catalog-editor"),
+        roles=("secrets-rotator", "catalog-editor", "deejay-trigger"),
         notes=(
             "GET and POST /v1/secrets/rotation-events, from the owner's local "
             "scripts (rotator-cog's rotate.py); PATCH /v1/catalog/{id}, from a "
-            "catalog correction the owner runs."
+            "catalog correction the owner runs; POST /v1/deejay/runs, a run "
+            "the owner asks for."
         ),
     ),
     # A Claude session working with the owner files the board's manual tasks
