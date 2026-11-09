@@ -301,10 +301,10 @@ async def test_the_rotator_machine_records_rotations_and_asks_for_tasks() -> Non
 # ── the owner's local scripts ─────────────────────────────────────────────
 
 
-def test_the_owner_console_holds_only_the_rotator_and_catalog_editor_roles() -> None:
+def test_the_owner_console_holds_only_its_three_roles() -> None:
     console = identity_registry.declared("owner-console")
     assert console is not None
-    assert console.roles == ("secrets-rotator", "catalog-editor")
+    assert console.roles == ("secrets-rotator", "catalog-editor", "deejay-trigger")
     assert console.key_env_var == "OWNER_CONSOLE_API_KEY"
     assert console.task_sources == ()
     assert not console.development_only
