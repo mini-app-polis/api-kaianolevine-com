@@ -406,11 +406,20 @@ async def _needing(client) -> list[str]:
     return [r["drive_file_id"] for r in response.json()["data"]]
 
 
+#: The owned fields a sync records for a file linked to "Temple".
+TEMPLE = {"title": "Temple", "artist": "Thomas Gold"}
+
+
+def _marked(*drive_ids: str, synced_at: str = "2030-01-01T00:00:00Z") -> dict:
+    return {
+        "drive_file_ids": list(drive_ids),
+        "synced_at": synced_at,
+        "values": {i: TEMPLE for i in drive_ids},
+    }
+
+
 async def _synced(client, *drive_ids: str) -> int:
-    response = await client.post(
-        SYNCED,
-        json={"drive_file_ids": list(drive_ids), "synced_at": "2030-01-01T00:00:00Z"},
-    )
+    response = await client.post(SYNCED, json=_marked(*drive_ids))
     assert response.status_code == 200, response.text
     return response.json()["data"]["marked"]
 
@@ -425,15 +434,54 @@ async def test_a_linked_file_never_synced_needs_a_sync_until_marked(client) -> N
     assert await _needing(client) == []
 
 
+async def test_a_sync_records_each_files_values_and_lists_them(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _register(client, _file("drive-2", entry))
+
+    response = await client.post(
+        SYNCED,
+        json={
+            "drive_file_ids": ["drive-1", "drive-2"],
+            "synced_at": "2030-01-01T00:00:00Z",
+            "values": {"drive-1": {**TEMPLE, "bpm": "128"}, "elsewhere": TEMPLE},
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    rows = {
+        r["drive_file_id"]: r
+        for r in (await client.get(FILES, params={"catalog_id": entry})).json()["data"]
+    }
+    assert rows["drive-1"]["synced"]["bpm"] == "128"
+    assert rows["drive-1"]["synced"]["genre"] is None
+    # Marked without values: it has none recorded, so it stays on the list.
+    assert rows["drive-2"]["synced"] is None
+    assert await _needing(client) == ["drive-2"]
+
+
+async def test_registering_a_file_as_synced_clears_its_values(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await _synced(client, "drive-1")
+    assert await _needing(client) == []
+
+    # Identify or the reconcile wrote to it: the next sync records it afresh.
+    row = await _register(
+        client, _file("drive-1", entry, synced_at="2030-01-02T00:00:00Z")
+    )
+
+    assert row["synced"] is None
+    assert await _needing(client) == ["drive-1"]
+
+
 async def test_an_entry_edit_puts_only_its_files_back_on_the_list(client) -> None:
     entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
     other = (await _entry(client, "Oops", "Tweet"))["entry"]["id"]
     await _register(client, _file("drive-1", entry))
     await _register(client, _file("drive-2", other))
     now = dt.datetime.now(dt.UTC).isoformat()
-    await client.post(
-        SYNCED, json={"drive_file_ids": ["drive-1", "drive-2"], "synced_at": now}
-    )
+    await client.post(SYNCED, json=_marked("drive-1", "drive-2", synced_at=now))
     assert await _needing(client) == []
 
     edit = await client.patch(f"/v1/catalog/{entry}", json={"genre": "House"})
@@ -448,7 +496,7 @@ async def test_a_rule_change_puts_every_linked_file_on_the_list(client) -> None:
     await _register(client, _file("gone", entry))
     await client.post(ABSENT, json={"drive_file_ids": ["gone"]})
     now = dt.datetime.now(dt.UTC).isoformat()
-    await client.post(SYNCED, json={"drive_file_ids": ["drive-1"], "synced_at": now})
+    await client.post(SYNCED, json=_marked("drive-1", synced_at=now))
     assert await _needing(client) == []
 
     rules = (await client.get("/v1/catalog/display-rules")).json()["data"]
