@@ -21,6 +21,7 @@ ABSENT = "/v1/catalog/library/files/absent"
 ENTRIES = "/v1/catalog/library/entries"
 NEEDING_SYNC = "/v1/catalog/library/files/needing-sync"
 SYNCED = "/v1/catalog/library/files/synced"
+EDITED = "/v1/catalog/library/files/edited"
 
 
 async def _ingest(client, *tracks: dict, set_date: str = "2026-03-08") -> None:
@@ -531,6 +532,180 @@ async def test_the_sync_list_filters_by_root_and_pages(client) -> None:
     assert len(first["data"]) == 2 and len(rest["data"]) == 1
 
 
+# ── Edits made in a file ──────────────────────────────────────────────────
+
+
+async def _shown(client, entry: str, label: str | None = None) -> dict:
+    """The owned fields as the sync writes them for ``entry``."""
+    response = await client.post("/v1/catalog/display", json={"ids": [entry]})
+    assert response.status_code == 200, response.text
+    shown = response.json()["data"][0]
+    return {
+        "title": f"{shown['title']} ({label})" if label else shown["title"],
+        "artist": shown["artist"],
+        "year": str(shown["release_year"]) if shown["release_year"] else None,
+        "genre": shown["genre"],
+        "bpm": f"{shown['bpm']:g}" if shown["bpm"] is not None else None,
+        "label": shown["label"],
+    }
+
+
+async def _in_step(client, *drive_ids: str, entry: str, label=None) -> dict:
+    """Register the files and record them as synced with the entry's values."""
+    values = await _shown(client, entry, label)
+    for drive_id in drive_ids:
+        await _register(client, _file(drive_id, entry, edit_label=label))
+    response = await client.post(
+        SYNCED,
+        json={
+            "drive_file_ids": list(drive_ids),
+            "synced_at": dt.datetime.now(dt.UTC).isoformat(),
+            "values": {i: values for i in drive_ids},
+        },
+    )
+    assert response.status_code == 200, response.text
+    return values
+
+
+async def _edited(client, drive_id: str, tags: dict, **extra) -> dict:
+    response = await client.post(
+        EDITED, json={"drive_file_id": drive_id, "tags": tags, **extra}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _detail(client, entry: str) -> dict:
+    return (await client.get(f"/v1/catalog/{entry}")).json()["data"]
+
+
+async def _row(client, entry: str, drive_id: str) -> dict:
+    rows = (await client.get(FILES, params={"catalog_id": entry})).json()["data"]
+    return next(r for r in rows if r["drive_file_id"] == drive_id)
+
+
+async def test_a_genre_edited_in_a_file_goes_up_and_reaches_the_other_copies(
+    client,
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", genre="House"))["entry"][
+        "id"
+    ]
+    values = await _in_step(client, "drive-1", "drive-2", entry=entry)
+    assert await _needing(client) == []
+
+    result = await _edited(client, "drive-1", {**values, "genre": "Pop"})
+
+    [field] = result["fields"]
+    assert (field["field"], field["outcome"], field["file"]) == (
+        "genre",
+        "sent_up",
+        "Pop",
+    )
+    assert (await _detail(client, entry))["genre"] == "Pop"
+    assert (await _row(client, entry, "drive-1"))["synced"]["genre"] == "Pop"
+    # The sync carries it to the other copy; this one comes up to be checked.
+    assert sorted(await _needing(client)) == ["drive-1", "drive-2"]
+
+
+async def test_a_field_the_catalog_changed_too_stays_the_catalogs(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", genre="House"))["entry"][
+        "id"
+    ]
+    values = await _in_step(client, "drive-1", entry=entry)
+    edit = await client.patch(f"/v1/catalog/{entry}", json={"genre": "R&B/Soul"})
+    assert edit.status_code == 200, edit.text
+
+    result = await _edited(client, "drive-1", {**values, "genre": "Pop"})
+
+    assert [(f["field"], f["outcome"]) for f in result["fields"]] == [
+        ("genre", "overwritten")
+    ]
+    assert (await _detail(client, entry))["genre"] == "R&B/Soul"
+    assert await _needing(client) == ["drive-1"]  # the sync writes the catalog's
+
+
+async def test_a_bpm_a_player_remeasured_is_not_an_edit(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=124.0))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    near = await _edited(client, "drive-1", {**values, "bpm": "124.9"})
+    double = await _edited(client, "drive-1", {**values, "bpm": "248"})
+
+    assert near["fields"][0]["outcome"] == "reanalysed"
+    assert double["fields"][0]["outcome"] == "reanalysed"
+    assert (await _detail(client, entry))["bpm"] == 124.0
+    assert await _needing(client) == []  # marked synced: not read again
+
+
+async def test_a_title_edited_in_a_file_is_split_into_parts(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry, label="Radio Edit")
+
+    result = await _edited(
+        client, "drive-1", {**values, "title": "Temple (Club Mix) (Radio Edit)"}
+    )
+
+    assert result["fields"][0]["outcome"] == "sent_up"
+    detail = await _detail(client, entry)
+    assert detail["title"] == "Temple (Club Mix)"
+
+
+async def test_an_artist_that_does_not_split_cleanly_is_held(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "artist": "Thomas Gold & Kaskade"}
+    )
+
+    [field] = result["fields"]
+    assert field["outcome"] == "held" and "one artist, or several" in field["why"]
+    assert (await _detail(client, entry))["artist"] == "Thomas Gold"
+    assert (await _row(client, entry, "drive-1"))["synced"] == values
+
+
+async def test_a_preview_answers_and_changes_nothing(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", genre="House"))["entry"][
+        "id"
+    ]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(client, "drive-1", {**values, "genre": "Pop"}, preview=True)
+
+    assert result["fields"][0]["outcome"] == "sent_up"
+    assert (await _detail(client, entry))["genre"] == "Dance/Electronic"
+    assert (await _row(client, entry, "drive-1"))["synced"] == values
+
+
+async def test_a_file_with_no_recorded_values_is_refused(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+
+    response = await client.post(
+        EDITED, json={"drive_file_id": "drive-1", "tags": TEMPLE}
+    )
+
+    assert response.status_code == 409
+
+
+async def test_a_rollback_forgets_the_recorded_values(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _in_step(client, "drive-1", entry=entry)
+
+    response = await client.post(
+        SYNCED,
+        json={
+            "drive_file_ids": ["drive-1"],
+            "synced_at": "2030-01-01T00:00:00Z",
+            "forget": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert (await _row(client, entry, "drive-1"))["synced"] is None
+    assert await _needing(client) == ["drive-1"]
+
+
 # ── Who may call ──────────────────────────────────────────────────────────
 
 
@@ -551,8 +726,11 @@ async def test_every_library_route_needs_the_library_scope(role_client) -> None:
                     "synced_at": "2030-01-01T00:00:00Z",
                 },
             ),
+            await ingest_only.post(
+                EDITED, json={"drive_file_id": "drive-1", "tags": {}}
+            ),
         ]
-    assert [r.status_code for r in calls] == [403, 403, 403, 403, 403, 403]
+    assert [r.status_code for r in calls] == [403] * 7
 
 
 async def test_the_library_role_may_call_every_library_route(role_client) -> None:
@@ -572,7 +750,12 @@ async def test_the_library_role_may_call_every_library_route(role_client) -> Non
                 json={
                     "drive_file_ids": ["drive-1"],
                     "synced_at": "2030-01-01T00:00:00Z",
+                    "values": {"drive-1": TEMPLE},
                 },
             ),
+            await library.post(
+                EDITED,
+                json={"drive_file_id": "drive-1", "tags": TEMPLE, "preview": True},
+            ),
         ]
-    assert [r.status_code for r in calls] == [200, 200, 200, 200, 200, 200]
+    assert [r.status_code for r in calls] == [200] * 7

@@ -487,34 +487,54 @@ async def patch_catalog(
     if catalog is None:
         raise api_error(404, "not_found", "Catalog entry not found")
 
-    before = _edit_values(catalog)
-    for name in patch.model_fields_set:
-        setattr(catalog, name, _cleaned(name, getattr(patch, name)))
-    after = _edit_values(catalog)
-    if after != before:
-        catalog.source = "manual"
-        catalog.updated_at = func.now()
-        session.add(
-            CatalogRevision(
-                catalog_id=catalog.id,
-                kind="edit",
-                before=before,
-                after={**after, "by": principal.subject},
-            )
-        )
-        shown = render(catalog, await load_rules(session))
-        await record_alias(
-            session,
-            catalog_id=catalog.id,
-            title=shown.title,
-            artist=shown.artist,
-            remix=shown.remix,
-            source="display",
-        )
+    changes = {name: getattr(patch, name) for name in patch.model_fields_set}
+    if await edit_entry(
+        session, catalog, changes, by=principal.subject, source="manual"
+    ):
         await session.commit()
         await session.refresh(catalog)
 
     return await get_catalog(id=id, session=session)
+
+
+async def edit_entry(
+    session: AsyncSession,
+    catalog: DbCatalog,
+    changes: dict[str, object],
+    *,
+    by: str,
+    source: str,
+) -> bool:
+    """Set ``changes`` on the entry. When that changes it: mark when and
+    from where, record a revision (kind edit) with the values before and
+    after, and keep the new display as a spelling it matches under. True
+    when it changed; the caller commits."""
+    before = _edit_values(catalog)
+    for name, value in changes.items():
+        setattr(catalog, name, _cleaned(name, value))
+    after = _edit_values(catalog)
+    if after == before:
+        return False
+    catalog.source = source
+    catalog.updated_at = func.now()
+    session.add(
+        CatalogRevision(
+            catalog_id=catalog.id,
+            kind="edit",
+            before=before,
+            after={**after, "by": by},
+        )
+    )
+    shown = render(catalog, await load_rules(session))
+    await record_alias(
+        session,
+        catalog_id=catalog.id,
+        title=shown.title,
+        artist=shown.artist,
+        remix=shown.remix,
+        source="display",
+    )
+    return True
 
 
 @router.get(

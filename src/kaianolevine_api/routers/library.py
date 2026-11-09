@@ -34,7 +34,10 @@ from ..schemas import (
     IngestTrack,
     LibraryEntryCreate,
     LibraryEntryCreated,
+    LibraryFieldEdit,
     LibraryFile,
+    LibraryFileEdited,
+    LibraryFileEditResult,
     LibraryFileRegister,
     LibraryFilesAbsentRequest,
     LibraryFilesAbsentResult,
@@ -45,11 +48,13 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services.display import load_rules
-from ..services.genres import catalog_genre
+from ..services.display import Rules, load_rules
+from ..services.fill_up import label_taken
+from ..services.genres import catalog_genre, vocabulary_genre
 from ..services.reconciliation import lookup_catalog, record_alias, track_keys
 from ..services.song_identity import catalog_artist, clean_genre
-from .catalog import catalog_match
+from ..services.song_parts import propose
+from .catalog import catalog_display, catalog_match, edit_entry
 
 router = APIRouter()
 
@@ -369,7 +374,8 @@ async def list_library_files_needing_sync(
     description=(
         "Each registered file named gets synced_at as when the catalog's "
         "values were last written to it, and its synced values from values "
-        "when they name it. An id the registry does not hold is ignored. "
+        "when they name it; with forget, its synced values are cleared "
+        "instead (a rollback). An id the registry does not hold is ignored. "
         "Requires catalog.library.write."
     ),
 )
@@ -378,24 +384,240 @@ async def mark_library_files_synced(
     principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryFilesSyncedResult]:
-    """Set last_synced on the named files, and the synced values sent."""
+    """Set last_synced on the named files, and the synced values sent (or,
+    with forget, clear them)."""
+    values: dict[str, object] = {"last_synced": payload.synced_at}
+    if payload.forget:
+        values["synced_values"] = null()
     result = await session.execute(
         update(DbLibraryFile)
         .where(DbLibraryFile.drive_file_id.in_(payload.drive_file_ids))
-        .values(last_synced=payload.synced_at)
+        .values(**values)
         .returning(DbLibraryFile.id)
     )
     marked = len(result.all())
-    named = set(payload.drive_file_ids)
-    for drive_file_id, values in payload.values.items():
+    named = set() if payload.forget else set(payload.drive_file_ids)
+    for drive_file_id, synced in payload.values.items():
         if drive_file_id in named:
             await session.execute(
                 update(DbLibraryFile)
                 .where(DbLibraryFile.drive_file_id == drive_file_id)
-                .values(synced_values=values.model_dump())
+                .values(synced_values=synced.model_dump())
             )
     await session.commit()
     return success_envelope(LibraryFilesSyncedResult(marked=marked), count=1, total=1)
+
+
+#: The owned fields, in the order a file edit is answered.
+_OWNED = ("title", "artist", "year", "genre", "bpm", "label")
+
+#: A BPM within this of the recorded one, or of its double or half, is a
+#: player re-measuring the track, not an edit.
+_BPM_REMEASURED = 1.5
+
+
+def _text(value: str | None) -> str | None:
+    return (value or "").strip() or None
+
+
+def _bpm(value: str | None) -> float | None:
+    try:
+        return float(value) if value else None
+    except ValueError:
+        return None
+
+
+def _same(field: str, a: str | None, b: str | None) -> bool:
+    """Whether two values of ``field`` say the same; BPMs as numbers."""
+    if field == "bpm":
+        x, y = _bpm(a), _bpm(b)
+        if x is not None and y is not None:
+            return abs(x - y) < 0.05
+    return _text(a) == _text(b)
+
+
+def _remeasured(file: str | None, synced: str | None) -> bool:
+    x, y = _bpm(file), _bpm(synced)
+    if x is None or y is None:
+        return False
+    return any(abs(x - y * k) < _BPM_REMEASURED for k in (1, 2, 0.5))
+
+
+def _shown(entry: DbCatalog, rules: Rules, label: str | None) -> dict[str, str | None]:
+    """The owned fields as the library sync writes them to a file with
+    release label ``label``."""
+    shown = catalog_display(entry, rules, None)
+    title = f"{shown.title} ({label})" if label else shown.title
+    return {
+        "title": title,
+        "artist": _text(shown.artist),
+        "year": None if shown.release_year is None else str(shown.release_year),
+        "genre": _text(shown.genre),
+        "bpm": None if shown.bpm is None else f"{shown.bpm:g}",
+        "label": _text(shown.label),
+    }
+
+
+def _without_label(title: str, label: str | None) -> str:
+    suffix = f" ({label})" if label else ""
+    if suffix and title.endswith(suffix):
+        return title[: -len(suffix)].strip()
+    return title.strip()
+
+
+def _changes(
+    edited: dict[str, str],
+    shown: dict[str, str | None],
+    label: str | None,
+) -> tuple[dict[str, object], dict[str, str]]:
+    """The entry's fields an edit in a file sets, and the fields held with
+    why."""
+    changes: dict[str, object] = {}
+    held: dict[str, str] = {}
+    if "title" in edited or "artist" in edited:
+        title = _without_label(edited.get("title") or shown["title"] or "", label)
+        artist = edited.get("artist") or shown["artist"] or ""
+        proposal = propose(title, artist)
+        if proposal.clear and proposal.parts.base_title and proposal.parts.main_artists:
+            changes.update(
+                base_title=proposal.parts.base_title,
+                version=proposal.parts.version,
+                main_artists=list(proposal.parts.main_artists),
+                featured_artists=list(proposal.parts.featured_artists),
+            )
+        else:
+            why = "; ".join(proposal.ambiguous) or "the title or artist is empty"
+            for name in ("title", "artist"):
+                if name in edited:
+                    held[name] = f"not split into parts cleanly ({why})"
+    if "year" in edited:
+        year = edited["year"][:4]
+        if year.isdigit() and 1000 <= int(year) <= 9999:
+            changes["release_year"] = int(year)
+        else:
+            held["year"] = "not a year"
+    if "genre" in edited:
+        genre, subgenre = vocabulary_genre(edited["genre"])
+        if genre is None:
+            held["genre"] = "not a genre the catalog's vocabulary places"
+        else:
+            changes.update(genre=genre, subgenre=subgenre)
+    if "bpm" in edited:
+        bpm = _bpm(edited["bpm"])
+        if bpm is None or bpm <= 0:
+            held["bpm"] = "not a BPM"
+        else:
+            changes["bpm"] = bpm
+    if "label" in edited:
+        taken = label_taken(edited["label"])
+        if taken is None:
+            held["label"] = "a one-character label is an explicit or clean marker"
+        else:
+            changes["label"] = taken
+    return changes, held
+
+
+@router.post(
+    "/catalog/library/files/edited",
+    response_model=Envelope[LibraryFileEditResult],
+    summary="Send up the fields a library file changed outside the pipeline",
+    description=(
+        "A linked file's owned fields as read after it changed outside the "
+        "pipeline (VirtualDJ writes tags back). Each field the file holds "
+        "differently from its last sync is compared with its entry now: one "
+        "the catalog did not change goes up to the entry as a revision "
+        "(source library); one the catalog changed too stays the catalog's "
+        "(overwritten); a BPM within 1.5 of the recorded one, or of its "
+        "double or half, is a re-measure; a title or artist that does not "
+        "split into parts cleanly, a genre the vocabulary does not place, or "
+        "a one-character label is held. A field sent up takes the file's "
+        "value as its recorded one. A file with nothing sent up or "
+        "overwritten is marked synced. With preview, nothing is written. "
+        "Requires catalog.library.write."
+    ),
+)
+async def report_library_file_edited(
+    payload: LibraryFileEdited,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[LibraryFileEditResult]:
+    """Compare a file's fields with its last sync and its entry; send up
+    what only the file changed."""
+    row = (
+        await session.execute(
+            select(DbLibraryFile).where(
+                DbLibraryFile.drive_file_id == payload.drive_file_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None or row.catalog_id is None:
+        raise api_error(404, "not_found", "Linked library file not found")
+    if row.synced_values is None:
+        raise api_error(
+            409,
+            "not_synced",
+            "The file has no recorded values: a sync records them first",
+        )
+    entry = await session.get(DbCatalog, row.catalog_id)
+    if entry is None:
+        raise api_error(404, "not_found", "Catalog entry not found")
+
+    shown = _shown(entry, await load_rules(session), row.edit_label)
+    synced: dict[str, str | None] = dict(row.synced_values)
+    tags = payload.tags.model_dump()
+    fields: dict[str, LibraryFieldEdit] = {}
+    edited: dict[str, str] = {}
+    recorded = dict(synced)
+    for name in _OWNED:
+        file = _text(tags.get(name))
+        before = synced.get(name)
+        if file is None or _same(name, file, before):
+            continue
+        if _same(name, file, shown[name]):
+            recorded[name] = file  # the file already shows the catalog
+            continue
+        field = LibraryFieldEdit(
+            field=name,  # type: ignore[arg-type]
+            synced=before,
+            file=file,
+            catalog=shown[name],
+            outcome="sent_up",
+        )
+        if not _same(name, shown[name], before):
+            field.outcome = "overwritten"
+        elif name == "bpm" and _remeasured(file, before):
+            field.outcome = "reanalysed"
+        else:
+            edited[name] = file
+        fields[name] = field
+
+    changes, held = _changes(edited, shown, row.edit_label)
+    for name, why in held.items():
+        fields[name].outcome = "held"
+        fields[name].why = why
+    for name in edited:
+        if name not in held:
+            recorded[name] = edited[name]
+
+    if not payload.preview:
+        changed = await edit_entry(
+            session, entry, changes, by=principal.subject, source="library"
+        )
+        values: dict[str, object] = {"synced_values": recorded}
+        if not changed and not any(f.outcome == "overwritten" for f in fields.values()):
+            # Nothing for the sync to bring: not read again until it changes.
+            values["last_synced"] = func.now()
+        await session.execute(
+            update(DbLibraryFile).where(DbLibraryFile.id == row.id).values(**values)
+        )
+        await session.commit()
+
+    data = LibraryFileEditResult(
+        drive_file_id=row.drive_file_id,
+        catalog_id=row.catalog_id,
+        fields=[fields[name] for name in _OWNED if name in fields],
+    )
+    return success_envelope(data, count=1, total=1)
 
 
 @router.post(
