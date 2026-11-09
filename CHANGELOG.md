@@ -1,3 +1,10 @@
+# [2.78.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.77.1...v2.78.0) (2026-11-09)
+
+
+### Features
+
+* **identity:** the owner-console key holds the deejay-trigger role, so the owner can ask deejay-cog for a run now ([2d3f137](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2d3f137e6e9301f9331a5a6591e2d87782152d22))
+
 ## [2.77.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.77.0...v2.77.1) (2026-11-09)
 
 
