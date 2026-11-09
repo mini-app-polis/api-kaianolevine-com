@@ -1,3 +1,11 @@
+## [2.75.6](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.5...v2.75.6) (2026-11-09)
+
+
+### Bug Fixes
+
+* **catalog:** one spelling for each artist name, as the artist styles it ([bfbc588](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bfbc5888a919134687ada0de19b8a56881ef5f98))
+* **deps:** bump miniapppolis-common-utils to 9.0.2 ([8a178a3](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8a178a3466044003d8442e13d0b9614c39259d5e))
+
 ## [2.75.5](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.75.4...v2.75.5) (2026-11-08)
 
 
