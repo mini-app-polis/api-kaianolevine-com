@@ -36,6 +36,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services.display import DEFAULT_RULES, Rules, load_rules, render
+from ..services.fill_up import label_taken
 from ..services.genres import vocabulary_genre
 from ..services.reconciliation import lookup_catalog, record_alias
 
@@ -265,8 +266,8 @@ async def fill_up_catalog_entry(
     if entry.bpm is None and payload.bpm is not None:
         entry.bpm = payload.bpm
         filled.append("bpm")
-    label = (payload.label or "").strip()
-    if entry.label is None and len(label) > 1:
+    label = label_taken(payload.label)
+    if entry.label is None and label is not None:
         entry.label = label
         filled.append("label")
     if filled:

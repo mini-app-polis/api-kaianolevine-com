@@ -63,6 +63,26 @@ async def _review(client) -> dict:
     return response.json()["data"]
 
 
+async def test_a_fill_up_the_catalog_would_refuse_is_not_stored(client) -> None:
+    for name in ("a", "b", "c", "d", "e"):
+        await _linked(client, name)
+
+    result = await _report(
+        client,
+        ["a", "b", "c", "d", "e"],
+        _diff("a", "genre", "fill_up", file_value="California"),
+        _diff("b", "label", "fill_up", file_value=" E "),
+        _diff("c", "genre", "fill_up", file_value="Pop"),
+        _diff("d", "label", "fill_up", file_value="Atlantic"),
+        _diff("e", "genre", "genre_remapped", file_value="California"),
+    )
+
+    assert result == {"open_differences": 3, "files_with_differences": 3}
+    review = await _review(client)
+    held = {(d["drive_file_id"], d["field"]) for d in review["differences"]}
+    assert held == {("c", "genre"), ("d", "label"), ("e", "genre")}
+
+
 async def test_a_report_replaces_the_differences_of_the_files_it_compared(
     client,
 ) -> None:

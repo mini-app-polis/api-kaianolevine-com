@@ -39,6 +39,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.fill_up import fill_up_refused
 
 router = APIRouter()
 
@@ -102,7 +103,11 @@ async def report_reconcile_differences(
                 DbDifference.drive_file_id.in_(set(payload.compared))
             )
         )
-    latest = {(d.drive_file_id, d.field): d for d in payload.differences}
+    latest = {
+        (d.drive_file_id, d.field): d
+        for d in payload.differences
+        if not (d.kind == "fill_up" and fill_up_refused(d.field, d.file_value))
+    }
     if latest:
         await session.execute(
             insert(DbDifference).values(
