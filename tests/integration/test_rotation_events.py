@@ -301,16 +301,16 @@ async def test_the_rotator_machine_records_rotations_and_asks_for_tasks() -> Non
 # ── the owner's local scripts ─────────────────────────────────────────────
 
 
-def test_the_owner_console_holds_only_the_rotator_role() -> None:
+def test_the_owner_console_holds_only_the_rotator_and_catalog_editor_roles() -> None:
     console = identity_registry.declared("owner-console")
     assert console is not None
-    assert console.roles == ("secrets-rotator",)
+    assert console.roles == ("secrets-rotator", "catalog-editor")
     assert console.key_env_var == "OWNER_CONSOLE_API_KEY"
     assert console.task_sources == ()
     assert not console.development_only
 
 
-async def test_the_owner_console_records_and_reads_rotations_and_nothing_else(
+async def test_the_owner_console_records_and_reads_rotations_but_holds_no_notifier(
     client, db_session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     await identity_registry.reconcile(db_session)

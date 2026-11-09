@@ -305,17 +305,19 @@ MACHINES: tuple[Machine, ...] = (
         task_sources=("secret-rotation",),
     ),
     # The key the owner's local scripts use: rotator-cog's rotate.py, run by
-    # hand for a rotation the owner does himself, records that rotation here.
-    # It holds the rotation record's role and nothing else, not even
-    # notifier: a script on the owner's machine has no run report to post,
-    # and a key that leaves the fleet's hosts should be able to do as little
-    # as the job needs.
+    # hand for a rotation the owner does himself, records that rotation here;
+    # and a reviewed catalog correction, run by the owner, edits entries as
+    # his catalog editor does. It holds those two roles and nothing else, not
+    # even notifier: a script on the owner's machine has no run report to
+    # post, and a key that leaves the fleet's hosts should be able to do as
+    # little as its jobs need.
     Machine(
         name="owner-console",
-        roles=("secrets-rotator",),
+        roles=("secrets-rotator", "catalog-editor"),
         notes=(
             "GET and POST /v1/secrets/rotation-events, from the owner's local "
-            "scripts (rotator-cog's rotate.py)."
+            "scripts (rotator-cog's rotate.py); PATCH /v1/catalog/{id}, from a "
+            "catalog correction the owner runs."
         ),
     ),
     # A Claude session working with the owner files the board's manual tasks

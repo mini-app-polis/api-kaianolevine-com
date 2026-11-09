@@ -272,8 +272,10 @@ Required environment variables:
   audit event records which one matched (`key_slot`), so the old key is
   retired once nothing presents it.
 - `OWNER_CONSOLE_API_KEY` — optional; the `owner-console` machine's key,
-  used by the owner's local scripts (rotator-cog's `rotate.py`). It holds
-  only the `secrets-rotator` role: read and record rotation events.
+  used by the owner's local scripts. It holds the `secrets-rotator` role
+  (read and record rotation events, for rotator-cog's `rotate.py`) and the
+  `catalog-editor` role (edit catalog entries, for a reviewed catalog
+  correction the owner runs), and nothing else.
 - `CLAUDE_SESSION_API_KEY` — optional; the `claude-session` machine's
   key, used by a Claude session to file manual tasks (`POST /v1/tasks`
   under the `manual` source) and to ask for a sweep of the board now
