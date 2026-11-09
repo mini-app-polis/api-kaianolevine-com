@@ -1,3 +1,11 @@
+# [2.80.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.79.0...v2.80.0) (2026-11-09)
+
+
+### Features
+
+* **library:** send up the fields a library file changed outside the pipeline ([4f9b438](https://github.com/mini-app-polis/api-kaianolevine-com/commit/4f9b4389f9d3ccd39d3403e2b175877f0c5f669c))
+* **library:** send up the fields a library file changed outside the pipeline ([9a12eb7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a12eb7a3e27681a6ed69bdd906e7d3cfc7baccc))
+
 # [2.79.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.78.1...v2.79.0) (2026-11-09)
 
 
