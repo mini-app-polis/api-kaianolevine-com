@@ -83,7 +83,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### First-time setup
 ```bash
-# 1. Install all dependencies including dev extras
+# 1. Install every dependency: the extras, and the dev group (tests, lint, pre-commit)
 uv sync --all-extras
 
 # 2. Install pre-commit hooks
