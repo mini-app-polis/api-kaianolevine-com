@@ -645,6 +645,9 @@ class FeatureFlagItem(BaseModel):
     description: str | None = Field(
         default=None, description="Human-readable description for this record."
     )
+    value: str | None = Field(
+        default=None, description="Optional value carried by this feature flag."
+    )
     created_at: dt.datetime = Field(
         ..., description="Timestamp when this record was created."
     )
@@ -657,6 +660,10 @@ class FeatureFlagPatch(BaseModel):
     """Patch payload for updating a feature flag."""
 
     enabled: bool = Field(..., description="Whether this feature flag is enabled.")
+    value: str | None = Field(
+        default=None,
+        description="Optional value for this flag; left as it is when omitted.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

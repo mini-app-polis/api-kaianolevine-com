@@ -174,7 +174,7 @@ async def create_tables(async_engine) -> AsyncIterator[None]:
     conn = await asyncpg.connect(TEST_DATABASE_URL)
     try:
         rows = await conn.fetch(
-            "SELECT owner_id, name, enabled, description FROM feature_flags"
+            "SELECT owner_id, name, enabled, description, value FROM feature_flags"
         )
         _SEEDED_FLAGS[:] = [dict(r) for r in rows]
         _RESET_TABLES[:] = await _deletion_order(conn)
@@ -340,8 +340,8 @@ async def reset_db(async_engine) -> AsyncIterator[None]:
             await conn.execute(
                 text(
                     "INSERT INTO feature_flags (id, owner_id, name, enabled, "
-                    "description) VALUES (gen_random_uuid(), :owner_id, :name, "
-                    ":enabled, :description)"
+                    "description, value) VALUES (gen_random_uuid(), :owner_id, "
+                    ":name, :enabled, :description, :value)"
                 ),
                 _SEEDED_FLAGS,
             )

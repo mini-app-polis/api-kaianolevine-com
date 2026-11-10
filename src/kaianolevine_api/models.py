@@ -559,6 +559,7 @@ class FeatureFlag(Base):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
