@@ -1,3 +1,10 @@
+# [2.83.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.82.0...v2.83.0) (2026-11-10)
+
+
+### Features
+
+* **flags:** seed the deejay-cog step flags with prd's modes ([e2921e7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e2921e7ac30edb0937c529af68dae698b4ab9572))
+
 # [2.82.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.81.1...v2.82.0) (2026-11-10)
 
 
