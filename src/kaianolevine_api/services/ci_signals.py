@@ -10,6 +10,13 @@ dependency-graph refresh ("Graph Update: uv in /. #1691021664"), so the job
 number is dropped from the workflow name first: without that, every run would
 open its own streak, and none could ever recover.
 
+A run started by a ``repository_dispatch`` is not a signal. GitHub runs a
+dispatched workflow from the default branch whatever it checks out, so its
+``head_branch`` names that branch and not the code it tested: a dispatched
+check of ``dev`` would fail and recover as ``main``, opening an Issue against
+a branch with nothing wrong on it and closable only by another dispatch. Its
+failures still reach Discord with every other CI failure.
+
 ``failure`` and ``timed_out`` are failing and remediable, once per streak,
 by :func:`remediate`, which picks the remedy from the jobs that failed:
 
@@ -88,6 +95,8 @@ def signal_from_workflow_run(
     if not isinstance(run, dict) or not isinstance(repository, dict):
         return None
     if payload.get("action") != "completed" or run.get("status") != "completed":
+        return None
+    if run.get("event") == "repository_dispatch":
         return None
     full_name = str(repository.get("full_name") or "")
     owner, _, repo = full_name.partition("/")

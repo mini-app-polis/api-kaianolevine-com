@@ -18,7 +18,9 @@ ORGS = ["mini-app-polis"]
 BRANCHES = ["main", "dev"]
 
 
-def _run(conclusion: str, name: str, *, branch: str = "main") -> dict:
+def _run(
+    conclusion: str, name: str, *, branch: str = "main", event: str = "push"
+) -> dict:
     return {
         "action": "completed",
         "repository": {"full_name": "mini-app-polis/db-ops"},
@@ -28,6 +30,7 @@ def _run(conclusion: str, name: str, *, branch: str = "main") -> dict:
             "status": "completed",
             "conclusion": conclusion,
             "head_branch": branch,
+            "event": event,
             "head_sha": "c" * 40,
             "head_commit": {"message": "chore(release): 1.0.0"},
             "html_url": "https://github.com/mini-app-polis/db-ops/actions/runs/1",
@@ -103,6 +106,28 @@ def test_by_default_only_main_failures_are_signals() -> None:
     assert on_dev is None
     assert on_main is not None
     assert on_main.state == "failing"
+
+
+@pytest.mark.parametrize("conclusion", ["failure", "success"])
+def test_a_dispatched_run_is_not_a_signal(conclusion: str) -> None:
+    # Dispatched from the default branch, so its head_branch is not the code
+    # it tested: neither its failure nor its pass may open or close a streak.
+    signal = ci_signals.signal_from_workflow_run(
+        _run(conclusion, "Contract", event="repository_dispatch"),
+        orgs=ORGS,
+        branches=BRANCHES,
+    )
+
+    assert signal is None
+
+
+@pytest.mark.parametrize("event", ["push", "pull_request", "workflow_dispatch"])
+def test_other_triggers_on_a_signal_branch_are_signals(event: str) -> None:
+    signal = ci_signals.signal_from_workflow_run(
+        _run("failure", "CI", event=event), orgs=ORGS, branches=BRANCHES
+    )
+
+    assert signal is not None
 
 
 # ── which failed audits are findings ──────────────────────────────────────
