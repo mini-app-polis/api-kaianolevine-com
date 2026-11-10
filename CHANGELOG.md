@@ -1,3 +1,10 @@
+## [2.81.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.81.0...v2.81.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **ci-signals:** a repository_dispatch run is not a signal, since it runs from the default branch whatever it tests ([d91f497](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d91f497a97dc7c9fd874d8afdeae24a567fbf7c9))
+
 # [2.81.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.80.0...v2.81.0) (2026-11-10)
 
 
