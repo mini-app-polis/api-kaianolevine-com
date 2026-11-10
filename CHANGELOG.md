@@ -1,3 +1,16 @@
+# [2.84.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.83.0...v2.84.0) (2026-11-10)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.4.0 ([a6f8509](https://github.com/mini-app-polis/api-kaianolevine-com/commit/a6f8509f9a436f266cd926a53a71750ae5bb5c6f))
+* **deps:** bump miniapppolis-common-utils to 9.5.0 ([d44fe07](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d44fe07e77796aee749d75929a2bf57d05317bda))
+
+
+### Features
+
+* **reconcile:** approve a difference for the file, sending its value up to the catalog ([9bcf218](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9bcf218ed31dad15df6cc4bab4f1680ccd90a1a7))
+
 # [2.83.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.82.0...v2.83.0) (2026-11-10)
 
 
