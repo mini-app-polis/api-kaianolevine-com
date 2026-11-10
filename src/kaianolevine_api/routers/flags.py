@@ -52,6 +52,7 @@ async def list_flags(
             name=row.name,
             enabled=row.enabled,
             description=row.description,
+            value=row.value,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -64,7 +65,9 @@ async def list_flags(
     "/flags/{name}",
     response_model=Envelope[FeatureFlagItem],
     summary="Update feature flag state",
-    description='Enable/disable a flag. Protected. Request body: { "enabled": true }',
+    description="Enable/disable a flag and optionally set its value. Protected."
+    ' Request body: { "enabled": true, "value": "mode" }; an omitted value is'
+    " left as it is.",
 )
 async def patch_flag(
     name: Annotated[str, Path(min_length=1)],
@@ -82,6 +85,8 @@ async def patch_flag(
         raise api_error(404, "not_found", "Feature flag not found")
 
     row.enabled = payload.enabled
+    if "value" in payload.model_fields_set:
+        row.value = payload.value
     row.owner_id = owner_id
     await session.flush()
     await session.commit()
@@ -93,6 +98,7 @@ async def patch_flag(
         name=row.name,
         enabled=row.enabled,
         description=row.description,
+        value=row.value,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
