@@ -744,21 +744,78 @@ async def test_a_never_synced_file_sends_up_only_the_fields_kept(client) -> None
     assert (await _row(client, entry, "drive-1"))["synced"] is None
 
 
-async def test_a_field_kept_from_the_file_is_still_held_when_it_cannot_go_up(
+async def test_an_ambiguous_artist_kept_from_the_file_goes_up_as_one_artist(
     client,
 ) -> None:
-    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    entry = (await _entry(client, "Lean On", "Major Lazer"))["entry"]["id"]
     values = await _in_step(client, "drive-1", entry=entry)
 
     result = await _edited(
         client,
         "drive-1",
-        {**values, "artist": "Thomas Gold & Kaskade"},
+        {**values, "artist": "Major Lazer & DJ Snake"},
         keep_file=["artist"],
     )
 
+    assert result["fields"][0]["outcome"] == "sent_up"
+    detail = await _detail(client, entry)
+    # Kept as the file writes it: one artist, to split in the editor later.
+    assert detail["main_artists"] == ["Major Lazer & DJ Snake"]
+    assert detail["artist"] == "Major Lazer & DJ Snake"
+
+
+async def test_a_featured_artist_kept_from_the_files_title_goes_to_the_artist(
+    client,
+) -> None:
+    entry = (await _entry(client, "Got Your Money", "Ol' Dirty Bastard"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    await _edited(
+        client,
+        "drive-1",
+        {**values, "title": "Got Your Money (Feat. Kelis)"},
+        keep_file=["title"],
+    )
+
+    detail = await _detail(client, entry)
+    assert (detail["base_title"], detail["featured_artists"]) == (
+        "Got Your Money",
+        ["Kelis"],
+    )
+
+
+async def test_a_release_label_kept_in_a_title_is_left_to_the_file(client) -> None:
+    entry = (await _entry(client, "Gravity [Clean]", "Kill J"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    await _edited(
+        client, "drive-1", {**values, "title": "Gravity"}, keep_file=["title"]
+    )
+
+    assert (await _detail(client, entry))["title"] == "Gravity"
+
+
+async def test_a_kept_title_with_nothing_left_once_split_is_still_held(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "title": "(Remix)"}, keep_file=["title"]
+    )
+
     assert result["fields"][0]["outcome"] == "held"
-    assert (await _detail(client, entry))["artist"] == "Thomas Gold"
+    assert (await _detail(client, entry))["title"] == "Temple"
+
+
+async def test_an_ambiguous_artist_not_kept_is_still_held(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "artist": "Thomas Gold & Kaskade"}
+    )
+
+    assert result["fields"][0]["outcome"] == "held"
 
 
 async def test_a_rollback_forgets_the_recorded_values(client) -> None:
