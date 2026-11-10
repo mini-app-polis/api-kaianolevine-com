@@ -221,6 +221,11 @@ run.
   catalog editor would (revision kind `edit`, by `cleanup.fixes`, source manual, the new
   display kept as an alias); a fix already applied matches nothing again.
   `--show TEXT` prints the parts of entries whose title or artist contains TEXT.
+- `python -m kaianolevine_api.cleanup.revert --by NAME --since TIME --until TIME`
+  — puts back the catalog edits one caller made in a window of time: per
+  entry, the values before its first revision in the window, unless the
+  entry was edited again since. `--apply` writes them as the catalog editor
+  would (revision kind `edit`, by `cleanup.revert`, source manual).
 
 ## Deployment Target
 
