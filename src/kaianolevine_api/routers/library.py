@@ -532,8 +532,11 @@ def _changes(
         "split into parts cleanly, a genre the vocabulary does not place, or "
         "a one-character label is held. A field sent up takes the file's "
         "value as its recorded one. A file with nothing sent up or "
-        "overwritten is marked synced. With preview, nothing is written. "
-        "Requires catalog.library.write."
+        "overwritten is marked synced. Fields named in keep_file (the owner "
+        "approved the file's value in the reconcile) go up whatever the last "
+        "sync and the catalog hold, still subject to the holds; a file never "
+        "synced sends up only those and keeps no recorded values. With "
+        "preview, nothing is written. Requires catalog.library.write."
     ),
 )
 async def report_library_file_edited(
@@ -552,7 +555,8 @@ async def report_library_file_edited(
     ).scalar_one_or_none()
     if row is None or row.catalog_id is None:
         raise api_error(404, "not_found", "Linked library file not found")
-    if row.synced_values is None:
+    keep = set(payload.keep_file)
+    if row.synced_values is None and not keep:
         raise api_error(
             409,
             "not_synced",
@@ -563,7 +567,8 @@ async def report_library_file_edited(
         raise api_error(404, "not_found", "Catalog entry not found")
 
     shown = _shown(entry, await load_rules(session), row.edit_label)
-    synced: dict[str, str | None] = dict(row.synced_values)
+    never_synced = row.synced_values is None
+    synced: dict[str, str | None] = dict(row.synced_values or {})
     tags = payload.tags.model_dump()
     fields: dict[str, LibraryFieldEdit] = {}
     edited: dict[str, str] = {}
@@ -571,7 +576,24 @@ async def report_library_file_edited(
     for name in _OWNED:
         file = _text(tags.get(name))
         before = synced.get(name)
-        if file is None or _same(name, file, before):
+        if name in keep:
+            # The owner chose the file's value: it goes up whatever the last
+            # sync recorded and whatever the catalog holds.
+            if file is None:
+                continue
+            if _same(name, file, shown[name]):
+                recorded[name] = file
+                continue
+            fields[name] = LibraryFieldEdit(
+                field=name,  # type: ignore[arg-type]
+                synced=before,
+                file=file,
+                catalog=shown[name],
+                outcome="sent_up",
+            )
+            edited[name] = file
+            continue
+        if never_synced or file is None or _same(name, file, before):
             continue
         if _same(name, file, shown[name]):
             recorded[name] = file  # the file already shows the catalog
@@ -603,13 +625,18 @@ async def report_library_file_edited(
         changed = await edit_entry(
             session, entry, changes, by=principal.subject, source="library"
         )
-        values: dict[str, object] = {"synced_values": recorded}
-        if not changed and not any(f.outcome == "overwritten" for f in fields.values()):
-            # Nothing for the sync to bring: not read again until it changes.
-            values["last_synced"] = func.now()
-        await session.execute(
-            update(DbLibraryFile).where(DbLibraryFile.id == row.id).values(**values)
-        )
+        if not never_synced:
+            # A file never synced keeps no recorded values: its first sync
+            # records them all.
+            values: dict[str, object] = {"synced_values": recorded}
+            if not changed and not any(
+                f.outcome == "overwritten" for f in fields.values()
+            ):
+                # Nothing for the sync to bring: not read again until it changes.
+                values["last_synced"] = func.now()
+            await session.execute(
+                update(DbLibraryFile).where(DbLibraryFile.id == row.id).values(**values)
+            )
         await session.commit()
 
     data = LibraryFileEditResult(

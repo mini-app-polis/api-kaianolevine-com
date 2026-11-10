@@ -144,7 +144,14 @@ async def test_approvals_start_empty_and_the_owner_sets_them(client) -> None:
         _diff("a", "year", "year_later"),
     )
     empty = (await client.get(APPROVALS)).json()["data"]
-    assert empty == {"kinds": [], "files": {}, "updated_at": None, "updated_by": None}
+    assert empty == {
+        "kinds": [],
+        "files": {},
+        "file_wins_kinds": [],
+        "file_wins_files": {},
+        "updated_at": None,
+        "updated_by": None,
+    }
 
     response = await client.put(
         APPROVALS,
@@ -164,6 +171,86 @@ async def test_approvals_start_empty_and_the_owner_sets_them(client) -> None:
         d["field"]: d["approved"] for d in (await _review(client))["differences"]
     }
     assert approved == {"title": True, "genre": True, "year": False}
+
+
+async def test_a_difference_can_be_approved_for_the_file(client) -> None:
+    await _linked(client, "a")
+    await _linked(client, "b")
+    await _report(
+        client,
+        ["a", "b"],
+        _diff("a"),
+        _diff("a", "year", "year_later"),
+        _diff("a", "bpm", "bpm_differs"),
+        _diff("b", "artist"),
+        _diff("b", "genre", "genre_remapped"),
+    )
+
+    response = await client.put(
+        APPROVALS,
+        json={
+            "kinds": ["genre_remapped"],
+            "files": {"a": ["title"]},
+            "file_wins_kinds": ["year_later", "bpm_differs", "year_later"],
+            "file_wins_files": {"b": ["artist"], "z": []},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    saved = response.json()["data"]
+    assert saved["file_wins_kinds"] == ["bpm_differs", "year_later"]
+    assert saved["file_wins_files"] == {"b": ["artist"]}
+    sides = {
+        (d["drive_file_id"], d["field"]): (d["approved"], d["approved_for"])
+        for d in (await _review(client))["differences"]
+    }
+    assert sides == {
+        ("a", "title"): (True, "catalog"),
+        ("a", "year"): (True, "file"),
+        ("a", "bpm"): (True, "file"),
+        ("b", "artist"): (True, "file"),
+        ("b", "genre"): (True, "catalog"),
+    }
+
+
+async def test_an_unapproved_difference_is_approved_for_neither_side(client) -> None:
+    await _linked(client, "a")
+    await _report(client, ["a"], _diff("a", "year", "year_later"))
+
+    (difference,) = (await _review(client))["differences"]
+
+    assert difference["approved"] is False
+    assert difference["approved_for"] is None
+
+
+async def test_a_difference_cannot_be_approved_both_ways(client) -> None:
+    both_kinds = await client.put(
+        APPROVALS, json={"kinds": ["year_later"], "file_wins_kinds": ["year_later"]}
+    )
+    both_fields = await client.put(
+        APPROVALS,
+        json={"files": {"a": ["title"]}, "file_wins_files": {"a": ["title"]}},
+    )
+    nothing_to_send = await client.put(APPROVALS, json={"file_wins_kinds": ["fill_up"]})
+    link = await client.put(APPROVALS, json={"file_wins_files": {"a": ["catalog_id"]}})
+
+    assert [
+        r.status_code for r in (both_kinds, both_fields, nothing_to_send, link)
+    ] == [
+        422,
+        422,
+        422,
+        422,
+    ]
+
+
+async def test_seeding_carries_approvals_for_the_file(client) -> None:
+    response = await client.post(
+        SEED, json={"kinds": ["fill_up"], "file_wins_kinds": ["year_later"]}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["file_wins_kinds"] == ["year_later"]
 
 
 async def test_other_cannot_be_approved_as_a_kind(client) -> None:

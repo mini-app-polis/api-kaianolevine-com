@@ -688,6 +688,79 @@ async def test_a_file_with_no_recorded_values_is_refused(client) -> None:
     assert response.status_code == 409
 
 
+async def test_a_field_kept_from_the_file_goes_up_though_the_catalog_changed_it(
+    client,
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", release_year=2015))["entry"][
+        "id"
+    ]
+    values = await _in_step(client, "drive-1", "drive-2", entry=entry)
+    edit = await client.patch(f"/v1/catalog/{entry}", json={"release_year": 2016})
+    assert edit.status_code == 200, edit.text
+
+    result = await _edited(
+        client, "drive-1", {**values, "year": "2014"}, keep_file=["year"]
+    )
+
+    assert [(f["field"], f["outcome"]) for f in result["fields"]] == [
+        ("year", "sent_up")
+    ]
+    assert (await _detail(client, entry))["release_year"] == 2014
+    assert (await _row(client, entry, "drive-1"))["synced"]["year"] == "2014"
+    # The other copy gets the kept year from the sync.
+    assert "drive-2" in await _needing(client)
+
+
+async def test_a_bpm_kept_from_the_file_is_not_taken_for_a_remeasure(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=124.0))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "bpm": "62"}, keep_file=["bpm"]
+    )
+
+    assert result["fields"][0]["outcome"] == "sent_up"
+    assert (await _detail(client, entry))["bpm"] == 62.0
+
+
+async def test_a_never_synced_file_sends_up_only_the_fields_kept(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=120.0, genre="House"))[
+        "entry"
+    ]["id"]
+    await _register(client, _file("drive-1", entry))
+
+    result = await _edited(
+        client,
+        "drive-1",
+        {**TEMPLE, "bpm": "90", "genre": "Pop"},
+        keep_file=["bpm"],
+    )
+
+    assert [(f["field"], f["outcome"]) for f in result["fields"]] == [
+        ("bpm", "sent_up")
+    ]
+    detail = await _detail(client, entry)
+    assert (detail["bpm"], detail["genre"]) == (90.0, "Dance/Electronic")
+    assert (await _row(client, entry, "drive-1"))["synced"] is None
+
+
+async def test_a_field_kept_from_the_file_is_still_held_when_it_cannot_go_up(
+    client,
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client,
+        "drive-1",
+        {**values, "artist": "Thomas Gold & Kaskade"},
+        keep_file=["artist"],
+    )
+
+    assert result["fields"][0]["outcome"] == "held"
+    assert (await _detail(client, entry))["artist"] == "Thomas Gold"
+
+
 async def test_a_rollback_forgets_the_recorded_values(client) -> None:
     entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
     await _in_step(client, "drive-1", entry=entry)
