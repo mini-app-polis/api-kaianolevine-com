@@ -7,7 +7,7 @@
 Reads DATABASE_URL. Every revision of kind ``edit`` whose ``after.by`` is the
 caller and whose time is in the window is taken; per entry, the earliest
 one's ``before`` is what is put back. An entry edited again since the last
-of those revisions (its values are no longer that revision's ``after``) is
+of those revisions (its values differ from that revision's ``after``) is
 skipped and listed, so a later change is never undone. ``--apply`` writes
 the same way an edit in the editor is written (revision kind ``edit``, by
 ``cleanup.revert``, source manual). Reverting twice changes nothing more:
@@ -110,6 +110,7 @@ async def plan(
 
 
 def report(reverts: list[Revert]) -> str:
+    """The plan as text: entries to put back with their changes, then skips."""
     lines: list[str] = []
     todo = [r for r in reverts if not r.skipped]
     for r in todo:
@@ -128,6 +129,7 @@ def report(reverts: list[Revert]) -> str:
 
 
 async def apply(session: AsyncSession, reverts: list[Revert]) -> int:
+    """Put back every entry not skipped, commit, and return how many changed."""
     count = 0
     for r in reverts:
         if r.skipped:
