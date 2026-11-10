@@ -1,3 +1,10 @@
+## [2.84.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.84.0...v2.84.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **library:** take a file's title or artist the owner chose even when its split is ambiguous ([24b321e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/24b321ed9f23c8e035920b00b3c53c6467d287cd))
+
 # [2.84.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.83.0...v2.84.0) (2026-11-10)
 
 
