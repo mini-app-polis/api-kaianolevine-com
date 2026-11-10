@@ -465,20 +465,37 @@ def _without_label(title: str, label: str | None) -> str:
     return title.strip()
 
 
+#: Reasons a split cannot go up even when the owner chose the file's value:
+#: nothing would be left of the title, or there is no main artist.
+_UNSPLITTABLE = ("nothing left of the title", "no main artist")
+
+
 def _changes(
     edited: dict[str, str],
     shown: dict[str, str | None],
     label: str | None,
+    kept: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, object], dict[str, str]]:
     """The entry's fields an edit in a file sets, and the fields held with
-    why."""
+    why.
+
+    A title or artist the owner chose the file's value for (``kept``) goes
+    up as the split reads it even when the split is ambiguous: names joined
+    by "&" stay one artist, as the file writes them, and a bracketed part
+    that names no version stays in the title. The difference closes with
+    nothing lost, and the owner can split the names in the editor later. It
+    is held only when the split leaves no title or no main artist."""
     changes: dict[str, object] = {}
     held: dict[str, str] = {}
     if "title" in edited or "artist" in edited:
         title = _without_label(edited.get("title") or shown["title"] or "", label)
         artist = edited.get("artist") or shown["artist"] or ""
         proposal = propose(title, artist)
-        if proposal.clear and proposal.parts.base_title and proposal.parts.main_artists:
+        chosen = bool(kept & {"title", "artist"} & set(edited))
+        takes = proposal.clear or (
+            chosen and not any(r.startswith(_UNSPLITTABLE) for r in proposal.ambiguous)
+        )
+        if takes and proposal.parts.base_title and proposal.parts.main_artists:
             changes.update(
                 base_title=proposal.parts.base_title,
                 version=proposal.parts.version,
@@ -613,7 +630,7 @@ async def report_library_file_edited(
             edited[name] = file
         fields[name] = field
 
-    changes, held = _changes(edited, shown, row.edit_label)
+    changes, held = _changes(edited, shown, row.edit_label, frozenset(keep))
     for name, why in held.items():
         fields[name].outcome = "held"
         fields[name].why = why
