@@ -29,9 +29,9 @@ from mini_app_polis import logger as logger_mod
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kaianolevine_api.models import CatalogRevision, TrackCatalog
-from kaianolevine_api.routers.catalog import _edit_values, edit_entry
-from kaianolevine_api.services.display import load_rules, render
+from ..models import CatalogRevision, TrackCatalog
+from ..routers.catalog import _edit_values, edit_entry
+from ..services.display import load_rules, render
 
 log = logger_mod.get_logger()
 
@@ -142,8 +142,8 @@ async def apply(session: AsyncSession, reverts: list[Revert]) -> int:
 
 async def run(apply_changes: bool, by: str, since: str, until: str) -> str:
     """Plan against DATABASE_URL, apply when asked, and return the report."""
-    from kaianolevine_api.config import get_settings
-    from kaianolevine_api.database import get_sessionmaker
+    from ..config import get_settings
+    from ..database import get_sessionmaker
 
     maker = get_sessionmaker(get_settings().DATABASE_URL)
     async with maker() as session:
