@@ -1,3 +1,10 @@
+# [2.82.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.81.1...v2.82.0) (2026-11-10)
+
+
+### Features
+
+* **flags:** add an optional value to feature flags ([d7597d8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d7597d8de226002d4b489d1e18b4dab2c0b31aa7))
+
 ## [2.81.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.81.0...v2.81.1) (2026-11-10)
 
 
