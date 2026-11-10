@@ -6,9 +6,13 @@ Each run reports the files it compared and their differences, under
 ``catalog.library.write``; for those files the report replaces what is held.
 The owner reviews the open differences on the WCS site and sets the
 approvals, under ``catalog.tracks.write`` (the catalog-editor role): whole
-kinds, or ``other`` differences one file and field at a time. The
-reconcile's write runs read the approvals and write only what they cover;
-nothing here writes music.
+kinds, or ``other`` differences one file and field at a time, each in one
+of two directions. Approved for the catalog, the catalog's value is written
+over the file; approved for the file, the file's value goes up to its entry
+(through ``POST /v1/catalog/library/files/edited`` with ``keep_file``) and
+the file is not written. Either way the two then match. The reconcile's
+write runs read the approvals and do only what they cover; nothing here
+writes music.
 
 Seeding carries approvals the owner gave before the API held them (deejay-
 cog's state file) and is refused once any are set, so the machine scope can
@@ -16,6 +20,8 @@ never change approvals the owner set here.
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from identity.types import Principal
@@ -53,20 +59,43 @@ def _approvals_out(row: DbApprovals | None) -> ReconcileApprovals:
         {
             "kinds": list(row.kinds),
             "files": dict(row.files),
+            "file_wins_kinds": list(row.file_wins_kinds or []),
+            "file_wins_files": dict(row.file_wins_files or {}),
             "updated_at": row.updated_at,
             "updated_by": row.updated_by,
         }
     )
 
 
-def approves(
+def approved_for(
     approvals: ReconcileApprovals, kind: str, file_id: str, field: str
-) -> bool:
-    """Whether ``approvals`` cover one difference: its kind, or for
-    ``other``, its file and field (as the reconcile's write run reads them)."""
+) -> Literal["catalog", "file"] | None:
+    """Which value ``approvals`` let win for one difference: by its kind, or
+    for ``other``, its file and field (as the reconcile's write run reads
+    them). None when not approved."""
     if kind == "other":
-        return field in approvals.files.get(file_id, [])
-    return kind in approvals.kinds
+        if field in approvals.files.get(file_id, []):
+            return "catalog"
+        if field in approvals.file_wins_files.get(file_id, []):
+            return "file"
+        return None
+    if kind in approvals.kinds:
+        return "catalog"
+    if kind in approvals.file_wins_kinds:
+        return "file"
+    return None
+
+
+def _stored(payload: ReconcileApprovalsSet) -> dict[str, object]:
+    """The approvals as the row holds them: sorted, no file left empty."""
+    return {
+        "kinds": sorted(set(payload.kinds)),
+        "files": {k: sorted(set(v)) for k, v in payload.files.items() if v},
+        "file_wins_kinds": sorted(set(payload.file_wins_kinds)),
+        "file_wins_files": {
+            k: sorted(set(v)) for k, v in payload.file_wins_files.items() if v
+        },
+    }
 
 
 async def _counts(session: AsyncSession) -> ReconcileReportResult:
@@ -165,12 +194,7 @@ async def seed_reconcile_approvals(
     """Carry approvals over from deejay-cog's state file, once."""
     stmt = (
         insert(DbApprovals)
-        .values(
-            id=1,
-            kinds=sorted(set(payload.kinds)),
-            files={k: sorted(set(v)) for k, v in payload.files.items()},
-            updated_by=f"seed:{principal.subject}",
-        )
+        .values(id=1, **_stored(payload), updated_by=f"seed:{principal.subject}")
         .on_conflict_do_nothing(index_elements=[DbApprovals.id])
         .returning(DbApprovals.id)
     )
@@ -189,7 +213,8 @@ async def seed_reconcile_approvals(
     description=(
         "Every open difference of a file still in the library, by kind, then "
         "path and field, each marked approved or not by the current "
-        "approvals. Requires catalog.tracks.write."
+        "approvals, and for which side (approved_for: catalog or file). "
+        "Requires catalog.tracks.write."
     ),
 )
 async def review_reconcile(
@@ -221,7 +246,9 @@ async def review_reconcile(
             run_id=d.run_id,
             reported_at=d.reported_at,
             catalog_id=catalog_id,
-            approved=approves(approvals, d.kind, d.drive_file_id, d.field),
+            approved=(side := approved_for(approvals, d.kind, d.drive_file_id, d.field))
+            is not None,
+            approved_for=side,
         )
         for d, catalog_id in rows
     ]
@@ -234,9 +261,13 @@ async def review_reconcile(
     response_model=Envelope[ReconcileApprovals],
     summary="Set the approvals the reconcile's write runs apply",
     description=(
-        "Replaces the approvals: the kinds approved whole (never 'other'), "
-        "and 'other' differences by file and field. A file's entry with no "
-        "fields is dropped. Requires catalog.tracks.write."
+        "Replaces the approvals, in both directions: for the catalog (kinds, "
+        "files), the catalog's value is written over the file; for the file "
+        "(file_wins_kinds, file_wins_files), the file's value goes up to the "
+        "entry. Kinds are approved whole (never 'other'); 'other' "
+        "differences by file and field. A kind, or a file's field, goes one "
+        "way only. A file's entry with no fields is dropped. Requires "
+        "catalog.tracks.write."
     ),
 )
 async def set_reconcile_approvals(
@@ -246,8 +277,7 @@ async def set_reconcile_approvals(
 ) -> Envelope[ReconcileApprovals]:
     """The owner's approvals, replaced."""
     values = {
-        "kinds": sorted(set(payload.kinds)),
-        "files": {k: sorted(set(v)) for k, v in payload.files.items() if v},
+        **_stored(payload),
         "updated_by": principal.subject,
         "updated_at": func.now(),
     }

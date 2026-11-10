@@ -466,8 +466,15 @@ class ReconcileDifferenceOut(ReconcileDifference):
     approved: bool = Field(
         ...,
         description=(
-            "Whether the approvals cover it: its kind, or for 'other' its file "
-            "and field."
+            "Whether the approvals cover it, in either direction: its kind, or "
+            "for 'other' its file and field."
+        ),
+    )
+    approved_for: Literal["catalog", "file"] | None = Field(
+        default=None,
+        description=(
+            "Which value wins when approved: the catalog's, written over the "
+            "file, or the file's, sent up to the entry. None when not approved."
         ),
     )
 
