@@ -1,3 +1,11 @@
+# [2.81.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.80.0...v2.81.0) (2026-11-10)
+
+
+### Features
+
+* **cleanup:** revert one caller's catalog edits within a time window ([9a5ce1b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9a5ce1b1992bbdc51320cce47b7ea10afb46814c))
+* **cleanup:** revert one caller's catalog edits within a time window ([cd8c2b6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/cd8c2b6a3619299126ecd4e4a14e4378403bae92))
+
 # [2.80.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.79.0...v2.80.0) (2026-11-09)
 
 
