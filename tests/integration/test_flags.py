@@ -53,8 +53,7 @@ async def test_flags_value_null_for_existing_and_settable_via_patch(client) -> N
     def item(resp):
         return next(i for i in resp.json()["data"] if i["name"] == name)
 
-    listed = await client.get("/v1/flags")
-    assert all(i["value"] is None for i in listed.json()["data"])
+    assert item(await client.get("/v1/flags"))["value"] is None
 
     set_resp = await client.patch(
         f"/v1/flags/{name}", json={"enabled": True, "value": "dry"}
@@ -73,6 +72,27 @@ async def test_flags_value_null_for_existing_and_settable_via_patch(client) -> N
         f"/v1/flags/{name}", json={"enabled": True, "value": None}
     )
     assert clear_resp.json()["data"]["value"] is None
+
+
+_DEEJAY_COG_STEP_MODES = {
+    "library_scan": "write",
+    "library_trash": "off",
+    "library_identify": "write",
+    "library_backfill": "write",
+    "library_sync": "write",
+    "library_duplicates": "write",
+    "library_reconcile": "write",
+    "new_music": "write",
+}
+
+
+async def test_deejay_cog_step_flags_are_seeded_with_their_modes(client) -> None:
+    listed = {i["name"]: i for i in (await client.get("/v1/flags")).json()["data"]}
+
+    for step, mode in _DEEJAY_COG_STEP_MODES.items():
+        flag = listed[f"flags.deejay_cog.{step}"]
+        assert flag["value"] == mode, step
+        assert flag["enabled"] is (mode != "off"), step
 
 
 async def test_flags_patch_unknown_name_returns_404(client) -> None:
