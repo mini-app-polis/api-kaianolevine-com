@@ -6,8 +6,9 @@
 
 Reads DATABASE_URL. Entries that are one song are grouped: the same title
 and artist as the display rules write them out (case and spacing ignored),
-or the same matching keys, across every owner. Groups are joined through
-any entry they share. Archived entries take no part.
+or the same matching keys, across every owner, within one library (main or
+fx, migration 112: an fx entry is never merged with a main one). Groups are
+joined through any entry they share. Archived entries take no part.
 
 A group's **keeper** is its most-played entry (then the oldest, then by
 id); the group is named by the keeper's id. A dry run writes nothing: it
@@ -31,10 +32,10 @@ Each merged entry's values before and after go to ``catalog_revisions``
 be put back. Live plays are not linked to entries (they match by their
 spelling), so the aliases carry them over.
 
-Once no two live entries share their keys, the per-owner unique key is
-replaced with a unique index on the keys of live entries
-(:data:`ONE_CATALOG_SQL`, as migration 098 does on a database with no
-duplicates). Run ``--apply`` only after the owner has reviewed the dry run.
+Once no two live entries of a library share their keys, the per-owner
+unique key is replaced with a unique index on the library and keys of live
+entries (:data:`ONE_CATALOG_SQL`, as migrations 098 and 112 do on a
+database with no duplicates). Run ``--apply`` only after the owner has reviewed the dry run.
 """
 
 from __future__ import annotations
@@ -59,21 +60,22 @@ log = logger_mod.get_logger()
 
 KIND = "merge"
 
-#: The same statements as migration 098: once no two live entries share
-#: their keys, the keys are unique across the catalog.
+#: The statements of migration 098, keyed per library as migration 112
+#: re-keys them: once no two live entries of a library share their keys,
+#: the keys are unique across the catalog's library.
 ONE_CATALOG_SQL = """
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM track_catalog
     WHERE archived_at IS NULL
-    GROUP BY title_normalized, artist_normalized
+    GROUP BY library, title_normalized, artist_normalized
     HAVING count(*) > 1
   ) THEN
     ALTER TABLE track_catalog
       DROP CONSTRAINT IF EXISTS uq_track_catalog_owner_norm_title_artist;
     CREATE UNIQUE INDEX IF NOT EXISTS ux_track_catalog_norm_title_artist
-      ON track_catalog (title_normalized, artist_normalized)
+      ON track_catalog (library, title_normalized, artist_normalized)
       WHERE archived_at IS NULL;
   END IF;
 END $$;
@@ -167,8 +169,8 @@ async def plan(session: AsyncSession) -> list[Group]:
     for entry in entries:
         shown[entry.id] = display_key(entry, rules)
         for key in (
-            ("display", *shown[entry.id]),
-            ("keys", entry.title_normalized, entry.artist_normalized),
+            ("display", entry.library, *shown[entry.id]),
+            ("keys", entry.library, entry.title_normalized, entry.artist_normalized),
         ):
             held = by_key.setdefault(key, entry.id)
             a, b = find(held), find(entry.id)

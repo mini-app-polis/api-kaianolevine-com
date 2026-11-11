@@ -118,6 +118,7 @@ async def plan(session: AsyncSession, entry_id: uuid.UUID) -> Plan:
         await session.execute(
             select(TrackCatalog.id).where(
                 TrackCatalog.archived_at.is_(None),
+                TrackCatalog.library == entry.library,
                 TrackCatalog.title_normalized == entry.title_normalized,
                 TrackCatalog.artist_normalized == entry.artist_normalized,
             )

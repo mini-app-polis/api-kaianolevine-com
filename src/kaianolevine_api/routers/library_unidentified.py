@@ -34,6 +34,7 @@ from ..schemas import (
     success_envelope,
 )
 from ..services.display import load_rules
+from ..services.libraries import library_of, other_library_error
 from .catalog import catalog_match
 from .library import file_out, make_library_entry
 
@@ -97,7 +98,9 @@ async def list_unidentified_files(
         "library entry made from the parts sent (the catalog's own entry for "
         "the song when it already has one), and marks it identified and "
         "never synced, so the nightly sync writes the catalog's values to "
-        "it. Requires catalog.tracks.write."
+        "it. The entry is of the file's own library (main, or fx under the "
+        "FX Music root): an entry of the other library is refused with 409. "
+        "Requires catalog.tracks.write."
     ),
 )
 async def link_library_file(
@@ -115,11 +118,15 @@ async def link_library_file(
     if row is None:
         raise api_error(404, "not_found", "Library file not found")
 
+    # The file links only to an entry of its own library (migration 112).
+    library = library_of(row.library_root_id)
     created = False
     if payload.catalog_id is not None:
         entry = await session.get(DbCatalog, payload.catalog_id)
         if entry is None:
             raise api_error(404, "not_found", "Catalog entry not found")
+        if entry.library != library:
+            raise api_error(*other_library_error(library))
         catalog_id = entry.id
     else:
         assert payload.entry is not None
@@ -128,7 +135,7 @@ async def link_library_file(
                 422, "preview_not_linkable", "A previewed entry cannot be linked"
             )
         made = await make_library_entry(
-            session, payload.entry, owner_id=principal.subject
+            session, payload.entry, owner_id=principal.subject, library=library
         )
         catalog_id, created = made.entry.id, made.created
 

@@ -138,12 +138,16 @@ class CatalogMatcher:
     as the caller's: which key filed a play does not change what the song
     is, and among entries under the same key the most played one is the
     song. An archived entry (merged into another, or a library entry left
-    with no files) is never matched.
+    with no files) is never matched, nor is an entry of another ``library``
+    (main by default: plays are the main library's; migration 112).
     """
 
-    def __init__(self, session: AsyncSession, owner_id: str | None) -> None:
+    def __init__(
+        self, session: AsyncSession, owner_id: str | None, library: str = "main"
+    ) -> None:
         self.session = session
         self.owner_id = owner_id
+        self.library = library
         #: The owner's entries by normalized (title, artist). The ingest adds
         #: the entries it creates, so a later play in the same set finds them.
         self.by_pair: dict[tuple[str, str], TrackCatalog] = {}
@@ -162,6 +166,7 @@ class CatalogMatcher:
                 wanted
             ),
             TrackCatalog.archived_at.is_(None),
+            TrackCatalog.library == self.library,
         )
         if self.owner_id is not None:
             stmt = stmt.where(TrackCatalog.owner_id == self.owner_id)
@@ -178,7 +183,10 @@ class CatalogMatcher:
     async def _load_catalog(self) -> dict[tuple[str, str], list[TrackCatalog]]:
         if self._version_index is None:
             self._version_index = {}
-            live = select(TrackCatalog).where(TrackCatalog.archived_at.is_(None))
+            live = select(TrackCatalog).where(
+                TrackCatalog.archived_at.is_(None),
+                TrackCatalog.library == self.library,
+            )
             for c in (await self.session.execute(live)).scalars():
                 # An owner-edit entry is keyed as one, whatever its title.
                 key = (
@@ -258,7 +266,13 @@ class CatalogMatcher:
             self._row_key(track.title, track.artist, track.remix)
         )
         found = await self.session.get(TrackCatalog, catalog_id) if catalog_id else None
-        return found if found is not None and found.archived_at is None else None
+        return (
+            found
+            if found is not None
+            and found.archived_at is None
+            and found.library == self.library
+            else None
+        )
 
     # Every spelling an entry has been matched under (catalog_aliases): its
     # earlier plays, its live plays, its own title and artist, and its display
@@ -276,7 +290,10 @@ class CatalogMatcher:
                     TrackCatalog.play_count,
                 )
                 .join(TrackCatalog, TrackCatalog.id == CatalogAlias.catalog_id)
-                .where(TrackCatalog.archived_at.is_(None))
+                .where(
+                    TrackCatalog.archived_at.is_(None),
+                    TrackCatalog.library == self.library,
+                )
                 .order_by(TrackCatalog.play_count.asc(), CatalogAlias.catalog_id.desc())
             )
             # Most played last, so it is the one kept for its key.
@@ -346,7 +363,7 @@ async def record_alias(
 
 
 async def lookup_catalog(
-    *, session: AsyncSession, tracks: Iterable[IngestTrack]
+    *, session: AsyncSession, tracks: Iterable[IngestTrack], library: str = "main"
 ) -> list[TrackCatalog | None]:
     """Each track's catalog entry, as its play would be filed.
 
@@ -360,9 +377,11 @@ async def lookup_catalog(
     credited artist, with case, spaces and every symbol ignored. So a file
     tagged "2AM", "5:19" or "Anne‐Marie" finds the plays filed as "2 AM",
     "519" or "Anne-Marie". The ingest itself does not match loosely.
+
+    Only entries of ``library`` are searched (migration 112).
     """
     items = [(t, track_keys(t)) for t in tracks]
-    matcher = CatalogMatcher(session, None)
+    matcher = CatalogMatcher(session, None, library)
     await matcher.prefetch(keys.pair for _, keys in items)
     out: list[TrackCatalog | None] = []
     for track, keys in items:
