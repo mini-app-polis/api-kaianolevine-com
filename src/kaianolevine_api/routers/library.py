@@ -51,6 +51,7 @@ from ..schemas import (
 from ..services.display import Rules, load_rules
 from ..services.fill_up import label_taken
 from ..services.genres import catalog_genre, vocabulary_genre
+from ..services.libraries import MAIN, Library, library_of, other_library_error
 from ..services.reconciliation import lookup_catalog, record_alias, track_keys
 from ..services.song_identity import catalog_artist, clean_genre, is_owner_edit
 from ..services.song_parts import propose
@@ -108,7 +109,9 @@ def file_out(row: DbLibraryFile) -> LibraryFile:
         "Keyed by the Drive file id. The first call registers the file; a "
         "later one writes the path, root, link and status, and of the "
         "optional fields only those it sends. Either way the file is present "
-        "and last seen now. Requires catalog.library.write."
+        "and last seen now. A file links only to an entry of its own library "
+        "(main, or fx under the FX Music root): a link to the other library's "
+        "entry is refused with 409. Requires catalog.library.write."
     ),
 )
 async def register_library_file(
@@ -118,8 +121,12 @@ async def register_library_file(
 ) -> Envelope[LibraryFile]:
     """Upsert one registry row by its Drive id."""
     if payload.catalog_id is not None:
-        if await session.get(DbCatalog, payload.catalog_id) is None:
+        linked = await session.get(DbCatalog, payload.catalog_id)
+        if linked is None:
             raise api_error(404, "not_found", "Catalog entry not found")
+        library = library_of(payload.library_root_id)
+        if linked.library != library:
+            raise api_error(*other_library_error(library))
 
     sent = payload.model_fields_set
     values: dict[str, object] = {
@@ -711,9 +718,14 @@ async def make_library_entry(
     *,
     owner_id: str,
     preview: bool = False,
+    library: Library = MAIN,
 ) -> LibraryEntryCreated:
     """The catalog's entry for the song, or a new library entry (no plays)
     when it has none; commits a new entry.
+
+    Only entries of ``library`` are searched, and a new entry belongs to it:
+    a file of FX Music gets an fx entry of its own, even for a song the main
+    library has (migration 112).
 
     With ``preview``, the new entry is made and written out exactly as it
     would be, then rolled back: nothing is saved.
@@ -727,7 +739,7 @@ async def make_library_entry(
         bpm=payload.bpm,
         release_year=payload.release_year,
     )
-    (found,) = await lookup_catalog(session=session, tracks=[track])
+    (found,) = await lookup_catalog(session=session, tracks=[track], library=library)
     if found is not None:
         return LibraryEntryCreated(
             entry=catalog_match(found, await load_rules(session)), created=False
@@ -753,6 +765,7 @@ async def make_library_entry(
         first_played=None,
         last_played=None,
         owner_edit=is_owner_edit(keys.display),
+        library=library,
     )
     session.add(entry)
     try:
@@ -774,7 +787,9 @@ async def make_library_entry(
     except IntegrityError:
         # Another call made the same entry first: that one is the answer.
         await session.rollback()
-        (found,) = await lookup_catalog(session=session, tracks=[track])
+        (found,) = await lookup_catalog(
+            session=session, tracks=[track], library=library
+        )
         if found is None:
             raise
         return LibraryEntryCreated(

@@ -23,7 +23,8 @@ Reads DATABASE_URL. The list is ``config_data/catalog_fixes.yaml``; each
   entry of its own: the found entry's parts and owned fields with that
   version and no BPM (the file's fills it), and no plays. The files are
   linked to it. When an entry is already shown that way, the files are
-  linked to that one and nothing is made.
+  linked to that one and nothing is made. The version stays in the found
+  entry's library (main or fx): a file of the other library is skipped.
 
 A dry run lists every entry a fix changes, with how it is shown before and
 after, and every fix that matches nothing or too much (skipped). ``--apply``
@@ -32,8 +33,8 @@ entry's values before and after go to ``catalog_revisions`` (kind
 ``edit``, by ``cleanup.fixes``), its source becomes manual and its new display is kept as a
 spelling it matches under. A fix already applied matches nothing the next
 time, so running the list twice changes nothing more. ``--show TEXT`` prints
-the parts of every entry whose shown title or artist contains TEXT, and
-writes nothing. A new version's entry records its values (``before`` empty),
+the parts of every entry whose shown title or artist contains TEXT, each
+archived entry marked ``[archived]``, and writes nothing. A new version's entry records its values (``before`` empty),
 the entry it was made from and the files moved to it, in the same
 revision kind. Run ``--apply`` only after the owner has reviewed the dry run.
 """
@@ -58,6 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CatalogRevision, LibraryFile, TrackCatalog
 from ..services.display import Rules, load_rules, render
+from ..services.libraries import MAIN, library_of
 from ..services.reconciliation import IngestTrack, record_alias, track_keys
 
 log = logger_mod.get_logger()
@@ -242,6 +244,8 @@ def _plan_version(
         out.skipped.append(f"{label}: matches {len(matches)} entries, not one")
         return
     [source] = matches
+    # A version stays in its entry's library (main or fx, migration 112).
+    library = getattr(source, "library", MAIN)
     values = {**values_of(source), "version": str(spec["version"]).strip()}
     values["bpm"] = None
     if values["base_title"] is None or not values["main_artists"]:
@@ -253,6 +257,7 @@ def _plan_version(
             e
             for e in live
             if e.id != source.id
+            and getattr(e, "library", MAIN) == library
             and tuple(fold(x) for x in shown[e.id]) == tuple(fold(x) for x in target)
         ),
         None,
@@ -262,6 +267,13 @@ def _plan_version(
         row = files.get(drive_id)
         if row is None:
             out.skipped.append(f"{label}: file {drive_id} is not in the library")
+            continue
+        root = getattr(row, "library_root_id", None)
+        if root is not None and library_of(root) != library:
+            out.skipped.append(
+                f"{label}: file {drive_id} is in the {library_of(root)} library, "
+                f"the entry in the {library} library"
+            )
             continue
         if existing is None or row.catalog_id != existing.id:
             moving[drive_id] = row.catalog_id
@@ -388,14 +400,18 @@ def report(the_plan: Plan) -> str:
 
 
 def show_text(entries: Iterable[Any], text: str, rules: Rules) -> str:
-    """The parts of every entry whose shown title or artist contains ``text``."""
+    """The parts of every entry whose shown title or artist contains ``text``.
+
+    An archived entry (merged into another, or left with no files) is marked
+    ``[archived]``; a live one is not."""
     needle = fold(text)
     lines = []
     for e in entries:
         title, artist = _shown(e, values_of(e), rules)
         if needle in fold(title) or needle in fold(artist):
             v = values_of(e)
-            lines.append(f"{e.id}  {title} — {artist}")
+            archived = "  [archived]" if getattr(e, "archived_at", None) else ""
+            lines.append(f"{e.id}  {title} — {artist}{archived}")
             lines.append(
                 f"    base_title {v['base_title']!r}, version {v['version']!r}, "
                 f"main {v['main_artists']}, featured {v['featured_artists']}"
@@ -461,6 +477,7 @@ async def _apply_version(
         keys = track_keys(IngestTrack(title=title, artist=artist))
         entry = TrackCatalog(
             owner_id=source.owner_id,
+            library=source.library,
             title=title,
             artist=artist,
             title_normalized=keys.pair[0],

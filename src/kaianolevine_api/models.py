@@ -165,6 +165,12 @@ class TrackCatalog(Base):
     cut_from_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("track_catalog.id"), nullable=True
     )
+    # The library the entry belongs to (migration 112): main, or fx for FX
+    # Music, the event fx and bumper music. A file links only to an entry of
+    # its own library (services.libraries).
+    library: Mapped[str] = mapped_column(
+        String, nullable=False, default="main", server_default=text("'main'")
+    )
 
     play_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     first_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
@@ -187,10 +193,12 @@ class TrackCatalog(Base):
     )
 
     # One catalog (migration 098): a song's keys are unique among live
-    # entries, whichever owner filed it; archived entries keep theirs.
+    # entries of a library (migration 112), whichever owner filed it;
+    # archived entries keep theirs.
     __table_args__ = (
         Index(
             "ux_track_catalog_norm_title_artist",
+            "library",
             "title_normalized",
             "artist_normalized",
             unique=True,

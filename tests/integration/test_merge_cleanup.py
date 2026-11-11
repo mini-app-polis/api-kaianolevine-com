@@ -296,3 +296,214 @@ async def test_any_owners_entry_can_be_edited(client, async_engine) -> None:
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["genre"] == "House"
+
+
+def _file(drive_id: str, catalog_id: uuid.UUID, length: float, size: int | None):
+    return LibraryFile(
+        drive_file_id=drive_id,
+        library_root_id="root",
+        path=f"Pop/{drive_id}.mp3",
+        identification_status="identified",
+        catalog_id=catalog_id,
+        duration_secs=length,
+        size_bytes=size,
+    )
+
+
+async def _seed_likely_same(async_engine) -> tuple[async_sessionmaker, dict]:
+    """Pairs of entries that are one song but that the merge cannot group,
+    one for each kind of near miss, plus an unrelated song."""
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        ids: dict[str, uuid.UUID] = {}
+        rows = {
+            # The remixer stored in brackets in the artist.
+            "bracketed": _entry(
+                "kaiano", "Lean On", "Major Lazer [Collin McLoughlin Remix]", 2
+            ),
+            "plain": _entry("kaiano", "Lean On", "Major Lazer", 9),
+            # A missing version against the same song with one.
+            "unversioned": _entry("kaiano", "Cruel", "Snakehips", 1),
+            "versioned": _entry(
+                "kaiano",
+                "Cruel (Piano Acoustic)",
+                "Snakehips",
+                3,
+                base_title="Cruel",
+                version="Piano Acoustic",
+                main_artists=["Snakehips"],
+            ),
+            # No parts, against another entry with the same song (rule a and b).
+            "klymvx_no_parts": _entry(
+                "kaiano",
+                "Lean On (KLYMVX Ft. Emma Heesters Remix)",
+                "Major Lazer & DJ Snake",
+                0,
+            ),
+            "klymvx": _entry(
+                "kaiano",
+                "Lean On (KLYMVX Ft. Emma Heesters Remix) [v]",
+                "Major Lazer",
+                4,
+                title_normalized="lean on klymvx",
+                base_title="Lean On",
+                version="KLYMVX Ft. Emma Heesters Remix",
+                main_artists=["Major Lazer"],
+            ),
+            # Rule b: the same title, no shared artist, files a second apart.
+            "cover": _entry("kaiano", "Hallelujah", "Jeff Buckley", 1),
+            "cover_too": _entry("kaiano", "Hallelujah", "J. Buckley", 1),
+            # Rule c: different titles, the same file.
+            "renamed": _entry("kaiano", "Track 07", "Unknown", 0),
+            "named": _entry("kaiano", "Wonderwall", "Oasis", 6),
+            "unrelated": _entry("kaiano", "Temple", "Thomas Gold", 3),
+        }
+        session.add_all(rows.values())
+        await session.flush()
+        ids = {name: row.id for name, row in rows.items()}
+        session.add_all(
+            [
+                _file("klymvx-1", ids["klymvx_no_parts"], 276.0, 11_040_000),
+                _file("klymvx-2", ids["klymvx"], 276.4, 11_052_000),
+                _file("cover-1", ids["cover"], 412.2, 9_000_000),
+                _file("cover-2", ids["cover_too"], 412.9, 9_100_000),
+                _file("renamed-1", ids["renamed"], 258.5, 10_340_000),
+                _file("named-1", ids["named"], 258.5, 10_340_000),
+                _file("temple-1", ids["unrelated"], 258.5, 10_999_999),
+            ]
+        )
+        await session.commit()
+    return maker, ids
+
+
+def _pairs(likely: list[merge.LikelySame]) -> dict[frozenset, set[str]]:
+    return {frozenset(e.id for e in c.entries): c.why for c in likely}
+
+
+async def test_the_dry_run_lists_entries_that_may_be_one_song_apart(
+    async_engine,
+) -> None:
+    maker, ids = await _seed_likely_same(async_engine)
+
+    async with maker() as session:
+        groups = await merge.plan(session)
+        likely = await merge.likely_same(session, groups)
+
+    assert groups == []
+    found = _pairs(likely)
+    lean_on = frozenset(
+        {ids["bracketed"], ids["plain"], ids["klymvx_no_parts"], ids["klymvx"]}
+    )
+    assert "title" in found[lean_on]  # rule a: a bracketed remixer, a shared artist
+    assert "title and file" in found[lean_on]  # rule b: the 4:36 files
+    assert found[frozenset({ids["unversioned"], ids["versioned"]})] == {"title"}
+    assert found[frozenset({ids["cover"], ids["cover_too"]})] == {"title and file"}
+    assert found[frozenset({ids["renamed"], ids["named"]})] == {"file"}  # rule c
+    assert not any(ids["unrelated"] in pair for pair in found)
+
+    text_ = merge.report(groups, likely)
+    assert "may be one song, in no group" in text_
+    assert "--apply never merges these" in text_
+    assert f"{ids['klymvx_no_parts']}  Lean On (KLYMVX" in text_
+    assert "[0 plays, no parts, files: 4:36 11040000 bytes]" in text_
+    assert "[4 plays, parts, files: 4:36 11052000 bytes]" in text_
+
+
+async def test_apply_never_merges_entries_that_may_be_one_song(async_engine) -> None:
+    maker, ids = await _seed_likely_same(async_engine)
+
+    async with maker() as session:
+        groups = await merge.plan(session)
+        merged, _unique = await merge.apply(session, groups, None)
+
+    assert merged == 0
+    async with maker() as session:
+        rows = (await session.execute(select(TrackCatalog))).scalars().all()
+        files = (await session.execute(select(LibraryFile))).scalars().all()
+    assert all(r.archived_at is None for r in rows)
+    assert {f.drive_file_id: f.catalog_id for f in files}["klymvx-1"] == (
+        ids["klymvx_no_parts"]
+    )
+
+
+async def test_an_entry_in_a_group_is_not_listed_as_may_be_one_song(
+    async_engine,
+) -> None:
+    maker, ids = await _seed_tweet(async_engine)
+
+    async with maker() as session:
+        groups = await merge.plan(session)
+        likely = await merge.likely_same(session, groups)
+
+    assert len(groups) == 1
+    assert likely == []
+
+
+async def test_the_merge_keeps_the_keepers_own_parts(async_engine) -> None:
+    await _per_owner_keys(async_engine)
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        # The keeper has its own version and artists but no base title.
+        keeper = _entry(
+            "kaiano",
+            "I See Fire (Kygo Remix)",
+            "Ed Sheeran",
+            12,
+            version="Kygo Remix",
+            main_artists=["Ed Sheeran"],
+        )
+        other = _entry(
+            "deejay-cog",
+            "I See Fire (Kygo Remix)",
+            "Ed Sheeran",
+            2,
+            base_title="I See Fire",
+            main_artists=["Ed Sheeran"],
+            genre="Pop",
+            release_year=2013,
+        )
+        session.add_all([keeper, other])
+        await session.commit()
+
+    async with maker() as session:
+        [group] = await merge.plan(session)
+        assert "parts" not in group.fills()
+        await merge.apply(session, [group], None)
+
+    async with maker() as session:
+        kept = await session.get(TrackCatalog, keeper.id)
+    assert kept is not None
+    assert (kept.base_title, kept.version, kept.main_artists) == (
+        None,
+        "Kygo Remix",
+        ["Ed Sheeran"],
+    )
+    assert (kept.genre, kept.release_year) == ("Pop", 2013)  # empty fields fill
+
+
+async def test_a_keeper_with_no_parts_takes_another_entrys_parts_whole(
+    async_engine,
+) -> None:
+    await _per_owner_keys(async_engine)
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        keeper = _entry("kaiano", "I See Fire", "Ed Sheeran", 12)
+        other = _entry(
+            "deejay-cog",
+            "I See Fire",
+            "Ed Sheeran",
+            2,
+            base_title="I See Fire",
+            main_artists=["Ed Sheeran"],
+        )
+        session.add_all([keeper, other])
+        await session.commit()
+
+    async with maker() as session:
+        [group] = await merge.plan(session)
+        await merge.apply(session, [group], None)
+
+    async with maker() as session:
+        kept = await session.get(TrackCatalog, keeper.id)
+    assert kept is not None
+    assert (kept.base_title, kept.main_artists) == ("I See Fire", ["Ed Sheeran"])

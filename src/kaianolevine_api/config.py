@@ -325,6 +325,13 @@ class Settings(BaseSettings):
     # can be.
     SPOTIFY_TOKEN_CHECK_INTERVAL_SECS: int = 3600
 
+    # The FX Music library root: the Drive folder id deejay-cog registers FX
+    # Music's files under (their library_root_id, deejay-cog ADR-0009). A
+    # file under it is in the fx library, every other file in the main one,
+    # and a file links only to an entry of its own library
+    # (services.libraries). Unset: every file is in the main library.
+    FX_LIBRARY_ROOT_FOLDER_ID: str | None = None
+
     # Google service account (Drive resume proxy): the fleet's one service
     # account, as the JSON key file Google issues — the same
     # GOOGLE_CREDENTIALS_JSON every cog reads. See google_service_account.
