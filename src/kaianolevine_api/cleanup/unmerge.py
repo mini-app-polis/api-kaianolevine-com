@@ -9,7 +9,7 @@ that:
 
 - the entry is live again (``archived_at`` cleared) with its values from
   before the merge;
-- the plays and library files the merge moved from it go back to it, those
+- the plays and library files the merge took from it go back to it, those
   still on the keeper (one moved on since is left and listed);
 - the keeper loses the aliases the merge gave it from the entry (the
   entry's own spelling and its aliases), unless the keeper's own title and
