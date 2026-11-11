@@ -321,20 +321,38 @@ async def _archived_at(async_engine, catalog_id: str):
         return row.archived_at
 
 
-async def test_an_unplayed_entry_whose_last_file_goes_is_archived_and_comes_back(
+async def test_an_unplayed_entry_stays_live_when_its_only_file_goes(
     client, async_engine
 ) -> None:
     entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
     await _register(client, _file("drive-1", entry))
-    await _register(client, _file("drive-2", entry))
 
     await client.post(ABSENT, json={"drive_file_ids": ["drive-1"]})
-    assert await _archived_at(async_engine, entry) is None  # drive-2 is still there
+    assert await _archived_at(async_engine, entry) is None
+    linked = (await client.get(FILES, params={"catalog_id": entry})).json()["data"]
+    assert [(r["drive_file_id"], r["present"]) for r in linked] == [("drive-1", False)]
 
-    await client.post(ABSENT, json={"drive_file_ids": ["drive-2"]})
-    assert await _archived_at(async_engine, entry) is not None
+    back = await _register(client, _file("drive-1", entry))
+    assert back["present"] is True and back["catalog_id"] == entry
+    assert await _archived_at(async_engine, entry) is None
+    linked = (await client.get(FILES, params={"catalog_id": entry})).json()["data"]
+    assert [(r["drive_file_id"], r["present"]) for r in linked] == [("drive-1", True)]
 
-    await _register(client, _file("drive-2", entry))
+
+async def test_an_entry_archived_before_comes_back_when_its_file_is_registered(
+    client, async_engine
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold"))["entry"]["id"]
+    await _register(client, _file("drive-1", entry))
+    await client.post(ABSENT, json={"drive_file_ids": ["drive-1"]})
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        row = await session.get(DbCatalog, uuid.UUID(entry))
+        assert row is not None
+        row.archived_at = dt.datetime(2026, 11, 1, tzinfo=dt.UTC)
+        await session.commit()
+
+    await _register(client, _file("drive-1", entry))
     assert await _archived_at(async_engine, entry) is None
 
 
