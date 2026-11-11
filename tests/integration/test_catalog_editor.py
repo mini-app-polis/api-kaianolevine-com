@@ -232,12 +232,22 @@ async def test_the_migration_grants_the_editor_role_to_wcs_admin_humans(
 
     await grant_role(async_engine, "the-owner", "wcs-admin")
     await grant_role(async_engine, "a-reader", "wcs-reader")
-    sql = (
-        Path(__file__).parents[2] / "migrations" / "099_catalog_editor.sql"
-    ).read_text()
+    migrations = Path(__file__).parents[2] / "migrations"
+    sql = (migrations / "099_catalog_editor.sql").read_text()
+    # 099 also sets the revision kinds as they were then: the later
+    # migrations that change them run again after it, so the tests after
+    # this one see the schema as migrated.
+    later = [
+        m.read_text()
+        for m in sorted(migrations.glob("*.sql"))
+        if m.name > "099_catalog_editor.sql"
+        and "catalog_revisions_kind_check" in m.read_text()
+    ]
     async with async_engine.begin() as conn:
         raw = await conn.get_raw_connection()
         await raw.driver_connection.execute(sql)
+        for again in later:
+            await raw.driver_connection.execute(again)
         rows = await conn.execute(
             text(
                 "SELECT ip.subject FROM identity_principal_roles pr "

@@ -226,6 +226,18 @@ run.
   entry, the values before its first revision in the window, unless the
   entry was edited again since. `--apply` writes them as the catalog editor
   would (revision kind `edit`, by `cleanup.revert`, source manual).
+- `python -m kaianolevine_api.cleanup.unmerge --entry ID` — puts back one
+  entry that a merge archived (by the duplicates page or the merge
+  clean-up): its values as they were before the merge, and the plays and
+  library files the merge moved, where they are still on the keeper (a file
+  moved on since is left and listed). The aliases the merge gave the keeper
+  from this entry are dropped and the keeper's play count goes back down; the
+  keeper's other values are left, so check it in the editor if the merge
+  filled any of them from this entry. Refused if the entry is live, was never
+  merged, or another live entry holds its keys. `--apply` writes it, with a
+  revision of kind `unmerge` on both entries (migration 110). A file put back
+  is synced by deejay-cog's next library job, which writes the entry's values
+  to it.
 
 ## Deployment Target
 
