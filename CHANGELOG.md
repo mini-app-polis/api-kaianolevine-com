@@ -1,3 +1,12 @@
+# [2.86.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.85.0...v2.86.0) (2026-11-11)
+
+
+### Features
+
+* **catalog:** owner-edit entries and an owner-edit display pair ([5cc8d0b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5cc8d0bf4a36bc3a8d81de1f8dd29aa088da8956))
+* **catalog:** split, display and match owner-edit versions ([f85676c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f85676cb586146b77a554ba96fd9c1a6b049f6aa))
+* **queue:** send a time-bucketed dedup id on FIFO enqueues and report collapsed requests ([d908a50](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d908a504d04b71e92add8bcf0a6158748e610947))
+
 # [2.85.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.84.1...v2.85.0) (2026-11-11)
 
 
