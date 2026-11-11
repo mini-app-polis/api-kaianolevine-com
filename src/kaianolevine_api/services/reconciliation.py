@@ -180,8 +180,12 @@ class CatalogMatcher:
             self._version_index = {}
             live = select(TrackCatalog).where(TrackCatalog.archived_at.is_(None))
             for c in (await self.session.execute(live)).scalars():
+                # An owner-edit entry is keyed as one, whatever its title.
                 key = (
-                    loose_title_key(c.title + (f" {c.remix}" if c.remix else "")),
+                    loose_title_key(
+                        c.title + (f" {c.remix}" if c.remix else ""),
+                        owner_edit=True if c.owner_edit else None,
+                    ),
                     main_artist_key(c.artist),
                 )
                 self._version_index.setdefault(key, []).append(c)
@@ -195,7 +199,9 @@ class CatalogMatcher:
     async def find_loose(self, display: str, artist: str) -> TrackCatalog | None:
         """The entry whose title (with its version) and first credited artist
         match ``display`` and ``artist`` with case, spaces and every symbol
-        ignored ("2AM" is "2 AM", "5:19" is "519"), or None."""
+        ignored ("2AM" is "2 AM", "5:19" is "519"), or None. An owner edit
+        matches only an owner-edit entry, and the published song only an
+        entry that is not one."""
         matches = (await self._load_catalog()).get(
             (loose_title_key(display), main_artist_key(artist)), []
         )

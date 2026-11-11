@@ -17,6 +17,7 @@ class _Entry:
     version: str | None = None
     main_artists: list[str] = dataclasses.field(default_factory=list)
     featured_artists: list[str] = dataclasses.field(default_factory=list)
+    owner_edit: bool = False
 
 
 def test_featured_artists_go_in_the_artist() -> None:
@@ -130,5 +131,54 @@ def test_the_default_rules_are_the_first_agreed_rules() -> None:
         artist_joiner=", ",
         version_open="(",
         version_close=")",
+        owner_edit_open="<",
+        owner_edit_close=">",
         bpm_decimals=1,
     )
+
+
+def test_an_owner_edit_is_shown_in_angle_brackets() -> None:
+    shown = render(
+        _Entry(
+            base_title="Baby What You Want Me To Do",
+            version="Intro Cut",
+            main_artists=["Etta James"],
+            owner_edit=True,
+        )
+    )
+    assert shown.title == "Baby What You Want Me To Do <Intro Cut>"
+    assert shown.remix is None
+
+
+def test_an_unflagged_version_keeps_the_version_pair() -> None:
+    shown = render(_Entry(base_title="Song", version="Intro Cut", main_artists=["A"]))
+    assert shown.title == "Song (Intro Cut)"
+
+
+def test_the_owner_edit_pair_is_a_rule() -> None:
+    rules = Rules(owner_edit_open="{", owner_edit_close="}")
+    shown = render(
+        _Entry(
+            base_title="Song",
+            version="Self Censored",
+            main_artists=["A"],
+            owner_edit=True,
+        ),
+        rules,
+    )
+    assert shown.title == "Song {Self Censored}"
+
+
+def test_an_entry_without_the_flag_is_not_an_owner_edit() -> None:
+    @dataclasses.dataclass
+    class _Older:
+        title: str = "t"
+        artist: str = "a"
+        remix: str | None = None
+        bpm: float | None = None
+        base_title: str | None = "Song"
+        version: str | None = "Live"
+        main_artists: list[str] = dataclasses.field(default_factory=lambda: ["A"])
+        featured_artists: list[str] = dataclasses.field(default_factory=list)
+
+    assert render(_Older()).title == "Song (Live)"

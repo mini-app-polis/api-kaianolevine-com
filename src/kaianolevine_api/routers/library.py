@@ -52,7 +52,7 @@ from ..services.display import Rules, load_rules
 from ..services.fill_up import label_taken
 from ..services.genres import catalog_genre, vocabulary_genre
 from ..services.reconciliation import lookup_catalog, record_alias, track_keys
-from ..services.song_identity import catalog_artist, clean_genre
+from ..services.song_identity import catalog_artist, clean_genre, is_owner_edit
 from ..services.song_parts import propose
 from .catalog import catalog_display, catalog_match, edit_entry
 
@@ -475,6 +475,7 @@ def _changes(
     shown: dict[str, str | None],
     label: str | None,
     kept: frozenset[str] = frozenset(),
+    owner_edit: bool = False,
 ) -> tuple[dict[str, object], dict[str, str]]:
     """The entry's fields an edit in a file sets, and the fields held with
     why.
@@ -484,7 +485,11 @@ def _changes(
     by "&" stay one artist, as the file writes them, and a bracketed part
     that names no version stays in the title. The difference closes with
     nothing lost, and the owner can split the names in the editor later. It
-    is held only when the split leaves no title or no main artist."""
+    is held only when the split leaves no title or no main artist.
+
+    A title that would make the entry an owner edit, or stop it being one
+    (``owner_edit`` says whether it is), is held: an owner edit is an entry
+    of its own, so the file is linked to that entry instead."""
     changes: dict[str, object] = {}
     held: dict[str, str] = {}
     if "title" in edited or "artist" in edited:
@@ -495,7 +500,14 @@ def _changes(
         takes = proposal.clear or (
             chosen and not any(r.startswith(_UNSPLITTABLE) for r in proposal.ambiguous)
         )
-        if takes and proposal.parts.base_title and proposal.parts.main_artists:
+        if "title" in edited and proposal.parts.owner_edit != owner_edit:
+            held["title"] = (
+                "an owner edit is an entry of its own: link the file to it "
+                "rather than retitle this entry"
+            )
+            if "artist" in edited:
+                held["artist"] = held["title"]
+        elif takes and proposal.parts.base_title and proposal.parts.main_artists:
             changes.update(
                 base_title=proposal.parts.base_title,
                 version=proposal.parts.version,
@@ -630,7 +642,9 @@ async def report_library_file_edited(
             edited[name] = file
         fields[name] = field
 
-    changes, held = _changes(edited, shown, row.edit_label, frozenset(keep))
+    changes, held = _changes(
+        edited, shown, row.edit_label, frozenset(keep), owner_edit=entry.owner_edit
+    )
     for name, why in held.items():
         fields[name].outcome = "held"
         fields[name].why = why
@@ -738,6 +752,7 @@ async def make_library_entry(
         play_count=0,
         first_played=None,
         last_played=None,
+        owner_edit=is_owner_edit(keys.display),
     )
     session.add(entry)
     try:

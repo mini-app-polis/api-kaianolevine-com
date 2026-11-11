@@ -201,3 +201,64 @@ def test_a_credit_inside_a_version_s_brackets_is_featured() -> None:
     assert p.parts.base_title == "Twerk It Like Miley"
     assert p.parts.version == "Dawin Remix"
     assert p.parts.featured_artists == ("Christopher",)
+
+
+def test_a_version_in_angle_brackets_is_an_owner_edit() -> None:
+    p = propose("Baby What You Want Me To Do <Intro Cut>", "Etta James")
+    assert p.parts == Parts(
+        "Baby What You Want Me To Do",
+        "Intro Cut",
+        ("Etta James",),
+        (),
+        owner_edit=True,
+    )
+    assert p.clear
+    assert "owner_edit" in p.notes
+
+
+def test_a_version_in_parentheses_is_not_an_owner_edit() -> None:
+    p = propose("Baby What You Want Me To Do (Live)", "Etta James")
+    assert p.parts.version == "Live"
+    assert not p.parts.owner_edit
+
+
+def test_an_owner_edit_keeps_a_release_label_s_words_as_its_version() -> None:
+    p = propose("Song <No Intro Edit>", "A")
+    assert (p.parts.version, p.parts.owner_edit) == ("No Intro Edit", True)
+    assert "release_label" not in p.notes
+    # The same words in parentheses are an official release label.
+    q = propose("Song (No Intro Edit)", "A")
+    assert (q.parts.version, q.parts.owner_edit) == (None, False)
+
+
+def test_an_owner_edit_keeps_its_credits() -> None:
+    p = propose("Song ft. X <Self Censored>", "A")
+    assert p.parts == Parts("Song", "Self Censored", ("A",), ("X",), owner_edit=True)
+
+
+def test_an_owner_edit_and_another_version_is_asked_about() -> None:
+    p = propose("Song <Intro Cut> (Lash Remix)", "A")
+    assert p.parts.owner_edit
+    assert not p.clear
+
+
+def test_empty_angle_brackets_are_no_version() -> None:
+    p = propose("Song <>", "A")
+    assert p.parts == Parts("Song", None, ("A",), ())
+
+
+def test_an_owner_edit_split_shows_as_it_was_written() -> None:
+    p = propose("Baby What You Want Me To Do <Intro Cut>", "Etta James").parts
+
+    class Entry:
+        title = "t"
+        artist = "a"
+        remix = None
+        bpm = None
+        base_title = p.base_title
+        version = p.version
+        main_artists = list(p.main_artists)
+        featured_artists = list(p.featured_artists)
+        owner_edit = p.owner_edit
+
+    assert render(Entry()).title == "Baby What You Want Me To Do <Intro Cut>"

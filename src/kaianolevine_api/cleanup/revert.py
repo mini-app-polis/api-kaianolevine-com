@@ -103,7 +103,9 @@ async def plan(
         skipped = ""
         if not changes:
             skipped = "already back"
-        elif now != last:
+        elif {name: now.get(name) for name in last} != last:
+            # Compared on the fields the revision holds: one written before
+            # a field existed does not hold it.
             skipped = "edited again since; left as it is"
         out.append(Revert(catalog_id, label, target, changes, skipped))
     return sorted(out, key=lambda r: r.shown_now.lower())

@@ -155,6 +155,17 @@ class TrackCatalog(Base):
     )
     subgenre: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # An owner edit (migration 111): the owner's own cut of a recording, a
+    # version with an entry of its own, written with the display rules'
+    # owner-edit pair. cut_from_id is the published entry it was cut from,
+    # when that is known.
+    owner_edit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    cut_from_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("track_catalog.id"), nullable=True
+    )
+
     play_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     first_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     last_played: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
@@ -200,6 +211,12 @@ class DisplayRules(Base):
     artist_joiner: Mapped[str] = mapped_column(String, nullable=False)
     version_open: Mapped[str] = mapped_column(String, nullable=False)
     version_close: Mapped[str] = mapped_column(String, nullable=False)
+    owner_edit_open: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'<'")
+    )
+    owner_edit_close: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'>'")
+    )
     bpm_decimals: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     case_style: Mapped[str] = mapped_column(String, nullable=False)
     changed_at: Mapped[dt.datetime] = mapped_column(
