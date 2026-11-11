@@ -134,6 +134,11 @@ async def link_library_file(
             raise api_error(
                 422, "preview_not_linkable", "A previewed entry cannot be linked"
             )
+        if (
+            "library" in payload.entry.model_fields_set
+            and payload.entry.library != library
+        ):
+            raise api_error(*other_library_error(library))
         made = await make_library_entry(
             session, payload.entry, owner_id=principal.subject, library=library
         )

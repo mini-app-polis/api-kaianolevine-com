@@ -177,3 +177,46 @@ async def test_the_merge_never_groups_an_fx_entry_with_a_main_one(
         groups = await merge.plan(session)
 
     assert groups == []
+
+
+async def test_an_fx_entry_is_made_when_asked_for_by_its_library(client) -> None:
+    main = await _main_entry(client)
+
+    response = await client.post(
+        ENTRIES, json={"title": "Temple", "artist": "Thomas Gold", "library": "fx"}
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["created"] is True
+    assert data["entry"]["id"] != main
+    assert data["entry"]["library"] == "fx"
+    again = await client.post(
+        ENTRIES, json={"title": "Temple", "artist": "Thomas Gold", "library": "fx"}
+    )
+    assert again.json()["data"]["entry"]["id"] == data["entry"]["id"]
+    assert again.json()["data"]["created"] is False
+
+
+async def test_an_entry_asked_for_without_a_library_is_main(client) -> None:
+    await _fx_entry(client)
+
+    response = await client.post(
+        ENTRIES, json={"title": "Temple", "artist": "Thomas Gold"}
+    )
+
+    data = response.json()["data"]
+    assert data["created"] is True
+    assert data["entry"]["library"] == "main"
+
+
+async def test_linking_new_parts_of_the_other_library_is_refused(client) -> None:
+    assert (await _register(client, "fx-1", FX_ROOT)).status_code == 200
+
+    response = await client.post(
+        f"{FILES}/fx-1/link",
+        json={"entry": {"title": "Temple", "artist": "Thomas Gold", "library": "main"}},
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "other_library"

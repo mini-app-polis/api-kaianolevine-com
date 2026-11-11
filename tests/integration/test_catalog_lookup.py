@@ -72,8 +72,10 @@ async def test_a_track_resolves_to_the_entry_its_play_was_filed_under(client) ->
         "release_year",
         "owner_edit",
         "cut_from_id",
+        "library",
     }
     assert (match["owner_edit"], match["cut_from_id"]) == (False, None)
+    assert match["library"] == "main"
 
 
 async def test_a_version_is_found_through_the_fallback(client) -> None:

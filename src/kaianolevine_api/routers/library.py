@@ -696,8 +696,9 @@ async def report_library_file_edited(
         "set import's own matching, across every owner), that entry is the "
         "answer and nothing is made. With preview, nothing is saved: a song "
         "the catalog lacks comes back as the entry the call would make "
-        "(previewed true, its id not a real catalog id). Requires "
-        "catalog.library.write."
+        "(previewed true, its id not a real catalog id). The entry is of "
+        "the library sent (main by default, or fx for FX Music): only that "
+        "library's entries are searched. Requires catalog.library.write."
     ),
 )
 async def create_library_entry(
@@ -707,7 +708,11 @@ async def create_library_entry(
 ) -> Envelope[LibraryEntryCreated]:
     """The song's entry, made from the library when the catalog lacks it."""
     data = await make_library_entry(
-        session, payload, owner_id=principal.subject, preview=payload.preview
+        session,
+        payload,
+        owner_id=principal.subject,
+        preview=payload.preview,
+        library=payload.library,
     )
     return success_envelope(data, count=1, total=1)
 

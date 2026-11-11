@@ -58,6 +58,7 @@ def catalog_match(entry: DbCatalog, rules: Rules) -> CatalogMatch:
         release_year=entry.release_year,
         owner_edit=entry.owner_edit,
         cut_from_id=entry.cut_from_id,
+        library=entry.library,
     )
 
 
