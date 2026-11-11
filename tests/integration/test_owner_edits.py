@@ -128,6 +128,11 @@ async def test_an_owner_edit_is_set_listed_and_shown_in_its_brackets(
     # The display the library sync writes carries the owner-edit pair too.
     shown = (await client.post("/v1/catalog/display", json={"ids": [str(cut)]})).json()
     assert shown["data"][0]["title"] == "Baby What You Want Me To Do <Intro Cut>"
+    # It says it is an owner edit, and which entry it was cut from.
+    assert (shown["data"][0]["owner_edit"], shown["data"][0]["cut_from_id"]) == (
+        True,
+        str(published),
+    )
 
     # The edit is a revision, and clearing the link puts it back to null.
     cleared = await client.patch(f"/v1/catalog/{cut}", json={"cut_from_id": None})
@@ -231,6 +236,7 @@ async def test_an_owner_edit_and_the_published_song_never_match(client) -> None:
     assert data["created"] is True
     cut = data["entry"]["id"]
     assert data["entry"]["title"] == "Baby What You Want Me To Do <Intro Cut>"
+    assert data["entry"]["owner_edit"] is True
     detail = (await client.get(f"/v1/catalog/{cut}")).json()["data"]
     assert detail["owner_edit"] is True
 
@@ -260,6 +266,8 @@ async def test_an_owner_edit_and_the_published_song_never_match(client) -> None:
     assert ids[0] is not None and ids[1] is not None
     assert cut not in (ids[0], ids[1])
     assert ids[2] == cut and ids[3] == cut
+    # A lookup says which matches are owner edits.
+    assert [m["owner_edit"] for m in found] == [False, False, True, True]
 
 
 async def test_a_file_links_to_an_owner_edit_entry_like_any_other(client) -> None:

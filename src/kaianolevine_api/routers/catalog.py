@@ -56,6 +56,8 @@ def catalog_match(entry: DbCatalog, rules: Rules) -> CatalogMatch:
         genre=entry.genre,
         bpm=shown.bpm,
         release_year=entry.release_year,
+        owner_edit=entry.owner_edit,
+        cut_from_id=entry.cut_from_id,
     )
 
 
@@ -190,6 +192,8 @@ def catalog_display(
         subgenre=entry.subgenre,
         bpm=shown.bpm,
         label=entry.label,
+        owner_edit=entry.owner_edit,
+        cut_from_id=entry.cut_from_id,
         changed_at=changed_at,
     )
 

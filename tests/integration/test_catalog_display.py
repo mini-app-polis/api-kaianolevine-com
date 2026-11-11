@@ -70,6 +70,8 @@ async def test_the_display_read_gives_each_entrys_owned_fields_in_order(
         "subgenre": None,
         "bpm": 100.0,
         "label": "Atlantic",
+        "owner_edit": False,
+        "cut_from_id": None,
         "changed_at": None,
     }
 
