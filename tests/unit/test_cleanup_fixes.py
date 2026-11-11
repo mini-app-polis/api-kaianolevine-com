@@ -284,3 +284,14 @@ def test_a_new_version_of_no_entry_is_skipped() -> None:
 def test_a_new_version_written_wrong_is_refused(spec) -> None:
     with pytest.raises(fixes.FixError):
         fixes.check({"new_version": spec})
+
+
+def test_show_marks_archived_entries_and_leaves_live_ones_unmarked() -> None:
+    live = _Entry(base_title="Lost In Space", main_artists=["Emmit Fenn"])
+    merged = _Entry(base_title="Lost In Space", main_artists=["Emmit Fenn"])
+    merged.archived_at = "2026-11-10T12:00:00Z"  # type: ignore[attr-defined]
+
+    lines = fixes.show_text([live, merged], "lost in space", DEFAULT_RULES).splitlines()
+
+    assert f"{live.id}  Lost In Space — Emmit Fenn" in lines
+    assert f"{merged.id}  Lost In Space — Emmit Fenn  [archived]" in lines

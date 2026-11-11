@@ -33,8 +33,8 @@ entry's values before and after go to ``catalog_revisions`` (kind
 ``edit``, by ``cleanup.fixes``), its source becomes manual and its new display is kept as a
 spelling it matches under. A fix already applied matches nothing the next
 time, so running the list twice changes nothing more. ``--show TEXT`` prints
-the parts of every entry whose shown title or artist contains TEXT, and
-writes nothing. A new version's entry records its values (``before`` empty),
+the parts of every entry whose shown title or artist contains TEXT, each
+archived entry marked ``[archived]``, and writes nothing. A new version's entry records its values (``before`` empty),
 the entry it was made from and the files moved to it, in the same
 revision kind. Run ``--apply`` only after the owner has reviewed the dry run.
 """
@@ -400,14 +400,18 @@ def report(the_plan: Plan) -> str:
 
 
 def show_text(entries: Iterable[Any], text: str, rules: Rules) -> str:
-    """The parts of every entry whose shown title or artist contains ``text``."""
+    """The parts of every entry whose shown title or artist contains ``text``.
+
+    An archived entry (merged into another, or left with no files) is marked
+    ``[archived]``; a live one is not."""
     needle = fold(text)
     lines = []
     for e in entries:
         title, artist = _shown(e, values_of(e), rules)
         if needle in fold(title) or needle in fold(artist):
             v = values_of(e)
-            lines.append(f"{e.id}  {title} — {artist}")
+            archived = "  [archived]" if getattr(e, "archived_at", None) else ""
+            lines.append(f"{e.id}  {title} — {artist}{archived}")
             lines.append(
                 f"    base_title {v['base_title']!r}, version {v['version']!r}, "
                 f"main {v['main_artists']}, featured {v['featured_artists']}"

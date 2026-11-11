@@ -205,11 +205,18 @@ run.
 - `python -m kaianolevine_api.cleanup.merge` — groups entries that are one
   song (the same title and artist as shown, or the same matching keys, across
   every owner, within one library: an fx entry is never grouped with a main
-  one), each under its most-played entry. `--apply --group ID`
-  (repeatable) or `--apply --all` merges groups into their keepers: empty
-  fields fill from the others, every play and library file is repointed, play
-  counts and first and last played are recombined, every spelling becomes an
-  alias, and the others are archived, never deleted. Once no duplicates are
+  one), each under its most-played entry. The dry run also lists, apart,
+  live entries in no group that may be one song, for the owner to confirm:
+  the same title once anything in parentheses or brackets is taken out and a
+  shared main artist (a bracketed remixer left out), the same title and a
+  file within a second or of the same size, or a file of exactly the same
+  length and size whatever the titles; each with its plays, whether it has
+  parts, and its files' length and size. `--apply` never merges these.
+  `--apply --group ID` (repeatable) or `--apply --all` merges groups into
+  their keepers: empty fields fill from the others (the song's parts only
+  onto a keeper that has none of them, never over one it holds), every play
+  and library file is repointed, play counts and first and last played are
+  recombined, every spelling becomes an alias, and the others are archived, never deleted. Once no duplicates are
   left, the catalog's keys become unique across owners (migration 098). The
   catalog is one catalog: the set import files a play under the song's entry
   whichever key filed it, archived entries are never matched or listed, and
@@ -222,7 +229,8 @@ run.
   plays). `--apply` writes them as the
   catalog editor would (revision kind `edit`, by `cleanup.fixes`, source manual, the new
   display kept as an alias); a fix already applied matches nothing again.
-  `--show TEXT` prints the parts of entries whose title or artist contains TEXT.
+  `--show TEXT` prints the parts of entries whose title or artist contains
+  TEXT, marking each archived entry `[archived]`.
 - `python -m kaianolevine_api.cleanup.revert --by NAME --since TIME --until TIME`
   — puts back the catalog edits one caller made in a window of time: per
   entry, the values before its first revision in the window, unless the

@@ -13,13 +13,17 @@ joined through any entry they share. Archived entries take no part.
 A group's **keeper** is its most-played entry (then the oldest, then by
 id); the group is named by the keeper's id. A dry run writes nothing: it
 lists every group, with each entry's display, owner and plays, and the
-fields the keeper would fill from the others.
+fields the keeper would fill from the others. It then lists, apart, live
+entries in no group that look like one song (:func:`likely_same`), with
+each one's plays, whether it has parts, and the length and size of its
+files, for the owner to confirm: ``--apply`` never merges these.
 
 ``--apply`` merges the groups named with ``--group`` (or every group with
 ``--all``) into their keepers:
 
 - the keeper's empty fields fill from the others, most played first (the
-  song's parts only as a whole, when the keeper has none);
+  song's parts only as a whole, and only when the keeper has none of them:
+  a part the keeper holds is never replaced);
 - every play in ``tracks`` and every library file linked to another entry
   is repointed to the keeper;
 - play counts are summed, and first and last played recombined;
@@ -43,6 +47,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import dataclasses
+import re
 import sys
 import uuid
 from typing import Any
@@ -84,6 +89,9 @@ END $$;
 #: Fields the keeper fills from the others when it leaves them empty.
 _FILLED = ("remix", "label", "genre", "subgenre", "bpm", "release_year")
 
+#: The song's parts: filled from another entry only when the keeper has none.
+_PARTS = ("base_title", "version", "main_artists", "featured_artists")
+
 
 def _spaced(text_: str) -> str:
     return " ".join(text_.casefold().split())
@@ -95,6 +103,31 @@ def display_key(entry: TrackCatalog, rules: Rules) -> tuple[str, str]:
     shown = render(entry, rules)
     title = shown.title + (f" ({shown.remix})" if shown.remix else "")
     return _spaced(title), _spaced(shown.artist)
+
+
+#: Anything in parentheses or square brackets: a version, or a remixer
+#: credited in the artist.
+_BRACKETED = re.compile(r"\s*[\[(][^\])]*[\])]")
+#: Featured artists, which do not make an artist a main one.
+_FEATURED = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s+.*$", re.IGNORECASE)
+#: What joins several main artists in a written-out artist.
+_JOINER = re.compile(r"\s*,\s*|\s+(?:&|and|x)\s+", re.IGNORECASE)
+
+
+def _bare(text_: str) -> str:
+    """Text with anything in parentheses or brackets taken out, compared with
+    case and spacing ignored."""
+    return _spaced(_BRACKETED.sub("", text_))
+
+
+def _main_artists(entry: TrackCatalog, artist: str) -> set[str]:
+    """The entry's main artists: its parts when it has them, otherwise the
+    artist as shown, without a bracketed remixer or featured artists."""
+    if entry.main_artists:
+        names = list(entry.main_artists)
+    else:
+        names = _JOINER.split(_FEATURED.sub("", _BRACKETED.sub("", artist)))
+    return {_spaced(n) for n in names if n.strip()}
 
 
 def _keeper_order(entry: TrackCatalog) -> tuple[int, Any, str]:
@@ -128,7 +161,9 @@ class Group:
                 if value not in (None, ""):
                     out[name] = (value, other.id)
                     break
-        if not self.keeper.base_title:
+        # The song's parts move only as a whole, and only onto a keeper that
+        # holds none of them: a part the keeper has is never overwritten.
+        if not any(getattr(self.keeper, part) for part in _PARTS):
             for other in self.others:
                 if other.base_title:
                     out["parts"] = (
@@ -195,6 +230,139 @@ async def plan(session: AsyncSession) -> list[Group]:
         )
     groups.sort(key=lambda g: (g.keeper.artist.casefold(), g.keeper.title.casefold()))
     return groups
+
+
+@dataclasses.dataclass
+class LikelySame:
+    """Live entries that look like one song but that no group holds: listed
+    for the owner to confirm, never merged. ``files`` gives each entry's
+    linked files as (length in seconds, size in bytes), and ``why`` the
+    rules that matched (see :func:`likely_same`)."""
+
+    entries: list[TrackCatalog]
+    files: dict[uuid.UUID, list[tuple[float | None, int | None]]]
+    why: set[str]
+
+
+#: How far apart two files' lengths may be, in seconds, for rule (b).
+_NEAR_SECONDS = 1.0
+
+
+async def likely_same(session: AsyncSession, groups: list[Group]) -> list[LikelySame]:
+    """Live entries, none in any group, that look like one song, in clusters.
+
+    Two entries of the same library are paired when:
+
+    - (a) ``title``: their titles match with anything in parentheses or
+      brackets taken out (case and spacing ignored), and they share a main
+      artist (an artist's bracketed remixer and featured artists left out);
+    - (b) ``title and file``: their titles match that way, and a linked file
+      of one is within a second in length, or exactly the same size, of a
+      linked file of the other;
+    - (c) ``file``: a linked file of one has exactly the same length and size
+      as a linked file of the other (the same length, when either size is not
+      known), whatever their titles.
+
+    An owner edit's ``< >`` version is kept in its title, so it never pairs
+    with the published song by title. Nothing here is written or merged.
+    """
+    grouped = {e.id for g in groups for e in (g.keeper, *g.others)}
+    rules = await load_rules(session)
+    entries = [
+        e
+        for e in (
+            await session.execute(
+                select(TrackCatalog).where(TrackCatalog.archived_at.is_(None))
+            )
+        )
+        .scalars()
+        .all()
+        if e.id not in grouped
+    ]
+    by_id = {e.id: e for e in entries}
+    files: dict[uuid.UUID, list[tuple[float | None, int | None]]] = {
+        e.id: [] for e in entries
+    }
+    rows = await session.execute(
+        select(
+            LibraryFile.catalog_id, LibraryFile.duration_secs, LibraryFile.size_bytes
+        ).where(LibraryFile.catalog_id.in_(list(by_id)))
+    )
+    for catalog_id, length, size in rows:
+        files[catalog_id].append((length, size))
+
+    title: dict[uuid.UUID, str] = {}
+    artists: dict[uuid.UUID, set[str]] = {}
+    for e in entries:
+        shown = render(e, rules)
+        title[e.id] = _bare(shown.title + (f" ({shown.remix})" if shown.remix else ""))
+        artists[e.id] = _main_artists(e, shown.artist)
+
+    why: dict[tuple[uuid.UUID, uuid.UUID], set[str]] = {}
+
+    def pair(a: uuid.UUID, b: uuid.UUID, rule: str) -> None:
+        if a != b and by_id[a].library == by_id[b].library:
+            why.setdefault((min(a, b), max(a, b)), set()).add(rule)
+
+    def near(a: uuid.UUID, b: uuid.UUID) -> bool:
+        return any(
+            (la is not None and lb is not None and abs(la - lb) <= _NEAR_SECONDS)
+            or (sa is not None and sb is not None and sa == sb)
+            for la, sa in files[a]
+            for lb, sb in files[b]
+        )
+
+    by_title: dict[str, list[uuid.UUID]] = {}
+    for e in entries:
+        if title[e.id]:
+            by_title.setdefault(title[e.id], []).append(e.id)
+    for ids in by_title.values():
+        for i, a in enumerate(ids):
+            for b in ids[i + 1 :]:
+                if artists[a] & artists[b]:
+                    pair(a, b, "title")
+                if near(a, b):
+                    pair(a, b, "title and file")
+
+    by_length: dict[float, list[tuple[uuid.UUID, int | None]]] = {}
+    for e in entries:
+        for length, size in files[e.id]:
+            if length is not None:
+                by_length.setdefault(length, []).append((e.id, size))
+    for same in by_length.values():
+        for i, (a, sa) in enumerate(same):
+            for b, sb in same[i + 1 :]:
+                if sa is None or sb is None or sa == sb:
+                    pair(a, b, "file")
+
+    parent = {e.id: e.id for e in entries}
+
+    def find(x: uuid.UUID) -> uuid.UUID:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a, b in why:
+        parent[find(b)] = find(a)
+    clusters: dict[uuid.UUID, LikelySame] = {}
+    for (a, _b), rules_hit in sorted(why.items()):
+        root = find(a)
+        cluster = clusters.setdefault(root, LikelySame([], {}, set()))
+        cluster.why |= rules_hit
+    for a, b in why:
+        cluster = clusters[find(a)]
+        for x in (a, b):
+            if x not in cluster.files:
+                cluster.entries.append(by_id[x])
+                cluster.files[x] = files[x]
+    out = list(clusters.values())
+    for cluster in out:
+        cluster.entries.sort(key=_keeper_order)
+    out.sort(
+        key=lambda c: (c.entries[0].artist.casefold(), c.entries[0].title.casefold())
+    )
+    return out
 
 
 def _values(entry: TrackCatalog) -> dict[str, Any]:
@@ -350,8 +518,14 @@ async def apply(
     return merged, unique
 
 
-def report(groups: list[Group]) -> str:
-    """The dry run: every group, its keeper first."""
+def _file_text(length: float | None, size: int | None) -> str:
+    shown = "?:??" if length is None else f"{int(length // 60)}:{int(length % 60):02d}"
+    return shown + ("" if size is None else f" {size} bytes")
+
+
+def report(groups: list[Group], likely: list[LikelySame] | None = None) -> str:
+    """The dry run: every group, its keeper first; then the entries that look
+    like one song but no group holds, for the owner to confirm."""
     lines = [f"{len(groups)} groups of entries that are one song."]
     for group in groups:
         lines.append("")
@@ -369,6 +543,22 @@ def report(groups: list[Group]) -> str:
                 "  fills: "
                 + "; ".join(f"{name} = {value!r}" for name, (value, _) in fills.items())
             )
+    if likely:
+        lines.append("")
+        lines.append(
+            f"{len(likely)} sets of entries that may be one song, in no group: "
+            "for the owner to confirm. --apply never merges these."
+        )
+        for cluster in likely:
+            lines.append("")
+            lines.append(f"May be one song  (same {', '.join(sorted(cluster.why))})")
+            for entry in cluster.entries:
+                parts = "parts" if entry.base_title else "no parts"
+                held = ", ".join(_file_text(*f) for f in cluster.files[entry.id])
+                lines.append(
+                    f"  {entry.id}  {entry.title} — {entry.artist}"
+                    f"  [{entry.play_count} plays, {parts}, files: {held or 'none'}]"
+                )
     return "\n".join(lines)
 
 
@@ -380,7 +570,7 @@ async def run(apply_changes: bool, chosen: set[uuid.UUID] | None) -> str:
     maker = get_sessionmaker(get_settings().DATABASE_URL)
     async with maker() as session:
         groups = await plan(session)
-        text_ = report(groups)
+        text_ = report(groups, await likely_same(session, groups))
         if apply_changes:
             merged, unique = await apply(session, groups, chosen)
             text_ += f"\n\nApplied: {merged} groups merged."
