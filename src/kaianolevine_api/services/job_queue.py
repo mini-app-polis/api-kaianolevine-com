@@ -31,7 +31,11 @@ report to ride on, and is posted with :func:`report_dropped` instead.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import hashlib
 import json
+import time
+import uuid
 from typing import Any
 
 import boto3
@@ -61,6 +65,84 @@ AWS_ACCOUNT_ID = "400200465748"
 FIFO_COGS: frozenset[str] = frozenset(
     {"deejay", "rotator", "task-manager", "transcription", "wiki-curator"}
 )
+
+
+#: How long a repeated request is collapsed into the first. SQS FIFO's own
+#: window is fixed at five minutes and cannot be shortened, so the window is
+#: ours: it is the time bucket in the deduplication id sent with every FIFO
+#: message (:func:`window_deduplication_id`). The one place to change it.
+DEDUP_WINDOW_SECONDS = 60
+
+#: How long SQS itself remembers a deduplication id. Fixed by SQS.
+SQS_DEDUP_SECONDS = 300
+
+#: Message id -> when this process first got it back from the queue. SQS
+#: answers a collapsed send with the kept message's id and no other sign.
+_recently_queued: dict[str, float] = {}
+
+
+def _clock() -> float:
+    """Wall-clock seconds for the window bucket; replaced in tests."""
+    return time.time()
+
+
+def request_identity(caller: str | None) -> dict[str, Any]:
+    """This request's own identity, for the message's ``request`` field.
+
+    Without it every trigger of one job is the same body. The id and the
+    time are left out of the deduplication id, or no repeat would ever be
+    collapsed; the caller is kept in it, and lets the run report say who
+    asked. Consumers that do not read the field ignore it.
+    """
+    return {
+        "id": uuid.uuid4().hex,
+        "requested_at": dt.datetime.now(dt.UTC).isoformat(),
+        "caller": caller,
+    }
+
+
+def window_deduplication_id(
+    message: dict[str, Any], group: str | None, *, now: float | None = None
+) -> str:
+    """An id that is the same for a repeated request within one window bucket.
+
+    Built from the group, the body without the request's own id and time,
+    and the time bucket. The explicit id takes precedence over the queue's
+    content-based deduplication, so a deliberate re-run in a later bucket is
+    queued even though it asks for the same thing. A repeat straddling a
+    bucket boundary is queued twice: the window is "about"
+    :data:`DEDUP_WINDOW_SECONDS`.
+    """
+    bucket = int((_clock() if now is None else now) // DEDUP_WINDOW_SECONDS)
+    stable = dict(message)
+    request = stable.get("request")
+    if isinstance(request, dict):
+        stable["request"] = {"caller": request.get("caller")}
+    body = json.dumps(stable, sort_keys=True)
+    return hashlib.sha256(f"{group}|{bucket}|{body}".encode()).hexdigest()
+
+
+def was_collapsed(message_id: str, *, now: float | None = None) -> bool:
+    """Whether SQS answered with a message this process already queued.
+
+    A new send always gets a new message id, so an id seen before is the
+    kept message of a collapsed send. Ids are kept for SQS's own window,
+    the longest a collapse can happen. One process's memory: after a
+    restart a collapsed send reads as new.
+    """
+    now = time.monotonic() if now is None else now
+    for mid, at in list(_recently_queued.items()):
+        if now - at > SQS_DEDUP_SECONDS:
+            del _recently_queued[mid]
+    if message_id in _recently_queued:
+        return True
+    _recently_queued[message_id] = now
+    return False
+
+
+def forget_queued() -> None:
+    """Forget every message id remembered by :func:`was_collapsed`."""
+    _recently_queued.clear()
 
 
 def message_group(cog: str) -> str | None:
@@ -159,11 +241,8 @@ def send(
     directly would block the event loop for the round trip.
 
     ``message_group`` is required for a FIFO queue and refused by a standard
-    one. Deduplication is the queue's content-based setting: an identical
-    body within five minutes is one job, which the dispatch claims already
-    make true, so by default no deduplication id is sent. A job whose body
-    is the same every time but which is meant to run each time it is asked
-    for passes its own ``deduplication_id``.
+    one. :func:`enqueue` passes a deduplication id for every FIFO send, which
+    takes precedence over the queue's content-based setting.
     """
     client = boto3.client(
         "sqs", region_name=settings.AWS_REGION, **producer_credentials(settings)
@@ -202,8 +281,11 @@ async def enqueue(
     not dispatched"), which the route's 502 fault report carries. ``group``
     is this job's FIFO message group, for a FIFO cog whose jobs are not all
     serial; by default every job of the cog shares one (:func:`message_group`).
-    ``deduplication_id`` replaces the FIFO queue's deduplication on the body
-    (:func:`send`), for a job that must not be merged with an identical one.
+    ``deduplication_id`` replaces the default for a job that must not be
+    merged with an identical one. By default a FIFO send carries a
+    :func:`window_deduplication_id`: an identical request within
+    :data:`DEDUP_WINDOW_SECONDS` is collapsed, and the result then says
+    ``deduplicated: True`` and carries the earlier message's id.
     """
     if group is not None and cog not in FIFO_COGS:
         raise ValueError(f"{cog} has a standard queue; it takes no message group")
@@ -211,6 +293,10 @@ async def enqueue(
         raise ValueError(f"{cog} has a standard queue; it takes no deduplication id")
     url = queue_url(cog, settings=settings)
     name = queue_name(cog)
+    group = group or message_group(cog)
+    windowed = deduplication_id is None and group is not None
+    if windowed:
+        deduplication_id = window_deduplication_id(message, group)
 
     try:
         response = await asyncio.to_thread(
@@ -218,7 +304,7 @@ async def enqueue(
             message,
             queue_url=url,
             settings=settings,
-            message_group=group or message_group(cog),
+            message_group=group,
             deduplication_id=deduplication_id,
         )
     except (ClientError, BotoCoreError) as exc:
@@ -248,6 +334,9 @@ async def enqueue(
             "the queue acknowledged without a message id", detail=detail
         )
 
+    if windowed and was_collapsed(message_id):
+        logger.info("%s: %s collapsed into %s on %s", label, what, message_id, name)
+        return {"message_id": message_id, "deduplicated": True}
     logger.info("%s: enqueued %s onto %s as %s", label, what, name, message_id)
     return {"message_id": message_id}
 

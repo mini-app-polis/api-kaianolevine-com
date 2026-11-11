@@ -19,6 +19,8 @@ import respx
 from botocore.exceptions import ClientError
 from identity.store.models import Principal, PrincipalRole
 from identity.types import VerifiedSubject
+from mini_app_polis.api.contract import DeejayRunMessage
+from mini_app_polis.lambda_worker import parse_message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kaianolevine_api import auth as auth_mod
@@ -195,6 +197,7 @@ async def test_enqueue_sends_the_run_message_to_deejays_queue(monkeypatch) -> No
 
     assert result == {"message_id": "m-1"}
     sent = sqs.send_message.call_args.kwargs
+    assert sent["MessageDeduplicationId"]
     assert sent["QueueUrl"] == QUEUE_URL
     assert json.loads(sent["MessageBody"]) == {
         "type": "deejay.run",
@@ -204,6 +207,68 @@ async def test_enqueue_sends_the_run_message_to_deejays_queue(monkeypatch) -> No
     assert sent["MessageAttributes"]["type"]["StringValue"] == "deejay.run"
     # FIFO, one group: the queue hands over one job at a time.
     assert sent["MessageGroupId"] == "deejay"
+
+
+async def test_a_route_message_says_who_asked_and_when(client, monkeypatch) -> None:
+    """Each request is its own message, so the run can name its caller."""
+    _settings(monkeypatch)
+    sqs = _sqs("m-1")
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        response = await client.post("/v1/deejay/runs", json={"mode": "retag-music"})
+
+    assert response.status_code == 202
+    body = json.loads(sqs.send_message.call_args.kwargs["MessageBody"])
+    assert body["payload"] == {"mode": "retag-music"}
+    assert set(body["request"]) == {"id", "requested_at", "caller"}
+    assert body["request"]["caller"]
+    assert parse_message(json.dumps(body), DeejayRunMessage).payload.mode == (
+        "retag-music"
+    )
+
+
+async def test_a_repeat_within_the_window_is_collapsed(client, monkeypatch) -> None:
+    """Same id in the same bucket; SQS answers with the earlier message, and
+    the response says so instead of passing it off as queued."""
+    _settings(monkeypatch)
+    sqs = _sqs("m-first")
+
+    with (
+        patch.object(job_queue.boto3, "client", return_value=sqs),
+        patch.object(job_queue, "_clock", return_value=1_000_000.0),
+    ):
+        first = await client.post("/v1/deejay/runs", json={"mode": "retag-music"})
+        second = await client.post("/v1/deejay/runs", json={"mode": "retag-music"})
+
+    assert first.status_code == 202
+    assert first.json()["data"]["deduplicated"] is False
+    assert second.status_code == 200
+    assert second.json()["data"]["deduplicated"] is True
+    assert second.json()["data"]["message_id"] == "m-first"
+    calls = [c.kwargs for c in sqs.send_message.call_args_list]
+    # Two requests, two bodies, one deduplication id.
+    assert calls[0]["MessageBody"] != calls[1]["MessageBody"]
+    assert calls[0]["MessageDeduplicationId"] == calls[1]["MessageDeduplicationId"]
+
+
+async def test_a_deliberate_rerun_a_minute_later_is_queued(client, monkeypatch) -> None:
+    _settings(monkeypatch)
+    sqs = MagicMock()
+    sqs.send_message.side_effect = [{"MessageId": "m-1"}, {"MessageId": "m-2"}]
+    start = 1_000_000.0
+    later = start + job_queue.DEDUP_WINDOW_SECONDS
+
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        with patch.object(job_queue, "_clock", return_value=start):
+            first = await client.post("/v1/deejay/runs", json={"mode": "retag-music"})
+        with patch.object(job_queue, "_clock", return_value=later):
+            second = await client.post("/v1/deejay/runs", json={"mode": "retag-music"})
+
+    assert first.status_code == second.status_code == 202
+    assert second.json()["data"]["deduplicated"] is False
+    assert second.json()["data"]["message_id"] == "m-2"
+    ids = [c.kwargs["MessageDeduplicationId"] for c in sqs.send_message.call_args_list]
+    assert ids[0] != ids[1]
 
 
 @pytest.mark.parametrize(

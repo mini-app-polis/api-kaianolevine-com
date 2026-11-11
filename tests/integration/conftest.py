@@ -200,6 +200,17 @@ async def stop_auto_refresh() -> AsyncIterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def forget_queued_messages() -> Iterator[None]:
+    """The message ids the queue has answered are process state; a mocked
+    queue's id from one test must not read as a collapsed send in the next."""
+    from kaianolevine_api.services import job_queue
+
+    job_queue.forget_queued()
+    yield
+    job_queue.forget_queued()
+
+
+@pytest.fixture(autouse=True)
 def reset_discord_limits() -> Iterator[None]:
     """The send budget and the transport's cooldowns are process state; one
     test's burst or 429 must not hold the next."""
