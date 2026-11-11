@@ -6,9 +6,11 @@ route is under ``catalog.library.write``, the scope deejay-cog's machine
 holds for the library. A registry row is never deleted: a file gone from the
 library is marked not present, and its link stays.
 
-An entry left with no plays and no present file is archived (``archived_at``,
-migration 097), never deleted; a present file linking to it again brings it
-back.
+An entry stays live when its last file leaves the library, with its links,
+even with no plays and no present file: removing a song never removes its
+entry. An entry archived (``archived_at``, migration 097) when its last file
+went, before entries were kept, comes back when a present file links to it
+again.
 """
 
 from __future__ import annotations
@@ -27,7 +29,6 @@ from ..auth import require_scope
 from ..database import get_db_session
 from ..models import DisplayRules as DbDisplayRules
 from ..models import LibraryFile as DbLibraryFile
-from ..models import Track as DbTrack
 from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
     Envelope,
@@ -171,35 +172,6 @@ async def register_library_file(
     return success_envelope(file_out(row), count=1, total=1)
 
 
-async def _archive_unplayed_without_files(
-    session: AsyncSession, catalog_ids: set[uuid.UUID]
-) -> None:
-    """Archive those of ``catalog_ids`` left with no plays and no present
-    file. An entry with a play, or a present file linking to it, is kept."""
-    if not catalog_ids:
-        return
-    present_file = (
-        select(DbLibraryFile.id)
-        .where(
-            DbLibraryFile.catalog_id == DbCatalog.id, DbLibraryFile.present.is_(True)
-        )
-        .exists()
-    )
-    played = select(DbTrack.id).where(DbTrack.catalog_id == DbCatalog.id).exists()
-    await session.execute(
-        update(DbCatalog)
-        .where(
-            DbCatalog.id.in_(catalog_ids),
-            DbCatalog.archived_at.is_(None),
-            DbCatalog.play_count == 0,
-            ~present_file,
-            ~played,
-        )
-        .values(archived_at=func.now())
-        .execution_options(synchronize_session=False)
-    )
-
-
 @router.post(
     "/catalog/library/files/absent",
     response_model=Envelope[LibraryFilesAbsentResult],
@@ -215,8 +187,8 @@ async def mark_library_files_absent(
     principal: Principal = Depends(require_scope("catalog.library.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[LibraryFilesAbsentResult]:
-    """Mark the named files not present, then archive any entry they leave
-    with no plays and no present file."""
+    """Mark the named files not present. The entries they link to stay
+    live, played or not."""
     result = await session.execute(
         update(DbLibraryFile)
         .where(
@@ -226,12 +198,8 @@ async def mark_library_files_absent(
         .values(present=False)
         .returning(DbLibraryFile.catalog_id)
     )
-    linked = [row[0] for row in result.all()]
-    await _archive_unplayed_without_files(
-        session, {catalog_id for catalog_id in linked if catalog_id is not None}
-    )
+    marked = len(result.all())
     await session.commit()
-    marked = len(linked)
     return success_envelope(LibraryFilesAbsentResult(marked=marked), count=1, total=1)
 
 
