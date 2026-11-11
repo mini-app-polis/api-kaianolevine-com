@@ -355,6 +355,10 @@ class LibraryDuplicateGroup(Base):
         String, nullable=False, server_default=text("'open'")
     )
     keeper_drive_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: Every file stayed on the entry (migration 113).
+    kept_together: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     resolved_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -382,6 +386,8 @@ class LibraryDuplicateMember(Base):
     )
     why_kept: Mapped[str | None] = mapped_column(Text, nullable=True)
     bitrate_kbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: keep, own_version or trash, once the group is resolved (migration 113).
+    outcome: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class LibraryReconcileDifference(Base):

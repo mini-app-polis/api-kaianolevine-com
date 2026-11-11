@@ -142,3 +142,28 @@ async def test_a_standard_queue_gets_no_deduplication_id(monkeypatch) -> None:
     sent = sqs.send_message.call_args.kwargs
     assert "MessageDeduplicationId" not in sent
     assert "MessageGroupId" not in sent
+
+
+@pytest.mark.parametrize(
+    ("mode", "queue"),
+    [
+        ("library-backfill", "deejay-library"),
+        ("library-sync", "deejay-library"),
+        ("process-new-files", "deejay"),
+        ("ingest-live-history", "deejay"),
+    ],
+)
+async def test_a_library_mode_goes_to_the_library_queue(
+    monkeypatch, mode: str, queue: str
+) -> None:
+    """A long library run never queues ahead of intake or live-play ingest."""
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    sqs = MagicMock()
+    sqs.send_message.return_value = {"MessageId": "m-1"}
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await deejay_dispatch.dispatch_deejay(
+            deejay_dispatch.DeejayJob(mode=mode), settings=get_settings()
+        )
+    sent = sqs.send_message.call_args.kwargs
+    assert sent["QueueUrl"].endswith(f"/{queue}-jobs.fifo")
+    assert sent["MessageGroupId"] == queue
