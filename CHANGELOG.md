@@ -1,3 +1,10 @@
+# [2.85.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.84.1...v2.85.0) (2026-11-11)
+
+
+### Features
+
+* **cleanup:** unmerge puts back one entry a merge archived, with its plays and library files ([10855a8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/10855a8953d0aa020de05e164e51ad727d0beb9a))
+
 ## [2.84.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.84.0...v2.84.1) (2026-11-10)
 
 
