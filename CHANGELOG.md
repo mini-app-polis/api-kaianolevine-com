@@ -1,3 +1,16 @@
+# [2.88.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.87.0...v2.88.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.8.0 ([d2a8df2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d2a8df2ab5c6db0c28ef820a514205e4f113bc25))
+* **library:** keep an entry when its last file leaves the library ([e4e0b1a](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e4e0b1a466d326b50104ae4ea18123cec0aa069b))
+
+
+### Features
+
+* **catalog:** make and report fx entries through the library routes ([d146ad5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d146ad5bb0ff19af523377577956b50dcb388c93))
+
 # [2.87.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.86.0...v2.87.0) (2026-11-11)
 
 
