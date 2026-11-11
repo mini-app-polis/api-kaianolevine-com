@@ -185,6 +185,10 @@ recording every entry's values before and after in `catalog_revisions`, so
 any change can be put back. Apply only after the owner has reviewed the dry
 run.
 
+These commands fix entries already in the catalog. How a song gets into the
+library and out of it, case by case, is deejay-cog's
+[adding and removing songs](https://github.com/mini-app-polis/deejay-cog/blob/main/docs/ADDING-AND-REMOVING-SONGS.md).
+
 - `python -m kaianolevine_api.cleanup.genres` — maps every genre onto the
   two-level vocabulary in `config_data/genre_map.yaml` (genre and subgenre;
   values that are not genres are cleared; Instrumental moves to the version).
