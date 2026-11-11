@@ -10,6 +10,9 @@ An entry whose parts are not filled yet (no base title, or no main artist)
 is shown from its ``title`` and ``artist`` columns, as it was before parts
 existed; only its BPM goes through the rules.
 
+An owner edit's version is written with the owner-edit pair instead of the
+version pair: "Baby What You Want Me To Do <Intro Cut>".
+
 Capitalisation is kept as the artist styles it: nothing here changes case.
 """
 
@@ -27,13 +30,16 @@ from ..models import DisplayRules as DbDisplayRules
 class Rules:
     """The display rules. The defaults are the first rules, agreed with the
     owner: "A feat. X", ", " between artists, the version in parentheses,
-    BPM to one decimal, case as styled."""
+    an owner edit's version in angle brackets, BPM to one decimal, case as
+    styled."""
 
     featured_placement: Literal["artist", "title"] = "artist"
     featured_word: str = "feat."
     artist_joiner: str = ", "
     version_open: str = "("
     version_close: str = ")"
+    owner_edit_open: str = "<"
+    owner_edit_close: str = ">"
     bpm_decimals: int = 1
 
 
@@ -51,7 +57,8 @@ class Shown:
 
 
 class Entry(Protocol):
-    """The fields of a catalog entry :func:`render` reads."""
+    """The fields of a catalog entry :func:`render` reads. It also reads
+    ``owner_edit`` when the entry has it, and takes it as false when not."""
 
     title: str
     artist: str
@@ -80,6 +87,8 @@ async def load_rules(session: AsyncSession) -> Rules:
         artist_joiner=row.artist_joiner,
         version_open=row.version_open,
         version_close=row.version_close,
+        owner_edit_open=row.owner_edit_open,
+        owner_edit_close=row.owner_edit_close,
         bpm_decimals=row.bpm_decimals,
     )
 
@@ -109,7 +118,11 @@ def render(entry: Entry, rules: Rules = DEFAULT_RULES) -> Shown:
     title = (entry.base_title or "").strip()
     version = (entry.version or "").strip()
     if version:
-        title = f"{title} {rules.version_open}{version}{rules.version_close}"
+        if getattr(entry, "owner_edit", False):
+            opening, closing = rules.owner_edit_open, rules.owner_edit_close
+        else:
+            opening, closing = rules.version_open, rules.version_close
+        title = f"{title} {opening}{version}{closing}"
 
     artist = rules.artist_joiner.join(_names(entry.main_artists))
     featured = _names(entry.featured_artists)

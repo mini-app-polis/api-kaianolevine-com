@@ -46,8 +46,9 @@ def rotation_message(request: RotationRequest) -> dict[str, Any]:
 async def dispatch_rotation(request: RotationRequest, *, settings: Settings) -> dict:
     """Enqueue one rotation for the rotator. Raises DispatchError.
 
-    The queue's content-based deduplication makes the same request asked
-    again within five minutes one job, so a double submit rotates once.
+    The deduplication id every FIFO send carries makes the same request
+    asked again within about a minute one job
+    (:data:`job_queue.DEDUP_WINDOW_SECONDS`), so a double submit rotates once.
     """
     return await job_queue.enqueue(
         rotation_message(request),

@@ -66,6 +66,20 @@ Errors return:
 
 * `POST /v1/ingest` — accept a set with track list, run reconciliation, return set id + catalog stats; protected
 
+### Queue deduplication
+
+Routes that enqueue to a FIFO cog queue (`POST /v1/deejay/runs`, `POST /v1/transcription/runs`, wiki jobs, and the rest) send their own `MessageDeduplicationId` instead of relying on the queue's content-based deduplication. SQS's own five-minute window is fixed and cannot be changed; the explicit id takes precedence over it, so the window is set through the id.
+
+The id hashes the message group, the message body and a time bucket of `job_queue.DEDUP_WINDOW_SECONDS` (about a minute; the one place to change it). A deejay or transcription run started through its route also carries the request's own identity in the message, `request: {id, requested_at, caller}`, so two triggers are two messages and the run can say who asked. The request's `id` and `requested_at` are left out of the deduplication id and the `caller` is kept, so:
+
+* the same request from the same caller again within the bucket is collapsed by SQS into the first;
+* a deliberate re-run in a later bucket is queued;
+* a repeat straddling a bucket boundary is queued twice, so the window is "about" a minute, never longer.
+
+A job meant to run every time it is asked for (the task-manager sweep) sends its own unique id instead and is never collapsed.
+
+A collapsed request is answered `200` with `deduplicated: true` and the `message_id` of the earlier message. SQS gives no other sign of a collapse than answering with the kept message's id, and a new message always gets a new id, so the API remembers the ids it has been given, in process memory, for SQS's five minutes: an id it has seen before is a collapse. After a restart a collapsed request reads as new.
+
 ## Reconciliation + Normalization
 
 Normalization and reconciliation rules are implemented in:

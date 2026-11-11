@@ -40,7 +40,9 @@ _LABEL = "transcription dispatch"
         "in the given mode, or the voicenotes retention sweep, which names "
         "no file. A file already claimed by an earlier request is answered "
         "200 with deduplicated true and the message id of the job that has "
-        "it, and nothing is enqueued. The run happens afterwards, on the cog."
+        "it, and nothing is enqueued. An identical request within about a "
+        "minute is collapsed by the queue and answered the same way; one "
+        "later is queued. The run happens afterwards, on the cog."
     ),
 )
 async def create_transcription_run(
@@ -61,7 +63,10 @@ async def create_transcription_run(
     waiting out the window with nothing running for it.
 
     The retention sweep names no file and is never claimed: it is an
-    operator's request, and asking for it twice means wanting it twice.
+    operator's request, and asking for it twice means wanting it twice —
+    unless the second is within the queue's collapse window
+    (:data:`job_queue.DEDUP_WINDOW_SECONDS`), when it is answered with the
+    first's message id.
     """
     settings = get_settings()
     job = transcription_dispatch.TranscriptionJob(
@@ -94,7 +99,7 @@ async def create_transcription_run(
 
     try:
         accepted = await transcription_dispatch.dispatch_transcription(
-            job, settings=settings
+            job, settings=settings, caller=principal.display_name or principal.subject
         )
     except transcription_dispatch.DispatchError as exc:
         if claim is not None:
@@ -110,9 +115,13 @@ async def create_transcription_run(
     if claim is not None:
         await dispatch_claims.record(session, [claim], message_id)
 
+    deduplicated = bool(accepted.get("deduplicated"))
+    if deduplicated:
+        response.status_code = 200
     data = TranscriptionRunAccepted(
         message_id=message_id,
         mode=payload.mode,
         drive_file_id=payload.drive_file_id,
+        deduplicated=deduplicated,
     )
     return success_envelope(data, count=1, total=1)

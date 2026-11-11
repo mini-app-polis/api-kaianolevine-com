@@ -3,10 +3,12 @@ from kaianolevine_api.services.song_identity import (
     catalog_title_key,
     clean_genre,
     display_title,
+    is_owner_edit,
     is_placeholder,
     is_release_label,
     loose_title_key,
     main_artist_key,
+    owner_edit_versions,
     version_tokens,
 )
 
@@ -170,3 +172,39 @@ def test_loose_keys_keep_a_version_that_follows_a_feat_credit():
     # A release label after the credit is still dropped.
     assert loose_title_key("Song ft. X (Radio Edit)") == loose_title_key("Song")
     assert loose_title_key("Starboy ft. Daft Punk") == loose_title_key("Starboy")
+
+
+def test_a_version_in_angle_brackets_is_an_owner_edit():
+    assert owner_edit_versions("Song <Intro Cut>") == ["Intro Cut"]
+    assert is_owner_edit("Song < Self Censored >")
+    assert not is_owner_edit("Song (Intro Cut)")
+    assert not is_owner_edit("Song <>")
+
+
+def test_an_owner_edit_never_keys_as_the_published_song():
+    published = ["Song", "Song (Intro Cut)", "Song - Intro Cut", "Song (No Intro Edit)"]
+    for title in published:
+        assert catalog_title_key("Song <Intro Cut>") != catalog_title_key(title)
+        assert loose_title_key("Song <Intro Cut>") != loose_title_key(title)
+    assert catalog_title_key("Song <Intro Cut>") == "song <intro cut>"
+    assert catalog_title_key("Song <No Intro Edit>") != catalog_title_key("Song")
+    assert version_tokens("Song <Intro Cut>")  # an owner edit is a version
+
+
+def test_an_owner_edit_matches_itself_loosely():
+    assert loose_title_key("Song <Intro Cut>") == loose_title_key("Song <Intro-Cut>")
+    assert loose_title_key("Song ft. X <Intro Cut>") == loose_title_key(
+        "Song <Intro Cut>"
+    )
+
+
+def test_an_owner_edit_entry_keys_as_one_whatever_its_title():
+    # The entry's flag decides: an owner-edit entry whose title has no
+    # brackets still never matches the published song, and the reverse.
+    assert loose_title_key("Song (Intro Cut)", owner_edit=True) != loose_title_key(
+        "Song (Intro Cut)"
+    )
+    assert loose_title_key("Song", owner_edit=True) != loose_title_key("Song")
+    assert loose_title_key("Song <Intro Cut>", owner_edit=True) == loose_title_key(
+        "Song <Intro Cut>"
+    )

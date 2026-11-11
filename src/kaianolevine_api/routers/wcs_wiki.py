@@ -839,7 +839,7 @@ async def start_wiki_operation(
     now = dt.datetime.now(dt.UTC)
     earlier = wiki_dispatch.first_queued(message_id, now)
     if earlier is not None:
-        summary = "Already queued less than five minutes ago; this joins that job."
+        summary = "Already queued a moment ago; this joins that job."
     log.info(
         "%s wiki admin operation %s caller=%s deduplicated=%s",
         LOG_SUCCESS,
@@ -932,7 +932,7 @@ async def send_wiki_note(
     # SQS answers a send it deduplicated with the kept message's id.
     earlier = wiki_dispatch.first_queued(message_id, now)
     summary = (
-        "Already sent less than five minutes ago; not queued again."
+        "Already sent a moment ago; not queued again."
         if earlier is not None
         else f"Queued “{file_name}”. It is a correction once extracted."
     )

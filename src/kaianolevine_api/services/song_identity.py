@@ -14,6 +14,12 @@ here, agreed 2026-10-15:
   the play stays with the song.
 * A version written in the title is kept, including "(Acoustic)" and a
   remix that follows a feat. credit.
+
+An owner edit (the owner's own cut of a recording, deejay-cog ADR-0008) is
+its version written in angle brackets: "Song <Intro Cut>". Whatever the
+brackets hold is the version, a release label's words included, and an
+owner edit never shares a key with the published song or its versions: not
+"Song", and not "Song (Intro Cut)".
 """
 
 from __future__ import annotations
@@ -41,6 +47,10 @@ _VERSION_WORD = re.compile(
     r"remix|mix|edit|acoustic|live|version|session|cover|piano", re.IGNORECASE
 )
 _BRACKETED = re.compile(r"[\[(]([^\])]*)[\])]")
+_OWNER_EDIT = re.compile(r"<([^<>]*)>")
+#: Marks an owner edit's loose key. ``_compact`` keeps only letters and
+#: digits, so no other key starts with it.
+_OWNER_EDIT_MARK = "<"
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
 _FURTHER_ARTISTS = re.compile(
     r"\s*(,|_|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bx\b|\bwith\b).*$",
@@ -109,14 +119,30 @@ def is_release_label(text: str) -> bool:
     return bool(_VIDEO_ID.match(text)) and not _VERSION_WORD.search(text)
 
 
+def owner_edit_versions(title: str) -> list[str]:
+    """The owner-edit versions a title names: what each ``< >`` pair holds,
+    trimmed. Empty when the title is not an owner edit."""
+    return [v.strip() for v in _OWNER_EDIT.findall(title) if v.strip()]
+
+
+def is_owner_edit(title: str) -> bool:
+    """Whether a title names an owner-edit version ("Song <Intro Cut>")."""
+    return bool(owner_edit_versions(title))
+
+
 def version_tokens(title: str) -> list[str]:
     """The versions a title names, compacted: bracketed or " - " parts that
-    are not release labels. Empty for the plain song."""
+    are not release labels, and owner-edit versions marked as such. Empty
+    for the plain song."""
+    tokens = {
+        _OWNER_EDIT_MARK + _compact(v)
+        for v in owner_edit_versions(title)
+        if _compact(v)
+    }
     parts = _BRACKETED.findall(title)
     dash = _DASH_SUFFIX.search(title)
     if dash:
         parts.append(dash.group(1))
-    tokens = set()
     for part in parts:
         if not part.strip() or is_release_label(part):
             continue
@@ -140,7 +166,8 @@ def display_title(title: str, remix: str | None) -> str:
 def catalog_title_key(display: str) -> str:
     """The catalog's title key for a song: the shared normalizer's, unless
     that drops a version the title names, in which case the full lowercased
-    title, so the version never shares a key with the plain song."""
+    title, so the version never shares a key with the plain song. An owner
+    edit always takes the full lowercased title, brackets included."""
     base, _ = normalize_for_matching(display, "")
     if all(token in _compact(base) for token in version_tokens(display)):
         return base
@@ -148,9 +175,10 @@ def catalog_title_key(display: str) -> str:
 
 
 #: A feat. credit outside brackets, up to the version that may follow it
-#: ("Starboy ft. Daft Punk (Alex Aiono Cover)" keeps its cover).
+#: ("Starboy ft. Daft Punk (Alex Aiono Cover)" keeps its cover, and
+#: "Song ft. X <Intro Cut>" its owner edit).
 _TRAILING_FEAT = re.compile(
-    r"\s+(feat\.?|ft\.?|featuring)\s+.*?(?=\s*[\[(]|\s+-\s+|$)", re.IGNORECASE
+    r"\s+(feat\.?|ft\.?|featuring)\s+.*?(?=\s*[\[(<]|\s+-\s+|$)", re.IGNORECASE
 )
 
 
@@ -169,12 +197,20 @@ def _without_release_labels(text: str) -> str:
     return kept if _compact(kept) else text
 
 
-def loose_title_key(text: str) -> str:
+def loose_title_key(text: str, owner_edit: bool | None = None) -> str:
     """Title (and version) ignoring case, punctuation, release labels and a
     trailing "Version": "Cruel - Piano Acoustic" and "Cruel (Piano
     Acoustic)" match, and so do "21 Questions" and "21 Questions [Clean]
-    [feat. Nate Dogg]"."""
-    return _compact(_without_release_labels(text)).removesuffix("version")
+    [feat. Nate Dogg]".
+
+    An owner edit's key is marked, so it never matches the published song's
+    ("Song <Intro Cut>" is not "Song (Intro Cut)"). ``owner_edit`` says
+    whether ``text`` is one; by default, whether it names an owner-edit
+    version."""
+    key = _compact(_without_release_labels(text)).removesuffix("version")
+    if owner_edit is None:
+        owner_edit = is_owner_edit(text)
+    return _OWNER_EDIT_MARK + key if owner_edit else key
 
 
 def main_artist_key(artist: str) -> str:

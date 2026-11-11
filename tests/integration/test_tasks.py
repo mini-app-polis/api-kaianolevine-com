@@ -373,8 +373,8 @@ async def test_each_sweep_asked_for_is_its_own_job(monkeypatch) -> None:
     assert first["MessageDeduplicationId"] != second["MessageDeduplicationId"]
 
 
-async def test_a_task_request_leaves_deduplication_to_the_queue(monkeypatch) -> None:
-    """Only the sweep brings its own id; other jobs dedupe on the body."""
+async def test_a_task_request_dedupes_on_the_window_id(monkeypatch) -> None:
+    """Other jobs carry the time-bucketed id, the same for a repeat."""
     settings = _settings(monkeypatch)
     sqs = MagicMock()
     sqs.send_message.return_value = {"MessageId": "m-1"}
@@ -384,7 +384,7 @@ async def test_a_task_request_leaves_deduplication_to_the_queue(monkeypatch) -> 
             TaskCreateRequest.model_validate(VOICENOTE), settings=settings
         )
 
-    assert "MessageDeduplicationId" not in sqs.send_message.call_args.kwargs
+    assert sqs.send_message.call_args.kwargs["MessageDeduplicationId"]
 
 
 # ── updates ──────────────────────────────────────────────────────────────

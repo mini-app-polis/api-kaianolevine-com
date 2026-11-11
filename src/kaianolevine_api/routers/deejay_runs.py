@@ -42,7 +42,9 @@ _LABEL = "deejay dispatch"
         "With drive_files, the files are claimed first and a request whose "
         "files are all already claimed is answered 200 with deduplicated "
         "true and the message id of an earlier sweep, and nothing is "
-        "enqueued. The run happens afterwards, on the cog."
+        "enqueued. An identical request within about a minute is collapsed "
+        "by the queue and answered the same way; one later is queued. The "
+        "run happens afterwards, on the cog."
     ),
 )
 async def create_deejay_run(
@@ -61,8 +63,11 @@ async def create_deejay_run(
     watcher will not act on the 502 — and
     every claim this request took is released, so the next tick asks again.
 
-    Without ``drive_files`` nothing is claimed and the sweep is always
-    enqueued: that is an operator asking, and asking twice means twice.
+    Without ``drive_files`` nothing is claimed and the sweep is enqueued:
+    that is an operator asking, and asking twice means twice — unless the
+    second is within the queue's collapse window
+    (:data:`job_queue.DEDUP_WINDOW_SECONDS`), when it is the same request
+    sent again and is answered with the first's message id.
     """
     settings = get_settings()
     job = deejay_dispatch.DeejayJob(mode=payload.mode)
@@ -111,7 +116,9 @@ async def create_deejay_run(
             return success_envelope(data, count=1, total=1)
 
     try:
-        accepted = await deejay_dispatch.dispatch_deejay(job, settings=settings)
+        accepted = await deejay_dispatch.dispatch_deejay(
+            job, settings=settings, caller=principal.display_name or principal.subject
+        )
     except deejay_dispatch.DispatchError as exc:
         for claim in acquired:
             await dispatch_claims.release(session, claim)
@@ -126,5 +133,10 @@ async def create_deejay_run(
     if acquired:
         await dispatch_claims.record(session, acquired, message_id)
 
-    data = DeejayRunAccepted(message_id=message_id, mode=payload.mode)
+    deduplicated = bool(accepted.get("deduplicated"))
+    if deduplicated:
+        response.status_code = 200
+    data = DeejayRunAccepted(
+        message_id=message_id, mode=payload.mode, deduplicated=deduplicated
+    )
     return success_envelope(data, count=1, total=1)

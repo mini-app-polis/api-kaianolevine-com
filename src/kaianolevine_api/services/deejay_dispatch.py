@@ -6,8 +6,10 @@ routing table as it stands, and the cog's ``deejay_router(mode)``
 reads the same thing it always did.
 
 A deejay job is a folder sweep, not a file: ``process-new-files`` lists
-the source folder and works through whatever it finds. The message
-therefore carries only the mode. Two triggers for one upload produce two
+the source folder and works through whatever it finds. The job is
+therefore only the mode; a request from a route also carries who asked
+and when (``request``), so two triggers are two messages. Two triggers
+for one upload a minute or more apart produce two
 sweeps; run one after the other, the second finds the files already
 archived. Run at the same time, they race over the same files — which is
 the consumer's concurrency setting to prevent, not something the message
@@ -48,10 +50,21 @@ class DeejayJob:
         )
 
 
-async def dispatch_deejay(job: DeejayJob, *, settings: Settings) -> dict:
-    """Enqueue one deejay run. Raises DispatchError when it did not land."""
+async def dispatch_deejay(
+    job: DeejayJob, *, settings: Settings, caller: str | None = None
+) -> dict:
+    """Enqueue one deejay run. Raises DispatchError when it did not land.
+
+    With ``caller``, the message carries this request's own identity
+    (:func:`job_queue.request_identity`), so two triggers are two messages
+    and the run can say who asked; a repeat within the collapse window is
+    still one job.
+    """
+    message = job.as_message()
+    if caller is not None:
+        message["request"] = job_queue.request_identity(caller)
     return await job_queue.enqueue(
-        job.as_message(),
+        message,
         f"deejay {job.mode}",
         cog="deejay",
         label="deejay dispatch",

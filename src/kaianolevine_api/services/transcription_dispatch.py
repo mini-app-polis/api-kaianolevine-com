@@ -76,10 +76,21 @@ class TranscriptionJob:
         return f"transcription {self.mode}"
 
 
-async def dispatch_transcription(job: TranscriptionJob, *, settings: Settings) -> dict:
-    """Enqueue one transcription job. Raises DispatchError when it did not land."""
+async def dispatch_transcription(
+    job: TranscriptionJob, *, settings: Settings, caller: str | None = None
+) -> dict:
+    """Enqueue one transcription job. Raises DispatchError when it did not land.
+
+    With ``caller``, the message carries this request's own identity
+    (:func:`job_queue.request_identity`), so two triggers are two messages
+    and the run can say who asked; a repeat within the collapse window is
+    still one job.
+    """
+    message = job.as_message()
+    if caller is not None:
+        message["request"] = job_queue.request_identity(caller)
     return await job_queue.enqueue(
-        job.as_message(),
+        message,
         job.describe(),
         cog="transcription",
         label="transcription dispatch",

@@ -92,9 +92,10 @@ def as_message(job: WcsWikiJob) -> dict[str, Any]:
     return WikiJobMessage(payload=job).model_dump(mode="json", exclude_none=True)
 
 
-#: How long SQS treats an identical message body as the same message: the
-#: queue's content-based deduplication window.
-DEDUP_WINDOW = dt.timedelta(minutes=5)
+#: How long SQS remembers a deduplication id, so how long a send can come
+#: back with an earlier message's id. Which sends collapse is the
+#: deduplication id's window (:data:`job_queue.DEDUP_WINDOW_SECONDS`).
+DEDUP_WINDOW = dt.timedelta(seconds=job_queue.SQS_DEDUP_SECONDS)
 
 #: Message id -> when this process first got it back from the queue.
 _first_queued: dict[str, dt.datetime] = {}
@@ -105,7 +106,7 @@ def first_queued(message_id: str, now: dt.datetime | None = None) -> dt.datetime
 
     SQS answers a send it deduplicated with the id of the message it kept,
     and with no other sign that nothing new was queued. Two clicks of
-    "Rebuild every page" five minutes apart are one job, and a panel waiting
+    "Rebuild every page" seconds apart are one job, and a panel waiting
     on the second would wait for work that already happened (2026-10-18). So
     each id is remembered for the dedup window: seen again inside it, the
     send was a duplicate and the original time is returned; otherwise the id

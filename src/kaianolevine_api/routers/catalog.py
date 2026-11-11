@@ -134,6 +134,8 @@ async def list_catalog(
             play_count=row.play_count,
             first_played=row.first_played,
             last_played=row.last_played,
+            owner_edit=row.owner_edit,
+            cut_from_id=row.cut_from_id,
         )
         for row in rows
         for shown in [render(row, rules)]
@@ -293,6 +295,8 @@ def _rules_out(row: DbDisplayRules | None) -> DisplayRulesOut:
             artist_joiner=first.artist_joiner,
             version_open=first.version_open,
             version_close=first.version_close,
+            owner_edit_open=first.owner_edit_open,
+            owner_edit_close=first.owner_edit_close,
             bpm_decimals=first.bpm_decimals,
             case_style="as_styled",
             changed_at=None,
@@ -303,6 +307,8 @@ def _rules_out(row: DbDisplayRules | None) -> DisplayRulesOut:
         artist_joiner=row.artist_joiner,
         version_open=row.version_open,
         version_close=row.version_close,
+        owner_edit_open=row.owner_edit_open,
+        owner_edit_close=row.owner_edit_close,
         bpm_decimals=row.bpm_decimals,
         case_style="as_styled",
         changed_at=row.changed_at,
@@ -334,8 +340,9 @@ async def get_display_rules(
     summary="Change the display rules",
     description=(
         "Replaces the display rules and records when they changed, so the "
-        "next sync writes the new display to every linked file. Requires "
-        "catalog.tracks.write."
+        "next sync writes the new display to every linked file. The "
+        "owner-edit pair is left as stored when not sent, and must differ "
+        "from the version pair. Requires catalog.tracks.write."
     ),
 )
 async def put_display_rules(
@@ -346,7 +353,9 @@ async def put_display_rules(
     """Store the rules; a change moves changed_at, the same rules do not."""
     del principal
     row = await session.get(DbDisplayRules, 1)
-    values = rules.model_dump()
+    # Every rule but the owner-edit pair is required; that pair, when not
+    # sent, stays as stored.
+    values = rules.model_dump(exclude_unset=True)
     if row is None:
         row = DbDisplayRules(id=1, **values)
         session.add(row)
@@ -421,6 +430,8 @@ async def get_catalog(
         featured_artists=list(catalog.featured_artists or []),
         subgenre=catalog.subgenre,
         label=catalog.label,
+        owner_edit=catalog.owner_edit,
+        cut_from_id=catalog.cut_from_id,
         updated_at=catalog.updated_at,
     )
 
@@ -438,6 +449,8 @@ _EDITABLE = (
     "bpm",
     "release_year",
     "label",
+    "owner_edit",
+    "cut_from_id",
 )
 
 
@@ -448,6 +461,9 @@ def _names(names: list[str] | None) -> list[str]:
 def _cleaned(name: str, value: object) -> object:
     if name in ("main_artists", "featured_artists"):
         return _names(value)  # type: ignore[arg-type]
+    if name == "cut_from_id":
+        # A revision holds it as text.
+        return uuid.UUID(str(value)) if value is not None else None
     if isinstance(value, str):
         return value.strip() or None
     return value
@@ -457,7 +473,11 @@ def _edit_values(entry: DbCatalog) -> dict[str, object]:
     values: dict[str, object] = {}
     for name in _EDITABLE:
         value = getattr(entry, name)
-        values[name] = list(value or []) if name.endswith("_artists") else value
+        if name.endswith("_artists"):
+            value = list(value or [])
+        elif isinstance(value, uuid.UUID):
+            value = str(value)  # revisions are JSON
+        values[name] = value
     return values
 
 
@@ -467,9 +487,12 @@ def _edit_values(entry: DbCatalog) -> dict[str, object]:
     summary="Edit a catalog entry's parts and owned fields",
     description=(
         "Sets the fields sent: base title, version, main and featured "
-        "artists, genre, subgenre, BPM, year and label; a field sent as null "
-        "is cleared. The title and artist shown are written out from the "
-        "parts by the display rules. Records when the entry changed and its "
+        "artists, genre, subgenre, BPM, year, label, whether the version is "
+        "an owner edit, and the published entry an owner edit was cut from "
+        "(another live entry, not one that is itself an owner edit); a "
+        "field sent as null is cleared. The title and artist shown are "
+        "written out from the parts by the display rules. Records when the "
+        "entry changed and its "
         "values before and after (catalog_revisions, kind edit), keeps the "
         "new display as a spelling the entry matches under, and sets its "
         "source to manual. Any entry, whichever key filed it. Requires "
@@ -488,6 +511,20 @@ async def patch_catalog(
         raise api_error(404, "not_found", "Catalog entry not found")
 
     changes = {name: getattr(patch, name) for name in patch.model_fields_set}
+    cut_from_id = changes.get("cut_from_id")
+    if cut_from_id is not None:
+        source = await session.get(DbCatalog, cut_from_id)
+        if (
+            cut_from_id == catalog.id
+            or source is None
+            or source.archived_at is not None
+            or source.owner_edit
+        ):
+            raise api_error(
+                422,
+                "invalid_cut_from",
+                "cut_from_id must be another live entry that is not an owner edit",
+            )
     if await edit_entry(
         session, catalog, changes, by=principal.subject, source="manual"
     ):
@@ -574,6 +611,7 @@ async def preview_catalog_edit(
         featured_artists=list(catalog.featured_artists or [])
         if featured_artists is None
         else _names(featured_artists),
+        owner_edit=catalog.owner_edit,
     )
     shown = render(parts, await load_rules(session))
     title = shown.title + (f" ({shown.remix})" if shown.remix else "")

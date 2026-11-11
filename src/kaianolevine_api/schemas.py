@@ -333,6 +333,15 @@ class CatalogListItem(BaseModel):
         default=None, description="Semantic value for last played."
     )
 
+    owner_edit: bool = Field(
+        default=False,
+        description="Whether the entry's version is an owner edit, not a published one.",
+    )
+    cut_from_id: uuid.UUID | None = Field(
+        default=None,
+        description="For an owner edit, the published entry it was cut from, if known.",
+    )
+
 
 class CatalogPatch(BaseModel):
     """An edit to an entry's owned fields: its parts and its metadata.
@@ -360,6 +369,14 @@ class CatalogPatch(BaseModel):
         default=None, ge=1000, le=9999, description="The release year."
     )
     label: str | None = Field(default=None, description="The record label.")
+    owner_edit: bool = Field(
+        default=False,
+        description="Whether the version is an owner edit, not a published one.",
+    )
+    cut_from_id: uuid.UUID | None = Field(
+        default=None,
+        description="For an owner edit, the published entry it was cut from.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -387,12 +404,38 @@ class DisplayRulesBody(BaseModel):
     )
     version_open: str = Field(..., description='What opens a version ("(").')
     version_close: str = Field(..., description='What closes a version (")").')
+    owner_edit_open: str = Field(
+        default="<",
+        min_length=1,
+        description=(
+            'What opens an owner edit\'s version ("<"). Left as stored when not sent.'
+        ),
+    )
+    owner_edit_close: str = Field(
+        default=">",
+        min_length=1,
+        description=(
+            'What closes an owner edit\'s version (">"). Left as stored when not sent.'
+        ),
+    )
     bpm_decimals: int = Field(..., ge=0, le=3, description="Decimals BPM is shown to.")
     case_style: Literal["as_styled"] = Field(
         ..., description="Capitalisation: kept as the artist styles it."
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _owner_edit_pair_differs(self) -> DisplayRulesBody:
+        if (self.owner_edit_open, self.owner_edit_close) == (
+            self.version_open,
+            self.version_close,
+        ):
+            raise ValueError(
+                "the owner-edit pair must differ from the version pair, or "
+                "an owner edit reads as a published version"
+            )
+        return self
 
 
 class DisplayRulesOut(DisplayRulesBody):
@@ -623,6 +666,14 @@ class CatalogDetail(BaseModel):
     )
     subgenre: str | None = Field(default=None, description="The subgenre.")
     label: str | None = Field(default=None, description="The record label.")
+    owner_edit: bool = Field(
+        default=False,
+        description="Whether the version is an owner edit, not a published one.",
+    )
+    cut_from_id: uuid.UUID | None = Field(
+        default=None,
+        description="For an owner edit, the published entry it was cut from, if known.",
+    )
     updated_at: dt.datetime | None = Field(
         default=None, description="When the entry last changed."
     )

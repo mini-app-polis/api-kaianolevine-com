@@ -8,6 +8,11 @@ column. A release label (Clean, Radio Edit, No Intro Edit, a remaster...) is
 not a version and is dropped: copies with different labels share the song's
 entry, and each file keeps its own label in the library registry.
 
+A version in angle brackets ("Song <Intro Cut>") is an owner edit: the
+owner's own cut of the recording, with an entry of its own. Whatever the
+brackets hold is the version, a release label's words included, and the
+parts record that it is an owner edit.
+
 A proposal is *clear* when nothing in it needs a person's judgement. It is
 *ambiguous*, with the reasons, when the text could be read more than one way:
 " & ", " and " or " x " between artists, main or featured (a duo's name, or
@@ -22,7 +27,7 @@ from __future__ import annotations
 import dataclasses
 import re
 
-from .song_identity import is_release_label
+from .song_identity import is_release_label, owner_edit_versions
 
 _FEAT = re.compile(r"\s*\b(?:feat\.?|ft\.?|featuring)\s+", re.IGNORECASE)
 #: A bracketed credit: "(feat. X)", "[ft. X]", "(featuring X)" or "(with X)",
@@ -35,6 +40,7 @@ _CREDIT_SPLIT = re.compile(
     r"\s*,?\s*\b(?:feat\.?|ft\.?|featuring|with)\s+|\s*,\s*", re.IGNORECASE
 )
 _BRACKETED = re.compile(r"\s*[\[(]([^\])]*)[\])]")
+_OWNER_EDIT = re.compile(r"\s*<[^<>]*>")
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
 _VERSION_WORD = re.compile(
     r"remix|mix|edit|acoustic|live|version|session|cover|piano|instrumental"
@@ -48,12 +54,14 @@ _ANY_JOINER = re.compile(r"\s*,\s*|\s+(?:&|and|x)\s+", re.IGNORECASE)
 
 @dataclasses.dataclass(frozen=True)
 class Parts:
-    """A song's parts: base title, version, main and featured artists."""
+    """A song's parts: base title, version, main and featured artists, and
+    whether the version is an owner edit."""
 
     base_title: str
     version: str | None
     main_artists: tuple[str, ...]
     featured_artists: tuple[str, ...]
+    owner_edit: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -62,7 +70,8 @@ class Proposal:
     must look at it, if anything."""
 
     parts: Parts
-    #: What the split did: featured, co_artists, version, release_label.
+    #: What the split did: featured, co_artists, version, owner_edit,
+    #: release_label.
     notes: tuple[str, ...]
     #: Why a person should look: empty for a clear proposal.
     ambiguous: tuple[str, ...]
@@ -135,9 +144,12 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
         ambiguous.append(f"{part.strip()!r} in the title names no version")
         return True
 
-    # Title: its bracketed credits, then bracketed parts, then a " - " part,
-    # then a trailing credit ("Song ft. X (Remix)" keeps its remix).
-    text = credits(title.strip())
+    # Title: its owner-edit version, its bracketed credits, then bracketed
+    # parts, then a " - " part, then a trailing credit ("Song ft. X (Remix)"
+    # keeps its remix).
+    owner_edits = owner_edit_versions(title)
+    versions.extend(owner_edits)
+    text = credits(_OWNER_EDIT.sub("", title).strip())
     text = _BRACKETED.sub(
         lambda m: m.group(0) if keep_or_take(m.group(1)) else "", text
     )
@@ -178,6 +190,8 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
         notes.append("featured")
     if versions:
         notes.append("version")
+    if owner_edits:
+        notes.append("owner_edit")
     if len(versions) > 1:
         ambiguous.append(f"more than one version: {', '.join(versions)}")
     if not base:
@@ -193,6 +207,7 @@ def propose(title: str, artist: str, remix: str | None = None) -> Proposal:
             version=" ".join(versions) if versions else None,
             main_artists=_unique(split_main),
             featured_artists=_unique(featured),
+            owner_edit=bool(owner_edits),
         ),
         notes=tuple(dict.fromkeys(notes)),
         ambiguous=tuple(ambiguous),
