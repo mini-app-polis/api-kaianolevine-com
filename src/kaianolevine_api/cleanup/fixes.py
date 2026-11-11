@@ -61,6 +61,7 @@ from ..models import CatalogRevision, LibraryFile, TrackCatalog
 from ..services.display import Rules, load_rules, render
 from ..services.libraries import MAIN, library_of
 from ..services.reconciliation import IngestTrack, record_alias, track_keys
+from ..services.song_parts import propose
 
 log = logger_mod.get_logger()
 
@@ -538,11 +539,24 @@ async def make_version(
     version and no BPM, in the source's library, or the entry already shown
     that way. Returns that entry's id; the caller commits.
 
-    Raises :class:`FixError` when the source has no parts to make a version of.
+    A source with no parts yet (as an entry made from a library file's tags
+    is) has them proposed from its title and artist, as the editor does.
+
+    Raises :class:`FixError` when the source has no parts to make a version
+    of and none can be proposed cleanly.
     """
     values = {**values_of(source), "version": version.strip(), "bpm": None}
     if values["base_title"] is None or not values["main_artists"]:
-        raise FixError("the entry has no parts to make a version of")
+        proposal = propose(source.title or "", source.artist or "", source.remix)
+        if not (
+            proposal.clear and proposal.parts.base_title and proposal.parts.main_artists
+        ):
+            raise FixError("the entry has no parts to make a version of")
+        values.update(
+            base_title=proposal.parts.base_title,
+            main_artists=list(proposal.parts.main_artists),
+            featured_artists=list(proposal.parts.featured_artists),
+        )
     shown = _shown(source, values, rules)
     keys = track_keys(IngestTrack(title=shown[0], artist=shown[1]))
     existing = (
