@@ -472,6 +472,9 @@ class DuplicateFileOut(BaseModel):
         ..., description="A different edit or label: never trashed via the group."
     )
     why_kept: str | None = Field(default=None, description="Why it is kept.")
+    outcome: Literal["keep", "own_version", "trash"] | None = Field(
+        default=None, description="What the owner decided for it, once resolved."
+    )
     catalog_id: uuid.UUID | None = Field(
         default=None, description="The catalog entry it links to."
     )
@@ -490,6 +493,10 @@ class DuplicateGroupOut(BaseModel):
     status: Literal["open", "resolved"] = Field(..., description="Open or resolved.")
     keeper_drive_file_id: str | None = Field(
         default=None, description="The file the owner kept, once resolved."
+    )
+    kept_together: bool = Field(
+        default=False,
+        description="Resolved with every file kept on the entry.",
     )
     reported_at: dt.datetime = Field(..., description="When last reported.")
     resolved_at: dt.datetime | None = Field(
@@ -534,23 +541,79 @@ class ReconcileReview(BaseModel):
     )
 
 
-class DuplicateResolve(BaseModel):
-    """The owner's choice for a duplicate group: the file to keep, and
-    which of the others go to the trash (every other file not kept on
-    purpose, when not given)."""
+DuplicateOutcome = Literal["keep", "own_version", "trash"]
 
-    keeper_drive_file_id: str = Field(
-        ..., min_length=1, description="The file to keep."
+
+class DuplicateFileOutcome(BaseModel):
+    """The owner's choice for one file of a duplicate group."""
+
+    drive_file_id: str = Field(..., min_length=1, description="The file.")
+    outcome: DuplicateOutcome = Field(
+        ...,
+        description=(
+            "keep: it stays on the entry; own_version: it gets a version entry "
+            "of its own; trash: it is marked for the trash."
+        ),
+    )
+    version: str | None = Field(
+        default=None,
+        max_length=200,
+        description="The version text, as typed, for own_version (only).",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _version_for_own_version(self) -> DuplicateFileOutcome:
+        text = (self.version or "").strip()
+        if self.outcome == "own_version" and not text:
+            raise ValueError("own_version needs the version text")
+        if self.outcome != "own_version" and self.version is not None:
+            raise ValueError("only own_version takes a version")
+        self.version = text or None
+        return self
+
+
+class DuplicateResolve(BaseModel):
+    """The owner's choice for a duplicate group. Either the file to keep,
+    with which of the others go to the trash (every other file not kept on
+    purpose, when not given), or an outcome for every file of the group."""
+
+    keeper_drive_file_id: str | None = Field(
+        default=None, min_length=1, description="The file to keep."
     )
     trash_drive_file_ids: list[str] | None = Field(
         default=None,
         description=(
-            "The files to mark for the trash; each must be in the group, not "
-            "the keeper and not kept on purpose."
+            "With keeper_drive_file_id: the files to mark for the trash; each "
+            "must be in the group and not the keeper."
+        ),
+    )
+    outcomes: list[DuplicateFileOutcome] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Instead of a keeper: what happens to each file of the group, "
+            "every file named once. At least one file is kept."
+        ),
+    )
+    confirm_different_edit: bool = Field(
+        default=False,
+        description=(
+            "Required to send a file kept on purpose (a different edit or "
+            "label) to the trash; without it that answers 409 kept_on_purpose."
         ),
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _keeper_or_outcomes(self) -> DuplicateResolve:
+        if (self.keeper_drive_file_id is None) == (self.outcomes is None):
+            raise ValueError("give either keeper_drive_file_id or outcomes")
+        if self.outcomes is not None and self.trash_drive_file_ids is not None:
+            raise ValueError("trash_drive_file_ids goes with keeper_drive_file_id")
+        return self
 
 
 class DuplicateResolveResult(BaseModel):
@@ -565,6 +628,10 @@ class DuplicateResolveResult(BaseModel):
     )
     trash_requested: list[str] = Field(
         ..., description="The files marked for the trash."
+    )
+    own_versions: dict[str, uuid.UUID] = Field(
+        default_factory=dict,
+        description="Each file given its own version, and that version's entry.",
     )
 
 

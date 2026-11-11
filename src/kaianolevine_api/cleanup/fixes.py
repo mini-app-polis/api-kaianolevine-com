@@ -61,12 +61,15 @@ from ..models import CatalogRevision, LibraryFile, TrackCatalog
 from ..services.display import Rules, load_rules, render
 from ..services.libraries import MAIN, library_of
 from ..services.reconciliation import IngestTrack, record_alias, track_keys
+from ..services.song_parts import propose
 
 log = logger_mod.get_logger()
 
 #: The revision kind the catalog editor writes; a fix is an edit made from a
 #: reviewed list rather than the form ("by" says which).
 KIND = "edit"
+#: Who a revision says made it, unless the caller says.
+BY = "cleanup.fixes"
 FIXES_PATH = (
     Path(__file__).resolve().parent.parent / "config_data" / "catalog_fixes.yaml"
 )
@@ -456,7 +459,7 @@ async def apply(session: AsyncSession, the_plan: Plan) -> int:
 
 
 async def _apply_version(
-    session: AsyncSession, version: NewVersion, rules: Rules
+    session: AsyncSession, version: NewVersion, rules: Rules, by: str = BY
 ) -> int:
     """Make the version's entry (unless it exists) and link its files."""
     source = await session.get(TrackCatalog, version.source_id)
@@ -471,7 +474,7 @@ async def _apply_version(
         if entry is None:
             return 0
         before = values_of(entry)
-        after: dict[str, Any] = {**before, "by": "cleanup.fixes"}
+        after: dict[str, Any] = {**before, "by": by}
     else:
         title, artist = version.shown
         keys = track_keys(IngestTrack(title=title, artist=artist))
@@ -494,7 +497,7 @@ async def _apply_version(
         before = {}
         after = {
             **version.values,
-            "by": "cleanup.fixes",
+            "by": by,
             "made_from": str(source.id),
         }
         shown = render(entry, rules)
@@ -521,6 +524,79 @@ async def _apply_version(
         )
     )
     return 1
+
+
+async def make_version(
+    session: AsyncSession,
+    source: TrackCatalog,
+    version: str,
+    files: Mapping[str, uuid.UUID | None],
+    rules: Rules,
+    by: str = BY,
+) -> uuid.UUID:
+    """Link ``files`` to another version of ``source``, as a new version fix
+    does: an entry made from the source's parts and owned fields with that
+    version and no BPM, in the source's library, or the entry already shown
+    that way. Returns that entry's id; the caller commits.
+
+    A source with no parts yet (as an entry made from a library file's tags
+    is) has them proposed from its title and artist, as the editor does.
+
+    Raises :class:`FixError` when the source has no parts to make a version
+    of and none can be proposed cleanly.
+    """
+    values = {**values_of(source), "version": version.strip(), "bpm": None}
+    if values["base_title"] is None or not values["main_artists"]:
+        proposal = propose(source.title or "", source.artist or "", source.remix)
+        if not (
+            proposal.clear and proposal.parts.base_title and proposal.parts.main_artists
+        ):
+            raise FixError("the entry has no parts to make a version of")
+        values.update(
+            base_title=proposal.parts.base_title,
+            main_artists=list(proposal.parts.main_artists),
+            featured_artists=list(proposal.parts.featured_artists),
+        )
+    shown = _shown(source, values, rules)
+    keys = track_keys(IngestTrack(title=shown[0], artist=shown[1]))
+    existing = (
+        (
+            await session.execute(
+                select(TrackCatalog).where(
+                    TrackCatalog.library == source.library,
+                    TrackCatalog.title_normalized == keys.pair[0],
+                    TrackCatalog.artist_normalized == keys.pair[1],
+                    TrackCatalog.archived_at.is_(None),
+                    TrackCatalog.id != source.id,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    await _apply_version(
+        session,
+        NewVersion(
+            source_id=source.id,
+            shown_source=(source.title, source.artist),
+            values=values,
+            shown=shown,
+            files=dict(files),
+            existing_id=existing.id if existing is not None else None,
+        ),
+        rules,
+        by,
+    )
+    linked = (
+        await session.execute(
+            select(LibraryFile.catalog_id).where(
+                LibraryFile.drive_file_id == next(iter(files))
+            )
+        )
+    ).scalar_one()
+    if linked is None:
+        raise FixError("the file is not in the library")
+    return linked
 
 
 def load_fixes(

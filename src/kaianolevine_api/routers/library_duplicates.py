@@ -6,13 +6,20 @@ look like copies of one song (migration 100; deejay-cog ADR-0008, decision
 machine holds for the library. Listing the groups and resolving one are the
 owner's, under ``catalog.tracks.write`` (the catalog-editor role).
 
-Resolving a group keeps the file the owner picks: the catalog entries of the
-files sent to the trash are merged into the keeper's entry, as the merge
+Resolving a group decides each file, case by case (deejay-cog ADR-0007,
+amended 2026-11-11: one entry may keep several files): it stays on the
+entry, it gets a version entry of its own (as the new version fix of the
+fixes clean-up makes one), or it goes to the trash. The catalog entries of
+the files kept and trashed are merged into the keeper's entry, as the merge
 clean-up does (plays moved, spellings kept as aliases, the others archived),
-and those files are marked trash-requested in the registry. Nothing is
-deleted here; deejay-cog's nightly run moves trash-requested files to
-Drive's trash. A file kept on purpose (a different edit or label) is never
-trash-requested through its group.
+and trashed files are marked trash-requested in the registry. At least one
+file in the library is kept, so no outcome leaves the entry with none. A
+group whose files all stay is kept together; like any resolved group, a
+later report does not reopen it unless its files change. The older body,
+a keeper and the files to trash, is still taken. Nothing is deleted here;
+deejay-cog's nightly run moves trash-requested files to Drive's trash. A
+file kept on purpose (a different edit or label) is trash-requested through
+its group only with ``confirm_different_edit``.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import require_scope
+from ..cleanup.fixes import FixError, make_version
 from ..cleanup.merge import Group, merge_group
 from ..database import get_db_session
 from ..models import LibraryDuplicateGroup as DbGroup
@@ -35,6 +43,7 @@ from ..models import TrackCatalog as DbCatalog
 from ..schemas import (
     DuplicateFileOut,
     DuplicateGroupOut,
+    DuplicateOutcome,
     DuplicateReport,
     DuplicateReportResult,
     DuplicateResolve,
@@ -43,6 +52,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.display import load_rules
 
 router = APIRouter()
 
@@ -109,6 +119,7 @@ async def _groups_out(
                 trash_requested=f.trash_requested if f else False,
                 kept_on_purpose=m.kept_on_purpose,
                 why_kept=m.why_kept,
+                outcome=m.outcome,  # type: ignore[arg-type]
                 catalog_id=f.catalog_id if f else None,
                 title=entry.title if entry else None,
                 artist=entry.artist if entry else None,
@@ -123,6 +134,7 @@ async def _groups_out(
             reasons=list(g.reasons),
             status=g.status,  # type: ignore[arg-type]
             keeper_drive_file_id=g.keeper_drive_file_id,
+            kept_together=g.kept_together,
             reported_at=g.reported_at,
             resolved_at=g.resolved_at,
             files=by_group[g.id],
@@ -278,17 +290,26 @@ async def list_duplicate_groups(
     return success_envelope(data, count=len(data), total=total)
 
 
+#: Who the revision of a version made on the duplicates page says made it.
+BY = "duplicates"
+
+
 @router.post(
     DUPLICATES + "/{group_id}/resolve",
     response_model=Envelope[DuplicateResolveResult],
-    summary="Resolve a duplicate group by picking its keeper",
+    summary="Resolve a duplicate group, file by file",
     description=(
-        "Keeps the file named and marks the others for the trash (every "
-        "other file not kept on purpose, or the ones named). The catalog "
-        "entries of the files sent to the trash are merged into the keeper's "
-        "entry, as the merge clean-up does. A file kept on purpose cannot be "
-        "sent to the trash through its group (409). Nothing is deleted. "
-        "Requires catalog.tracks.write."
+        "Decides each file of the group: keep it on the entry, give it its "
+        "own version entry (with the version text as typed), or mark it for "
+        "the trash. The catalog entries of the files kept and trashed are "
+        "merged into the keeper's entry, as the merge clean-up does. At "
+        "least one file in the library is kept (422 otherwise). A group "
+        "whose files all stay is kept together and not reopened by a later "
+        "report unless its files change. The older body, a keeper and the "
+        "files to trash (every other file not kept on purpose, when not "
+        "named), is still taken. A file kept on purpose is trashed only with "
+        "confirm_different_edit (409 kept_on_purpose otherwise). Nothing is "
+        "deleted. Requires catalog.tracks.write."
     ),
 )
 async def resolve_duplicate_group(
@@ -297,7 +318,7 @@ async def resolve_duplicate_group(
     principal: Principal = Depends(require_scope("catalog.tracks.write")),
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[DuplicateResolveResult]:
-    """Keep one file of the group; merge and trash-request the others."""
+    """Keep, version or trash each file of the group."""
     group = await session.get(DbGroup, group_id, with_for_update=True)
     if group is None:
         raise api_error(404, "not_found", "Duplicate group not found")
@@ -311,28 +332,66 @@ async def resolve_duplicate_group(
         .scalars()
         .all()
     }
-    keeper_id = payload.keeper_drive_file_id
-    if keeper_id not in members:
-        raise api_error(422, "not_in_group", "The keeper is not in the group")
-    if payload.trash_drive_file_ids is None:
-        trash = [
-            i for i, m in members.items() if i != keeper_id and not m.kept_on_purpose
-        ]
+
+    decided: dict[str, DuplicateOutcome] = {}
+    versions: dict[str, str] = {}
+    if payload.outcomes is None:
+        keeper_id = payload.keeper_drive_file_id
+        assert keeper_id is not None  # the body's validator
+        if keeper_id not in members:
+            raise api_error(422, "not_in_group", "The keeper is not in the group")
+        if payload.trash_drive_file_ids is None:
+            trash = [
+                i
+                for i, m in members.items()
+                if i != keeper_id and not m.kept_on_purpose
+            ]
+        else:
+            trash = list(dict.fromkeys(payload.trash_drive_file_ids))
+            strangers = [i for i in trash if i not in members]
+            if strangers:
+                raise api_error(
+                    422, "not_in_group", "Files named are not in the group", strangers
+                )
+            if keeper_id in trash:
+                raise api_error(422, "keeper_in_trash", "The keeper cannot be trashed")
+        decided = {i: "trash" if i in trash else "keep" for i in members}
+        merging = [keeper_id, *trash]
     else:
-        trash = list(dict.fromkeys(payload.trash_drive_file_ids))
-        strangers = [i for i in trash if i not in members]
+        for o in payload.outcomes:
+            if o.drive_file_id in decided:
+                raise api_error(
+                    422,
+                    "duplicate_outcome",
+                    "A file is decided more than once",
+                    [o.drive_file_id],
+                )
+            decided[o.drive_file_id] = o.outcome
+            if o.version is not None:
+                versions[o.drive_file_id] = o.version
+        strangers = [i for i in decided if i not in members]
         if strangers:
             raise api_error(
                 422, "not_in_group", "Files named are not in the group", strangers
             )
-        if keeper_id in trash:
-            raise api_error(422, "keeper_in_trash", "The keeper cannot be trashed")
+        missing = sorted(set(members) - set(decided))
+        if missing:
+            raise api_error(
+                422,
+                "outcomes_incomplete",
+                "Every file of the group needs an outcome",
+                missing,
+            )
+        trash = [i for i, o in decided.items() if o == "trash"]
+        merging = [i for i, o in decided.items() if o != "own_version"]
+        keeper_id = None
+
     kept = [i for i in trash if members[i].kept_on_purpose]
-    if kept:
+    if kept and not payload.confirm_different_edit:
         raise api_error(
             409,
             "kept_on_purpose",
-            "Files kept on purpose cannot be sent to the trash through a group",
+            "Files kept on purpose go to the trash only with confirm_different_edit",
             kept,
         )
 
@@ -340,22 +399,41 @@ async def resolve_duplicate_group(
         f.drive_file_id: f
         for f in (
             await session.execute(
-                select(DbLibraryFile).where(
-                    DbLibraryFile.drive_file_id.in_([keeper_id, *trash])
-                )
+                select(DbLibraryFile).where(DbLibraryFile.drive_file_id.in_(members))
             )
         )
         .scalars()
         .all()
     }
+    if keeper_id is None:
+        # The first file kept that is still in the library keeps the entry.
+        keeper_id = next(
+            (
+                i
+                for i, o in decided.items()
+                if o == "keep" and i in files and files[i].present is not False
+            ),
+            None,
+        )
+        if keeper_id is None:
+            raise api_error(
+                422,
+                "no_file_kept",
+                "Keep at least one file of the group that is in the library",
+            )
     keeper_file = files.get(keeper_id)
     if keeper_file is None:
         raise api_error(422, "not_registered", "The keeper is not in the registry")
+    unregistered = [i for i in versions if i not in files]
+    if unregistered:
+        raise api_error(
+            422, "not_registered", "Files are not in the registry", unregistered
+        )
 
     other_ids = {
-        f.catalog_id
-        for i, f in files.items()
-        if i != keeper_id and f.catalog_id is not None
+        files[i].catalog_id
+        for i in merging
+        if i != keeper_id and i in files and files[i].catalog_id is not None
     }
     candidates = (
         list(
@@ -379,6 +457,10 @@ async def resolve_duplicate_group(
         candidates.sort(key=lambda e: (-(e.play_count or 0), e.created_at, str(e.id)))
         keeper_entry = candidates[0]
         keeper_file.catalog_id = keeper_entry.id
+    if versions and keeper_entry is None:
+        raise api_error(
+            422, "no_entry", "The kept file has no catalog entry to make versions of"
+        )
     others = [e for e in candidates if keeper_entry and e.id != keeper_entry.id]
     if keeper_entry is not None and others:
         await merge_group(
@@ -388,14 +470,34 @@ async def resolve_duplicate_group(
             ),
         )
 
+    own_versions: dict[str, uuid.UUID] = {}
+    if versions:
+        assert keeper_entry is not None
+        rules = await load_rules(session)
+        for drive_id, text in versions.items():
+            try:
+                own_versions[drive_id] = await make_version(
+                    session,
+                    keeper_entry,
+                    text,
+                    {drive_id: files[drive_id].catalog_id},
+                    rules,
+                    BY,
+                )
+            except FixError as err:
+                raise api_error(422, "no_parts", str(err)) from err
+
     if trash:
         await session.execute(
             update(DbLibraryFile)
             .where(DbLibraryFile.drive_file_id.in_(trash))
             .values(trash_requested=True)
         )
+    for drive_id, member in members.items():
+        member.outcome = decided[drive_id]
     group.status = "resolved"
     group.keeper_drive_file_id = keeper_id
+    group.kept_together = not trash and not versions
     group.resolved_by = principal.subject
     group.resolved_at = func.now()
     await session.commit()
@@ -407,5 +509,6 @@ async def resolve_duplicate_group(
         keeper_catalog_id=keeper_entry.id if keeper_entry else None,
         merged_catalog_ids=[e.id for e in others],
         trash_requested=[i for i in trash if i in files],
+        own_versions=own_versions,
     )
     return success_envelope(result, count=1, total=1)

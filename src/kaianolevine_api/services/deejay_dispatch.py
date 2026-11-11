@@ -15,6 +15,10 @@ archived. Run at the same time, they race over the same files — which is
 the consumer's concurrency setting to prevent, not something the message
 can express.
 
+Every ``library-*`` mode goes to deejay-cog's library worker, on a queue of
+its own (``deejay-library``), so a long library run never holds up
+process-new-files or ingest-live-history on the shared deejay queue.
+
 The mechanics of sending, and of insisting that a send landed, are shared
 with every dispatcher; see :mod:`.job_queue`.
 """
@@ -37,11 +41,22 @@ __all__ = [
 ]
 
 
+#: Modes starting with this run on the library worker's own queue.
+LIBRARY_MODE_PREFIX = "library-"
+
+
 @dataclass(frozen=True)
 class DeejayJob:
     """One run of deejay-cog's router, in one mode."""
 
     mode: str
+
+    @property
+    def cog(self) -> str:
+        """The queue the job goes to: the library worker's for a library mode."""
+        return (
+            "deejay-library" if self.mode.startswith(LIBRARY_MODE_PREFIX) else "deejay"
+        )
 
     def as_message(self) -> dict[str, Any]:
         """Render this job as one ``deejay.run`` queue message."""
@@ -66,7 +81,7 @@ async def dispatch_deejay(
     return await job_queue.enqueue(
         message,
         f"deejay {job.mode}",
-        cog="deejay",
+        cog=job.cog,
         label="deejay dispatch",
         # The caller is a Drive watcher that will not read the 502, so the
         # route's fault report says this. A dropped deejay job is a DJ set

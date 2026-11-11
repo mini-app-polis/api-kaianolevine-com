@@ -293,3 +293,196 @@ async def test_trash_requested_files_can_be_listed(client) -> None:
     assert [f["drive_file_id"] for f in marked.json()["data"]] == ["copy"]
     unmarked = await client.get(FILES, params={"trash_requested": "false"})
     assert [f["drive_file_id"] for f in unmarked.json()["data"]] == ["keep"]
+
+
+# ── Resolving file by file ────────────────────────────────────────────────
+
+
+async def test_keeping_every_file_keeps_the_group_together(client) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "clean", a)
+    await _register(client, "explicit", a)
+    await _report(client, _group("t", "clean", "explicit", kept=("explicit",)))
+    [group] = await _open(client)
+
+    response = await client.post(
+        f"{DUPLICATES}/{group['id']}/resolve",
+        json={
+            "outcomes": [
+                {"drive_file_id": "clean", "outcome": "keep"},
+                {"drive_file_id": "explicit", "outcome": "keep"},
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["trash_requested"] == []
+    assert data["own_versions"] == {}
+    assert data["group"]["kept_together"] is True
+    assert data["group"]["keeper_drive_file_id"] == "clean"
+    assert {f["drive_file_id"]: f["outcome"] for f in data["group"]["files"]} == {
+        "clean": "keep",
+        "explicit": "keep",
+    }
+
+    # Not reopened while its files are unchanged; a new file reopens it.
+    again = await _report(client, _group("t", "clean", "explicit", kept=("explicit",)))
+    assert again["added"] == 0
+    await _register(client, "radio", a)
+    later = await _report(
+        client, _group("t", "clean", "explicit", "radio", kept=("explicit",))
+    )
+    assert later["added"] == 1
+
+
+async def test_a_file_can_get_its_own_version_entry(client, async_engine) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "original", a)
+    await _register(client, "remix", a)
+    await _report(client, _group("t", "original", "remix"))
+    [group] = await _open(client)
+
+    response = await client.post(
+        f"{DUPLICATES}/{group['id']}/resolve",
+        json={
+            "outcomes": [
+                {"drive_file_id": "original", "outcome": "keep"},
+                {
+                    "drive_file_id": "remix",
+                    "outcome": "own_version",
+                    "version": "Club Mix",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    version_id = data["own_versions"]["remix"]
+    assert version_id != a
+    assert data["group"]["kept_together"] is False
+    assert data["trash_requested"] == []
+
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        files = {
+            f.drive_file_id: f
+            for f in (await session.execute(select(DbLibraryFile))).scalars().all()
+        }
+        assert str(files["original"].catalog_id) == a
+        assert str(files["remix"].catalog_id) == version_id
+        assert files["remix"].trash_requested is False
+        version = await session.get(DbCatalog, version_id)
+        assert version.version == "Club Mix"
+        assert version.play_count == 0
+        revision = (
+            await session.execute(
+                select(CatalogRevision).where(CatalogRevision.catalog_id == version.id)
+            )
+        ).scalar_one()
+        assert revision.after["by"] == "duplicates"
+
+
+async def test_trashing_a_different_edit_needs_the_confirmation(
+    client, async_engine
+) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "keep", a)
+    await _register(client, "edit", a)
+    await _report(client, _group("t", "keep", "edit", kept=("edit",)))
+    [group] = await _open(client)
+    url = f"{DUPLICATES}/{group['id']}/resolve"
+    body = {
+        "outcomes": [
+            {"drive_file_id": "keep", "outcome": "keep"},
+            {"drive_file_id": "edit", "outcome": "trash"},
+        ]
+    }
+
+    refused = await client.post(url, json=body)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "kept_on_purpose"
+
+    response = await client.post(url, json={**body, "confirm_different_edit": True})
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["trash_requested"] == ["edit"]
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        edit = (
+            await session.execute(
+                select(DbLibraryFile).where(DbLibraryFile.drive_file_id == "edit")
+            )
+        ).scalar_one()
+        assert edit.trash_requested is True
+
+
+async def test_the_older_body_takes_the_confirmation_too(client) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "keep", a)
+    await _register(client, "edit", a)
+    await _report(client, _group("t", "keep", "edit", kept=("edit",)))
+    [group] = await _open(client)
+
+    response = await client.post(
+        f"{DUPLICATES}/{group['id']}/resolve",
+        json={
+            "keeper_drive_file_id": "keep",
+            "trash_drive_file_ids": ["edit"],
+            "confirm_different_edit": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["trash_requested"] == ["edit"]
+
+
+async def test_outcomes_must_cover_the_group_and_keep_a_file(client) -> None:
+    a = await _entry(client, "Temple", "Thomas Gold")
+    await _register(client, "one", a)
+    await _register(client, "two", a)
+    await _report(client, _group("t", "one", "two"))
+    [group] = await _open(client)
+    url = f"{DUPLICATES}/{group['id']}/resolve"
+
+    incomplete = await client.post(
+        url, json={"outcomes": [{"drive_file_id": "one", "outcome": "keep"}]}
+    )
+    assert incomplete.status_code == 422
+    assert incomplete.json()["error"]["code"] == "outcomes_incomplete"
+
+    nothing_kept = await client.post(
+        url,
+        json={
+            "outcomes": [
+                {"drive_file_id": "one", "outcome": "trash"},
+                {"drive_file_id": "two", "outcome": "own_version", "version": "Edit"},
+            ]
+        },
+    )
+    assert nothing_kept.status_code == 422
+    assert nothing_kept.json()["error"]["code"] == "no_file_kept"
+
+    both = await client.post(
+        url,
+        json={
+            "keeper_drive_file_id": "one",
+            "outcomes": [
+                {"drive_file_id": "one", "outcome": "keep"},
+                {"drive_file_id": "two", "outcome": "keep"},
+            ],
+        },
+    )
+    assert both.status_code == 422
+
+    no_text = await client.post(
+        url,
+        json={
+            "outcomes": [
+                {"drive_file_id": "one", "outcome": "keep"},
+                {"drive_file_id": "two", "outcome": "own_version"},
+            ]
+        },
+    )
+    assert no_text.status_code == 422
+    assert await _open(client) != []
