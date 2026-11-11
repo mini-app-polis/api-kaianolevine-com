@@ -1,3 +1,15 @@
+# [2.89.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.88.0...v2.89.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* **library:** propose parts for an entry without them when a duplicate gets its own version ([96c62ff](https://github.com/mini-app-polis/api-kaianolevine-com/commit/96c62fff95537e8ae448affa775e964dfe0ea8b1))
+
+
+### Features
+
+* **library:** resolve duplicate groups file by file and send library modes to their own queue ([76645f2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/76645f21197719a62e95a7a19eda34ec10bea625))
+
 # [2.88.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.87.0...v2.88.0) (2026-11-11)
 
 
