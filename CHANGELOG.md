@@ -1,3 +1,17 @@
+# [2.87.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.86.0...v2.87.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.6.0 ([5e92552](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5e9255249d172f5be8c5f344f651ebcfd18560cd))
+
+
+### Features
+
+* **catalog:** keep FX Music's entries apart from the main library's ([65c5c04](https://github.com/mini-app-polis/api-kaianolevine-com/commit/65c5c047e6c8f5c1c9b863dbecafb12fa7c461d5))
+* **catalog:** say whether lookups and displays are owner edits ([567b392](https://github.com/mini-app-polis/api-kaianolevine-com/commit/567b392303c18b3a0da4965770b89bc01a718b0a))
+* **cleanup:** list entries the merge may be missing, and keep the keeper's own parts ([9f565c1](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9f565c16291104aa7e4d91bd2fcbf2423e7b07e7))
+
 # [2.86.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.85.0...v2.86.0) (2026-11-11)
 
 
