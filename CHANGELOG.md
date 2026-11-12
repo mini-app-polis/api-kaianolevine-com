@@ -1,3 +1,11 @@
+## [2.89.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.1...v2.89.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.9.0 ([1aaf4e8](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1aaf4e889f7ca0bf023a58c1baf0a049a50c12de))
+* **library:** compare an FX file's genre as the vocabulary places it, and don't add a release label to a title that already carries it ([672dc54](https://github.com/mini-app-polis/api-kaianolevine-com/commit/672dc540fdc673fb3a82aa693fd3698ea5918137))
+
 ## [2.89.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.0...v2.89.1) (2026-11-12)
 
 
