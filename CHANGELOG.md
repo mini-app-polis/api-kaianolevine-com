@@ -1,3 +1,22 @@
+# [2.90.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.2...v2.90.0) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.10.0 ([536cac0](https://github.com/mini-app-polis/api-kaianolevine-com/commit/536cac040ae45325ee7c4509465be27155afdc56))
+* **deps:** bump miniapppolis-common-utils to 9.10.1 ([d015a3b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/d015a3bf81ff7c0e539987bc4ac8a0436a949529))
+
+
+### Features
+
+* **identity:** let deejay-cog queue its own new-music follow-up run ([2a2266c](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2a2266c06ae5dd440e561652717cc2a047a85636))
+
+
+### Performance Improvements
+
+* **deejay:** bulk-claim drive files in POST /v1/deejay/runs ([e823e94](https://github.com/mini-app-polis/api-kaianolevine-com/commit/e823e9478b54f332119ae6c621217b77de45c5a9))
+* **deejay:** claim a watcher's drive files in bulk so a big inbox costs a constant number of statements ([918ee24](https://github.com/mini-app-polis/api-kaianolevine-com/commit/918ee240ac68de26c06e7b42bc1a6381b89ffb99))
+
 ## [2.89.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.1...v2.89.2) (2026-11-12)
 
 
