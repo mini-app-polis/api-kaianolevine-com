@@ -3,7 +3,8 @@
 The caller is watcher-cog, on every tick that finds files in a watched
 Drive folder, and an operator starting a sweep by hand. A deejay job is a
 sweep of the folder, so the watcher names every file it sees and the API
-claims each one (services/dispatch_claims.py): the sweep is enqueued when
+claims them all at once (services/dispatch_claims.py), at the same cost for
+five files as for five hundred: the sweep is enqueued when
 any claim is new or renewed, and the request is deduplicated when every
 file is already accounted for.
 """
@@ -77,17 +78,14 @@ async def create_deejay_run(
     if payload.drive_files is not None:
         scope = dispatch_claims.scope_for("deejay", payload.mode)
         try:
-            for file in payload.drive_files:
-                claim = await dispatch_claims.claim(
-                    session,
-                    scope=scope,
-                    drive_file_id=file.id,
-                    revision=file.revision,
-                )
-                if claim.acquired:
-                    acquired.append(claim)
-                    continue
-                held.append(claim)
+            claims = await dispatch_claims.claim_many(
+                session,
+                scope=scope,
+                files=[(file.id, file.revision) for file in payload.drive_files],
+            )
+            acquired = [c for c in claims if c.acquired]
+            held = [c for c in claims if not c.acquired]
+            for claim in held:
                 if claim.outcome is dispatch_claims.Outcome.CAPPED:
                     await job_queue.report_dropped(
                         dispatch_claims.capped_message(claim),
@@ -96,13 +94,13 @@ async def create_deejay_run(
                         settings=settings,
                     )
         except Exception:
-            # A claim taken before the failure would otherwise hold its
-            # file for the whole window with no sweep coming for it. The
-            # rollback first: the session may be mid-way through the
-            # statement that failed.
+            # The claims are taken together, so a failure while taking them
+            # leaves none. One that comes after (a report) would otherwise
+            # leave the files held for the whole window with no sweep coming
+            # for them. The rollback first: the session may be mid-way
+            # through the statement that failed.
             await session.rollback()
-            for claim in acquired:
-                await dispatch_claims.release(session, claim)
+            await dispatch_claims.release_all(session, acquired)
             raise
 
         if not acquired:
@@ -120,8 +118,7 @@ async def create_deejay_run(
             job, settings=settings, caller=principal.display_name or principal.subject
         )
     except deejay_dispatch.DispatchError as exc:
-        for claim in acquired:
-            await dispatch_claims.release(session, claim)
+        await dispatch_claims.release_all(session, acquired)
         job_queue.record_drop(request, exc)
         raise api_error(
             502,

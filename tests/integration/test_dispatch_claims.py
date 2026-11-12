@@ -10,14 +10,16 @@ that a file edited in place is one job per version.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 import respx
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import event, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kaianolevine_api.main import app
 from kaianolevine_api.models import DispatchClaim
@@ -433,23 +435,33 @@ async def test_a_capped_file_beside_a_new_one_does_not_block_the_sweep(
 async def test_a_claim_failing_mid_sweep_releases_the_claims_already_taken(
     client, db_session
 ) -> None:
-    """A file claimed before the failure must not sit held for the window."""
-    real_claim = claims.claim
-    calls = 0
+    """A file claimed before the failure must not sit held for the window.
 
-    async def claim_then_fail(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise RuntimeError("database went away")
-        return await real_claim(*args, **kwargs)
+    The failure comes after the insert has taken the new files, while the
+    held one is being looked at: the claims are taken together, so none of
+    them may survive it."""
+    scope = claims.scope_for("deejay", "process-new-files")
+    db_session.add(
+        DispatchClaim(
+            scope=scope,
+            drive_file_id="h",
+            revision="",
+            attempts=1,
+            claimed_at=dt.datetime.now(dt.UTC),
+            message_id="m-old",
+        )
+    )
+    await db_session.commit()
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError("database went away")
 
     # The unhandled error is rendered as a 500 rather than re-raised into the
     # test, and the activity middleware's report of it goes nowhere real.
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     with (
         respx.mock(assert_all_called=False) as router,
-        patch.object(claims, "claim", claim_then_fail),
+        patch.object(claims, "_mark_capped", fail),
         patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched,
     ):
         router.post(url__startswith="https://discord.test/").mock(
@@ -458,7 +470,7 @@ async def test_a_claim_failing_mid_sweep_releases_the_claims_already_taken(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver", headers=client.headers
         ) as raw:
-            response = await raw.post("/v1/deejay/runs", json=_sweep("a", "b"))
+            response = await raw.post("/v1/deejay/runs", json=_sweep("a", "b", "h"))
         await _drain_activity()
 
     assert response.status_code == 500
@@ -467,12 +479,319 @@ async def test_a_claim_failing_mid_sweep_releases_the_claims_already_taken(
     db_session.expire_all()
     assert await _row(db_session, drive_file_id="a") is None
     assert await _row(db_session, drive_file_id="b") is None
+    held = await _row(db_session, drive_file_id="h")
+    assert held is not None and held.attempts == 1 and held.message_id == "m-old"
 
     # And so the next tick dispatches the files rather than deduplicating them.
     with patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched:
-        retried = await client.post("/v1/deejay/runs", json=_sweep("a", "b"))
+        retried = await client.post("/v1/deejay/runs", json=_sweep("a", "b", "h"))
     assert retried.status_code == 202, retried.text
     dispatched.assert_awaited_once()
+
+
+async def test_a_failed_report_releases_every_claim_the_sweep_took(
+    client, db_session
+) -> None:
+    """A failure after the claims are committed gives them all back."""
+    scope = claims.scope_for("deejay", "process-new-files")
+    db_session.add(
+        DispatchClaim(
+            scope=scope,
+            drive_file_id="f-poison",
+            revision="",
+            attempts=claims.MAX_ATTEMPTS,
+            claimed_at=dt.datetime.now(dt.UTC) - claims.CLAIM_WINDOW * 2,
+        )
+    )
+    await db_session.commit()
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    with (
+        respx.mock(assert_all_called=False) as router,
+        patch.object(
+            job_queue, "report_dropped", AsyncMock(side_effect=RuntimeError("down"))
+        ),
+        patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched,
+    ):
+        router.post(url__startswith="https://discord.test/").mock(
+            return_value=httpx.Response(204)
+        )
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver", headers=client.headers
+        ) as raw:
+            response = await raw.post(
+                "/v1/deejay/runs", json=_sweep("a", "b", "f-poison")
+            )
+        await _drain_activity()
+
+    assert response.status_code == 500
+    dispatched.assert_not_awaited()
+    db_session.expire_all()
+    assert await _row(db_session, drive_file_id="a") is None
+    assert await _row(db_session, drive_file_id="b") is None
+
+
+# ── claiming in bulk ─────────────────────────────────────────────────────
+
+
+DEEJAY = claims.scope_for("deejay", "process-new-files")
+
+
+async def test_a_mixed_request_answers_each_file(db_session) -> None:
+    """New, held, expired and capped files in one request, each as alone."""
+    now = T0 + dt.timedelta(days=2)
+    db_session.add_all(
+        [
+            DispatchClaim(
+                scope=DEEJAY,
+                drive_file_id="held",
+                revision="",
+                attempts=1,
+                claimed_at=now - dt.timedelta(minutes=5),
+                message_id="m-held",
+            ),
+            DispatchClaim(
+                scope=DEEJAY,
+                drive_file_id="expired",
+                revision="",
+                attempts=1,
+                claimed_at=now - claims.CLAIM_WINDOW * 2,
+                message_id="m-expired",
+            ),
+            DispatchClaim(
+                scope=DEEJAY,
+                drive_file_id="capped",
+                revision="",
+                attempts=claims.MAX_ATTEMPTS,
+                claimed_at=now - claims.CLAIM_WINDOW * 2,
+                message_id="m-capped",
+            ),
+            DispatchClaim(
+                scope=DEEJAY,
+                drive_file_id="sheet",
+                revision="r1",
+                attempts=1,
+                claimed_at=now - claims.CLAIM_WINDOW * 10,
+                message_id="m-sheet",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    files = [
+        ("new", None),
+        ("held", None),
+        ("expired", None),
+        ("capped", None),
+        ("sheet", "r1"),
+        ("new", None),
+    ]
+    result = await claims.claim_many(db_session, scope=DEEJAY, files=files, now=now)
+    by_id = {c.drive_file_id: c for c in result}
+
+    assert [c.drive_file_id for c in result] == [
+        "new",
+        "held",
+        "expired",
+        "capped",
+        "sheet",
+    ]
+    assert (by_id["new"].outcome, by_id["new"].attempts) == (
+        claims.Outcome.ACQUIRED,
+        1,
+    )
+    assert (by_id["held"].outcome, by_id["held"].message_id) == (
+        claims.Outcome.HELD,
+        "m-held",
+    )
+    assert (by_id["expired"].outcome, by_id["expired"].attempts) == (
+        claims.Outcome.ACQUIRED,
+        2,
+    )
+    assert (by_id["capped"].outcome, by_id["capped"].attempts) == (
+        claims.Outcome.CAPPED,
+        claims.MAX_ATTEMPTS,
+    )
+    assert by_id["capped"].message_id == "m-capped"
+    # A revision claim never renews, however old.
+    assert (by_id["sheet"].outcome, by_id["sheet"].message_id) == (
+        claims.Outcome.HELD,
+        "m-sheet",
+    )
+
+    # Asked again: the capped file is not reported a second time.
+    again = await claims.claim_many(
+        db_session, scope=DEEJAY, files=files, now=now + dt.timedelta(minutes=1)
+    )
+    assert {c.drive_file_id: c.outcome for c in again} == {
+        "new": claims.Outcome.HELD,
+        "held": claims.Outcome.HELD,
+        "expired": claims.Outcome.HELD,
+        "capped": claims.Outcome.HELD,
+        "sheet": claims.Outcome.HELD,
+    }
+
+
+async def test_releasing_a_bulk_claim_restores_each_file(db_session) -> None:
+    """A first claim is deleted; a renewal goes back to its count, free."""
+    db_session.add(
+        DispatchClaim(
+            scope=DEEJAY,
+            drive_file_id="expired",
+            revision="",
+            attempts=1,
+            claimed_at=T0 - claims.CLAIM_WINDOW * 2,
+        )
+    )
+    await db_session.commit()
+
+    taken = await claims.claim_many(
+        db_session, scope=DEEJAY, files=[("new", None), ("expired", None)], now=T0
+    )
+    assert all(c.acquired for c in taken)
+    await claims.release_all(db_session, taken)
+
+    db_session.expire_all()
+    assert await _row(db_session, drive_file_id="new") is None
+    expired = await _row(db_session, drive_file_id="expired")
+    assert expired is not None and expired.attempts == 1
+
+    again = await claims.claim_many(
+        db_session,
+        scope=DEEJAY,
+        files=[("new", None), ("expired", None)],
+        now=T0 + dt.timedelta(minutes=1),
+    )
+    assert [(c.outcome, c.attempts) for c in again] == [
+        (claims.Outcome.ACQUIRED, 1),
+        (claims.Outcome.ACQUIRED, 2),
+    ]
+
+
+async def test_overlapping_requests_never_both_acquire_a_file(async_engine) -> None:
+    """Two ticks at once, naming shared files in different orders."""
+    maker = async_sessionmaker(async_engine, expire_on_commit=False, autoflush=False)
+    first_files = [(f"f-{n:03}", None) for n in range(0, 300)]
+    second_files = [(f"f-{n:03}", None) for n in reversed(range(150, 450))]
+
+    async def ask(files: list[tuple[str, None]]) -> list[claims.Claim]:
+        async with maker() as session:
+            return await claims.claim_many(session, scope=DEEJAY, files=files, now=T0)
+
+    first, second = await asyncio.gather(ask(first_files), ask(second_files))
+
+    won = [c.drive_file_id for c in first + second if c.acquired]
+    assert sorted(won) == [f"f-{n:03}" for n in range(450)]
+    assert len(won) == len(set(won))
+
+
+# ── what a request costs ─────────────────────────────────────────────────
+
+
+@contextlib.contextmanager
+def _claim_costs(async_engine) -> Iterator[dict[str, int]]:
+    """Count the statements against dispatch_claims, and the commits of the
+    transactions that ran them."""
+    costs = {"statements": 0, "commits": 0}
+    engine = async_engine.sync_engine
+
+    def on_execute(conn, cursor, statement, parameters, context, executemany):
+        if "dispatch_claims" in statement:
+            costs["statements"] += 1
+            conn.info["touched_claims"] = True
+
+    def on_commit(conn):
+        if conn.info.pop("touched_claims", False):
+            costs["commits"] += 1
+
+    event.listen(engine, "before_cursor_execute", on_execute)
+    event.listen(engine, "commit", on_commit)
+    try:
+        yield costs
+    finally:
+        event.remove(engine, "before_cursor_execute", on_execute)
+        event.remove(engine, "commit", on_commit)
+
+
+async def _held(db_session, count: int, prefix: str) -> list[str]:
+    ids = [f"{prefix}-{n:03}" for n in range(count)]
+    now = dt.datetime.now(dt.UTC)
+    db_session.add_all(
+        DispatchClaim(
+            scope=DEEJAY,
+            drive_file_id=file_id,
+            revision="",
+            attempts=1,
+            claimed_at=now,
+            message_id="m-old",
+        )
+        for file_id in ids
+    )
+    await db_session.commit()
+    return ids
+
+
+async def test_an_all_held_request_costs_the_same_for_5_files_as_500(
+    client, db_session, async_engine
+) -> None:
+    small = await _held(db_session, 5, "small")
+    large = await _held(db_session, 500, "large")
+
+    with patch.object(deejay_dispatch, "dispatch_deejay", _deejay()) as dispatched:
+        with _claim_costs(async_engine) as for_small:
+            five = await client.post("/v1/deejay/runs", json=_sweep(*small))
+        with _claim_costs(async_engine) as for_large:
+            many = await client.post("/v1/deejay/runs", json=_sweep(*large))
+
+    for response in (five, many):
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["deduplicated"] is True
+        assert response.json()["data"]["message_id"] == "m-old"
+    dispatched.assert_not_awaited()
+    assert for_small == for_large
+    assert for_small["statements"] <= 3
+    assert for_small["commits"] == 1
+
+
+async def test_a_new_sweep_costs_the_same_for_5_files_as_500(
+    client, db_session, async_engine
+) -> None:
+    """Claimed, enqueued and recorded: still a fixed cost."""
+    small = [f"small-{n:03}" for n in range(5)]
+    large = [f"large-{n:03}" for n in range(500)]
+
+    with patch.object(deejay_dispatch, "dispatch_deejay", _deejay("m-new")):
+        with _claim_costs(async_engine) as for_small:
+            five = await client.post("/v1/deejay/runs", json=_sweep(*small))
+        with _claim_costs(async_engine) as for_large:
+            many = await client.post("/v1/deejay/runs", json=_sweep(*large))
+
+    assert five.status_code == 202, five.text
+    assert many.status_code == 202, many.text
+    assert for_small == for_large
+    db_session.expire_all()
+    recorded = await _row(db_session, drive_file_id="large-499")
+    assert recorded is not None and recorded.message_id == "m-new"
+
+
+async def test_a_dropped_sweep_costs_the_same_for_5_files_as_500(
+    client, db_session, async_engine
+) -> None:
+    small = [f"small-{n:03}" for n in range(5)]
+    large = [f"large-{n:03}" for n in range(500)]
+    failing = AsyncMock(side_effect=deejay_dispatch.DispatchError("unreachable"))
+
+    with patch.object(deejay_dispatch, "dispatch_deejay", failing):
+        with _claim_costs(async_engine) as for_small:
+            five = await client.post("/v1/deejay/runs", json=_sweep(*small))
+        with _claim_costs(async_engine) as for_large:
+            many = await client.post("/v1/deejay/runs", json=_sweep(*large))
+
+    assert five.status_code == 502
+    assert many.status_code == 502
+    assert for_small == for_large
+    db_session.expire_all()
+    assert await _row(db_session, drive_file_id="large-000") is None
 
 
 @pytest.mark.parametrize(
