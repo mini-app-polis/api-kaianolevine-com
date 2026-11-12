@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import dataclasses
 
-from kaianolevine_api.services.display import DEFAULT_RULES, Rules, has_parts, render
+import pytest
+
+from kaianolevine_api.services.display import (
+    DEFAULT_RULES,
+    Rules,
+    has_parts,
+    render,
+    with_release_label,
+)
 
 
 @dataclasses.dataclass
@@ -182,3 +190,38 @@ def test_an_entry_without_the_flag_is_not_an_owner_edit() -> None:
         featured_artists: list[str] = dataclasses.field(default_factory=list)
 
     assert render(_Older()).title == "Song (Live)"
+
+
+@pytest.mark.parametrize(
+    ("title", "label"),
+    [
+        ("Ain't No Sunshine (Explicit)", "Explicit"),
+        ("Panda (Clean)", "Clean"),
+        ("Panda [clean]", "Clean"),
+        ("Hey Ya! (Radio Edit)", "Radio Edit"),
+        ("Hey Ya! (radio edit)", "Radio Edit"),
+    ],
+)
+def test_a_release_label_the_title_already_carries_is_not_added_again(
+    title: str, label: str
+) -> None:
+    assert with_release_label(title, label) == title
+
+
+def test_a_release_label_the_title_does_not_carry_is_added() -> None:
+    assert (
+        with_release_label("Ain't No Sunshine", "Explicit")
+        == "Ain't No Sunshine (Explicit)"
+    )
+
+
+def test_a_label_that_is_only_a_word_of_the_title_is_still_added() -> None:
+    assert (
+        with_release_label("Clean Bandit Anthem", "Clean")
+        == "Clean Bandit Anthem (Clean)"
+    )
+
+
+def test_no_label_leaves_the_title() -> None:
+    assert with_release_label("Panda", None) == "Panda"
+    assert with_release_label("Panda", "") == "Panda"

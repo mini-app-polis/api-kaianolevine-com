@@ -19,6 +19,7 @@ Capitalisation is kept as the artist styles it: nothing here changes case.
 from __future__ import annotations
 
 import dataclasses
+import re
 from typing import Literal, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,6 +108,20 @@ def _names(names: list[str] | None) -> list[str]:
 def render_bpm(bpm: float | None, rules: Rules) -> float | None:
     """BPM to the rules' number of decimals."""
     return None if bpm is None else round(bpm, rules.bpm_decimals)
+
+
+def with_release_label(title: str, label: str | None) -> str:
+    """``title`` as a file with release label ``label`` shows it: the label
+    in parentheses after the title, unless the title already carries it in
+    brackets ("Ain't No Sunshine (Explicit)", "Panda [Clean]"), whatever its
+    case, so it is never given twice."""
+    label = (label or "").strip()
+    if not label:
+        return title
+    carried = rf"[(\[]\s*{re.escape(label)}\s*[)\]]"
+    if re.search(carried, title, re.IGNORECASE):
+        return title
+    return f"{title} ({label})"
 
 
 def render(entry: Entry, rules: Rules = DEFAULT_RULES) -> Shown:
