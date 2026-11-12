@@ -15,7 +15,6 @@ again.
 
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Annotated
 
@@ -50,7 +49,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services.display import Rules, load_rules
+from ..services.display import Rules, load_rules, with_release_label
 from ..services.fill_up import label_taken
 from ..services.genres import catalog_genre, vocabulary_genre
 from ..services.libraries import MAIN, Library, library_of, other_library_error
@@ -423,26 +422,14 @@ def _shown(entry: DbCatalog, rules: Rules, label: str | None) -> dict[str, str |
     """The owned fields as the library sync writes them to a file with
     release label ``label``."""
     shown = catalog_display(entry, rules, None)
-    title = (
-        f"{shown.title} ({label})"
-        if label and not _carries(shown.title, label)
-        else shown.title
-    )
     return {
-        "title": title,
+        "title": with_release_label(shown.title, label),
         "artist": _text(shown.artist),
         "year": None if shown.release_year is None else str(shown.release_year),
         "genre": _text(shown.genre),
         "bpm": None if shown.bpm is None else f"{shown.bpm:g}",
         "label": _text(shown.label),
     }
-
-
-def _carries(title: str, label: str) -> bool:
-    """Whether ``title`` already names release label ``label`` in brackets
-    ("Panda [Clean]" carries "Clean"), so it is not given it twice."""
-    pattern = rf"[(\[]\s*{re.escape(label)}\s*[)\]]"
-    return re.search(pattern, title, re.IGNORECASE) is not None
 
 
 def _shows(
