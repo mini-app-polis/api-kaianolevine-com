@@ -762,6 +762,40 @@ async def test_a_never_synced_file_sends_up_only_the_fields_kept(client) -> None
     assert (await _row(client, entry, "drive-1"))["synced"] is None
 
 
+async def test_a_kept_genre_the_vocabulary_places_as_the_entrys_is_not_sent_up(
+    client,
+) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", genre="House"))["entry"][
+        "id"
+    ]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "genre": "House"}, keep_file=["genre"]
+    )
+
+    assert result["fields"] == []
+    assert (await _detail(client, entry))["genre"] == "Dance/Electronic"
+
+
+async def test_a_title_already_carrying_the_files_label_is_not_given_it_twice(
+    client,
+) -> None:
+    entry = (await _entry(client, "Panda [Clean]", "Desiigner"))["entry"]["id"]
+    shown = await _shown(client, entry)
+    assert "Clean" in shown["title"]
+    await _register(client, _file("drive-1", entry, edit_label="Clean"))
+
+    result = await _edited(
+        client,
+        "drive-1",
+        {"title": shown["title"], "artist": shown["artist"]},
+        keep_file=["title"],
+    )
+
+    assert result["fields"] == []
+
+
 async def test_an_ambiguous_artist_kept_from_the_file_goes_up_as_one_artist(
     client,
 ) -> None:

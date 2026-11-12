@@ -15,6 +15,7 @@ again.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated
 
@@ -422,7 +423,11 @@ def _shown(entry: DbCatalog, rules: Rules, label: str | None) -> dict[str, str |
     """The owned fields as the library sync writes them to a file with
     release label ``label``."""
     shown = catalog_display(entry, rules, None)
-    title = f"{shown.title} ({label})" if label else shown.title
+    title = (
+        f"{shown.title} ({label})"
+        if label and not _carries(shown.title, label)
+        else shown.title
+    )
     return {
         "title": title,
         "artist": _text(shown.artist),
@@ -431,6 +436,32 @@ def _shown(entry: DbCatalog, rules: Rules, label: str | None) -> dict[str, str |
         "bpm": None if shown.bpm is None else f"{shown.bpm:g}",
         "label": _text(shown.label),
     }
+
+
+def _carries(title: str, label: str) -> bool:
+    """Whether ``title`` already names release label ``label`` in brackets
+    ("Panda [Clean]" carries "Clean"), so it is not given it twice."""
+    pattern = rf"[(\[]\s*{re.escape(label)}\s*[)\]]"
+    return re.search(pattern, title, re.IGNORECASE) is not None
+
+
+def _shows(
+    name: str, file: str | None, shown: dict[str, str | None], entry: DbCatalog
+) -> bool:
+    """Whether the entry already shows the file's value of ``name``. A genre
+    is compared as the vocabulary places it: a file's "Soundtrack" is the
+    entry's "Soundtrack & Seasonal", and a file naming no subgenre leaves the
+    entry's."""
+    if _same(name, file, shown[name]):
+        return True
+    if name != "genre":
+        return False
+    genre, subgenre = vocabulary_genre(file)
+    return (
+        genre is not None
+        and genre == entry.genre
+        and subgenre in (None, entry.subgenre)
+    )
 
 
 def _without_label(title: str, label: str | None) -> str:
@@ -585,7 +616,7 @@ async def report_library_file_edited(
             # sync recorded and whatever the catalog holds.
             if file is None:
                 continue
-            if _same(name, file, shown[name]):
+            if _shows(name, file, shown, entry):
                 recorded[name] = file
                 continue
             fields[name] = LibraryFieldEdit(
@@ -599,7 +630,7 @@ async def report_library_file_edited(
             continue
         if never_synced or file is None or _same(name, file, before):
             continue
-        if _same(name, file, shown[name]):
+        if _shows(name, file, shown, entry):
             recorded[name] = file  # the file already shows the catalog
             continue
         field = LibraryFieldEdit(
