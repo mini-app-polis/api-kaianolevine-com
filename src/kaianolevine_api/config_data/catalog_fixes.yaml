@@ -16,6 +16,9 @@
 - rename: {from: They., to: THEY.}
 - rename: {from: Inna, to: INNA}
 
+# Misspelled when an entry was made from a file's own tags.
+- rename: {from: Pharell Williams, to: Pharrell Williams}
+
 # Titles and versions.
 - find: {title: Drugs, artist: Tai Verdes}
   set: {base_title: DRUGS, main_artists: [Tai Verdes]}
