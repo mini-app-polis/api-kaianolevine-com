@@ -1,3 +1,10 @@
+## [2.89.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.0...v2.89.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **catalog:** correct Pharell Williams to Pharrell Williams ([973a666](https://github.com/mini-app-polis/api-kaianolevine-com/commit/973a666d09d8a0a0b959e01fc5736805716ccfb6))
+
 # [2.89.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.88.0...v2.89.0) (2026-11-11)
 
 
