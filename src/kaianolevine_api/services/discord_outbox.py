@@ -1,6 +1,7 @@
 """The Discord outbox: messages kept when they could not be sent straight away.
 
-Both notification routes try a send once, with a short wait, through
+Both notification routes, and the running list's change and fault messages
+(``services.activity.deliver``), try a send once, with a short wait, through
 ``services.discord``. A message that is held — no send-budget token free, a
 rate limit holding the webhook, or older messages for the same channel still
 waiting — is written to ``discord_outbox`` and the route answers at once. The
