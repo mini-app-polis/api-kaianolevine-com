@@ -359,7 +359,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
 | `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. Signed with `GITHUB_WEBHOOK_SECRET`, or `GITHUB_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. |
 | `POST /v1/webhooks/doppler` | Doppler's secrets.update webhook. Gated by `X-Doppler-Signature` over the raw body, signed with `DOPPLER_WEBHOOK_SECRET`, or `DOPPLER_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. Stores names only. |
-| `POST /v1/webhooks/sentry` | Sentry's issue webhook, from the internal integration. Gated by `Sentry-Hook-Signature` (hex HMAC-SHA256 over the raw body) with the integration's client secret, `SENTRY_WEBHOOK_SECRET`. |
+| `POST /v1/webhooks/sentry` | Sentry's issue webhook, from the internal integration. Gated by `Sentry-Hook-Signature` (hex HMAC-SHA256 over the raw body) with the integration's client secret, `SENTRY_WEBHOOK_SECRET`. Reads each new issue's latest event with `SENTRY_API_TOKEN` where set. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,
@@ -644,19 +644,25 @@ issue's lifecycle to `POST /v1/webhooks/sentry`, verified by
   a comment, rather than opening another.
 - **resolved** comments on the Issue and closes it.
 
-The repository: the issue's `service` tag (the one `init_sentry` sets), as
-`SIGNAL_ISSUE_OWNER/<service>`, where the payload carries it; otherwise its
-Sentry project's repository in `SENTRY_PROJECT_REPOS` (`python-apis` →
-`api-kaianolevine-com`, `deejaytools-com` → `deejaytools-com`). `cogs` has
-none, so a cogs issue whose payload names no service is skipped and logged.
-A project not listed is ignored.
-
 Sentry's issue webhook carries neither the issue's tags nor its
-environment, and this service holds no Sentry API token to read them. So an
-environment read from the payload that is not `production` opens nothing,
-and an issue that names none is taken to be production: a development event
-opens an Issue unless development does not report to these projects. For
-the same reason, today a cogs issue is always skipped.
+environment. With `SENTRY_API_TOKEN` set (a Sentry auth token with
+`event:read`), a `created` or `unresolved` delivery first reads the issue's
+latest event (`GET /api/0/organizations/<org>/issues/<id>/events/latest/`,
+the org and id taken from the payload) for its `service` and `environment`
+tags. `resolved` needs no lookup: it closes by short id.
+
+- **Environment:** an event whose environment is not `production` opens
+  nothing. Without the token, only an environment the payload carries is
+  checked, and an issue that names none is taken to be production.
+- **Repository:** the `service` tag (the one `init_sentry` sets), as
+  `SIGNAL_ISSUE_OWNER/<service>`; otherwise the Sentry project's repository
+  in `SENTRY_PROJECT_REPOS` (`python-apis` → `api-kaianolevine-com`,
+  `deejaytools-com` → `deejaytools-com`). `cogs` has none, so a cogs issue
+  that names no service is skipped and logged: cogs issues need the token.
+  A project not listed is ignored.
+- **A failed lookup** (network, or Sentry refusing) falls back to the
+  project's repository where it has one. A cogs issue is not guessed at: it
+  is reported as dropped, and the next delivery for the issue tries again.
 
 Streaks escalated before Issues asked task-manager-cog for a board task. When
 one of those closes, the API still sends a `task.update` that comments on the

@@ -181,6 +181,11 @@ class Settings(BaseSettings):
     # webhooks reach POST /v1/webhooks/sentry (services.sentry_signals).
     # Unset means every delivery is rejected.
     SENTRY_WEBHOOK_SECRET: str | None = None
+    # A Sentry auth token with event:read, used to read a new issue's latest
+    # event for its service and environment tags, which the issue webhook
+    # does not carry. Unset, they are read only where the payload holds
+    # them, so a cogs issue opens nothing.
+    SENTRY_API_TOKEN: str | None = None
     # The Sentry projects whose issues open GitHub Issues, each with the
     # repository (under SIGNAL_ISSUE_OWNER) an issue opens in when it names
     # no service. An empty repository means a project shared by several

@@ -7,6 +7,8 @@ import hashlib
 import hmac
 
 import pytest
+import respx
+from httpx import Response
 
 from kaianolevine_api.config import get_settings
 from kaianolevine_api.services import sentry_signals
@@ -35,6 +37,7 @@ def test_an_issue_is_read_from_the_payload() -> None:
         short_id="COGS-1K",
         title="ValueError: bad tag",
         project="cogs",
+        issue_id="1170820242",
         link="https://kaianolevine.sentry.io/issues/1170820242/",
         culprit="deejay_cog.tagging in retag",
         level="error",
@@ -128,3 +131,81 @@ def test_sentrys_unprefixed_hex_signature_verifies() -> None:
     assert not verify_sha256_signature(
         secrets=["s3cret"], raw_body=body, signature=f"sha256={digest}", prefix=""
     )
+
+
+EVENT_URL = (
+    "https://sentry.io/api/0/organizations/kaianolevine/issues/1170820242/"
+    "events/latest/"
+)
+
+
+def _api_payload(**issue: object) -> dict:
+    return _payload(
+        url="https://sentry.io/api/0/organizations/kaianolevine/issues/1170820242/",
+        **issue,
+    )
+
+
+def test_the_org_and_issue_id_are_read_from_the_payload() -> None:
+    issue = sentry_signals.read_issue(_api_payload())
+    assert issue is not None
+    assert (issue.org, issue.issue_id) == ("kaianolevine", "1170820242")
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_the_latest_events_tags_name_the_service_and_environment() -> None:
+    route = respx.get(EVENT_URL).mock(
+        return_value=Response(
+            200,
+            json={
+                "tags": [
+                    {"key": "service", "value": "deejay-cog"},
+                    {"key": "environment", "value": "production"},
+                ]
+            },
+        )
+    )
+    issue = sentry_signals.read_issue(_api_payload())
+    assert issue is not None
+
+    read = await sentry_signals.latest_event(issue, token="sntrys_test")
+
+    assert (read.service, read.environment) == ("deejay-cog", "production")
+    assert route.calls.last.request.headers["Authorization"] == "Bearer sntrys_test"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_the_events_own_environment_field_is_read_without_a_tag() -> None:
+    respx.get(EVENT_URL).mock(
+        return_value=Response(200, json={"tags": [], "environment": "development"})
+    )
+    issue = sentry_signals.read_issue(_api_payload())
+    assert issue is not None
+
+    read = await sentry_signals.latest_event(issue, token="t")
+
+    assert read.environment == "development"
+    assert read.service is None
+
+
+@respx.mock
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 404, 500])
+async def test_a_refused_lookup_raises(status: int) -> None:
+    respx.get(EVENT_URL).mock(return_value=Response(status))
+    issue = sentry_signals.read_issue(_api_payload())
+    assert issue is not None
+
+    with pytest.raises(sentry_signals.SentryLookupError, match=str(status)):
+        await sentry_signals.latest_event(issue, token="t")
+
+
+@pytest.mark.asyncio
+async def test_an_issue_naming_no_org_is_not_looked_up() -> None:
+    issue = sentry_signals.read_issue(_payload())
+    assert issue is not None
+
+    with pytest.raises(sentry_signals.SentryLookupError):
+        await sentry_signals.latest_event(issue, token="t")

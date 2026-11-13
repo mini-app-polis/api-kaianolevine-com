@@ -11,7 +11,9 @@ twice closes nothing twice.
 ``POST /v1/webhooks/sentry`` is the Sentry internal integration's webhook. It
 takes no bearer token: it is gated by the signature Sentry computes over the
 raw body with the integration's client secret (``SENTRY_WEBHOOK_SECRET``),
-the only credential Sentry can present. An ``issue`` delivery for a watched
+the only credential Sentry can present. With ``SENTRY_API_TOKEN`` set, a
+delivery that would open an Issue first reads the issue's latest event for its
+service and environment. An ``issue`` delivery for a watched
 project's production issue opens, reopens or closes that issue's GitHub
 Issue (services/sentry_signals.py). Production only, as every signal is.
 Everything it does not act on answers 200, so Sentry does not retry it.
@@ -131,6 +133,32 @@ async def sentry_webhook(
     if not is_production():
         # This service's own development deploy acts on no real repository.
         return _sentry_result(reason="observing_off")
+
+    token = (settings.SENTRY_API_TOKEN or "").strip()
+    if token and action in sentry_signals.OPENING_ACTIONS:
+        try:
+            issue = await sentry_signals.latest_event(issue, token=token)
+        except sentry_signals.SentryLookupError as exc:
+            if not settings.SENTRY_PROJECT_REPOS.get(issue.project):
+                # A shared project's repository is not guessed at: the next
+                # delivery for the issue tries again.
+                await sentry_signals.report_lookup_dropped(
+                    issue, exc, settings=settings
+                )
+                return _sentry_result(outcome="dropped")
+            logger.warning(
+                "signals: Sentry %s: %s; using %s's repository",
+                issue.short_id,
+                exc,
+                issue.project,
+            )
+        if not sentry_signals.is_production(issue):
+            logger.info(
+                "signals: Sentry %s is %s, not production; no Issue",
+                issue.short_id,
+                issue.environment,
+            )
+            return _sentry_result(reason="not_production")
 
     repo = sentry_signals.repo_for(issue, settings)
     if repo is None and action in sentry_signals.OPENING_ACTIONS:

@@ -12,8 +12,10 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
-from httpx import AsyncClient
+import respx
+from httpx import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +25,10 @@ pytestmark = pytest.mark.asyncio
 
 SECRET = "test-sentry-secret"
 LINK = "https://kaianolevine.sentry.io/issues/1170820242/"
+EVENT_URL = (
+    "https://sentry.io/api/0/organizations/kaianolevine/issues/1170820242/"
+    "events/latest/"
+)
 
 
 def _issue_payload(
@@ -40,6 +46,7 @@ def _issue_payload(
         "level": "error",
         "firstSeen": "2026-11-12T10:00:00Z",
         "permalink": LINK,
+        "url": "https://sentry.io/api/0/organizations/kaianolevine/issues/1170820242/",
         "project": {"id": "1", "slug": project, "name": project},
     }
     if tags is not None:
@@ -252,3 +259,108 @@ async def test_without_a_secret_every_delivery_is_refused(
     assert resp.status_code == 500
     assert resp.json()["error"]["code"] == "config_error"
     issues.open.assert_not_awaited()
+
+
+# ── with SENTRY_API_TOKEN: the latest event names service and environment ──
+
+
+def _event(**tags: str) -> Response:
+    return Response(
+        200, json={"tags": [{"key": k, "value": v} for k, v in tags.items()]}
+    )
+
+
+@pytest.fixture
+def token(monkeypatch):
+    monkeypatch.setenv("SENTRY_API_TOKEN", "sntrys_test")
+
+
+@respx.mock
+async def test_a_production_events_service_names_the_repo(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    looked_up = respx.get(EVENT_URL).mock(
+        return_value=_event(service="deejay-cog", environment="production")
+    )
+    data = _result(await _post(client, _issue_payload()))
+
+    assert data["outcome"] == "escalated"
+    assert looked_up.calls.last.request.headers["Authorization"] == (
+        "Bearer sntrys_test"
+    )
+    assert issues.open.await_args.args == ("mini-app-polis/deejay-cog",)
+
+
+@respx.mock
+async def test_a_development_event_opens_nothing(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    respx.get(EVENT_URL).mock(
+        return_value=_event(service="deejay-cog", environment="development")
+    )
+    data = _result(await _post(client, _issue_payload()))
+
+    assert data == {"outcome": None, "reason": "not_production"}
+    issues.open.assert_not_awaited()
+    assert await _streaks(db_session) == []
+
+
+@respx.mock
+async def test_a_failed_lookup_on_cogs_is_dropped_and_retried(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    route = respx.get(EVENT_URL)
+    route.side_effect = [
+        httpx.ConnectError("down"),
+        _event(service="deejay-cog", environment="production"),
+    ]
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
+        first = _result(await _post(client, _issue_payload()))
+    assert first == {"outcome": "dropped", "reason": None}
+    reported.assert_awaited_once()
+    issues.open.assert_not_awaited()
+
+    second = _result(await _post(client, _issue_payload("unresolved")))
+    assert second["outcome"] == "escalated"
+    assert issues.open.await_args.args == ("mini-app-polis/deejay-cog",)
+
+
+@respx.mock
+async def test_a_failed_lookup_falls_back_to_a_projects_repo(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    respx.get(EVENT_URL).mock(return_value=Response(500))
+    data = _result(
+        await _post(
+            client, _issue_payload(short_id="PYTHON-APIS-3", project="python-apis")
+        )
+    )
+
+    assert data["outcome"] == "escalated"
+    assert issues.open.await_args.args == ("mini-app-polis/api-kaianolevine-com",)
+
+
+@respx.mock
+async def test_resolving_needs_no_lookup(
+    client: AsyncClient, db_session: AsyncSession, issues, token
+) -> None:
+    looked_up = respx.get(EVENT_URL).mock(
+        return_value=_event(service="deejay-cog", environment="production")
+    )
+    await _post(client, _issue_payload())
+    resolved = _result(await _post(client, _issue_payload("resolved")))
+
+    assert resolved["outcome"] == "recovered"
+    assert looked_up.call_count == 1
+    issues.close.assert_awaited_once()
+
+
+@respx.mock
+async def test_without_a_token_nothing_is_looked_up(
+    client: AsyncClient, db_session: AsyncSession, issues
+) -> None:
+    looked_up = respx.get(EVENT_URL).mock(return_value=_event(service="x"))
+    data = _result(await _post(client, _issue_payload()))
+
+    assert data == {"outcome": None, "reason": "no_repository"}
+    assert not looked_up.called
