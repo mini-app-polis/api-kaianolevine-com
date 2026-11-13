@@ -94,6 +94,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
 os.environ.setdefault("DOPPLER_WEBHOOK_SECRET", "test-doppler-secret")
+os.environ.setdefault("SENTRY_WEBHOOK_SECRET", "test-sentry-secret")
 # Discord embed titles stay unmarked unless a test opts into non-production.
 # Unset would resolve to local via the shared environment resolver.
 # Deterministic, not setdefault: Settings is constructed at import time

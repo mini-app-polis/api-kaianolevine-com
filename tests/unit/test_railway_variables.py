@@ -33,6 +33,7 @@ NOT_DECLARED: dict[str, str] = {
     "SPOTIFY_DOPPLER_PROJECT": "the code default is the production project",
     "SPOTIFY_DOPPLER_CONFIG": "the code default is the production config",
     "DOPPLER_WEBHOOK_PROJECT": "the code default is the recorded Doppler project",
+    "SENTRY_PROJECT_REPOS": "code default, reviewed in config.py",
     "SPOTIFY_TOKEN_CHECK_INTERVAL_SECS": "code default, reviewed in config.py",
     "WCS_QA_EMBEDDING_MODEL": "versioned with the embeddings, changed in code",
     "WCS_QA_CHUNKING_VERSION": "versioned with the embeddings, changed in code",

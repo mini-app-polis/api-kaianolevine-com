@@ -177,6 +177,20 @@ class Settings(BaseSettings):
     # The owner of a repository a detector names without one (a run report
     # and this service's own faults name the repository alone).
     SIGNAL_ISSUE_OWNER: str = "mini-app-polis"
+    # The client secret of the Sentry internal integration whose issue
+    # webhooks reach POST /v1/webhooks/sentry (services.sentry_signals).
+    # Unset means every delivery is rejected.
+    SENTRY_WEBHOOK_SECRET: str | None = None
+    # The Sentry projects whose issues open GitHub Issues, each with the
+    # repository (under SIGNAL_ISSUE_OWNER) an issue opens in when it names
+    # no service. An empty repository means a project shared by several
+    # services: an issue there that names no service is skipped. A project
+    # not listed is ignored.
+    SENTRY_PROJECT_REPOS: dict[str, str] = {
+        "python-apis": "api-kaianolevine-com",
+        "deejaytools-com": "deejaytools-com",
+        "cogs": "",
+    }
 
     # ── The running list ──────────────────────────────────────────────────
     # Every committed data change and every server-side fault, in the same

@@ -50,6 +50,7 @@ Route groups:
 - `/v1/ingest` — set ingestion endpoint
 - `/v1/webhooks/github` — GitHub org webhook; filters deliveries by event, action and branch before forwarding to Discord (signature-verified)
 - `/v1/webhooks/doppler` — Doppler `config.secrets.update` webhook; stores the changed secret names, never values (signature-verified)
+- `/v1/webhooks/sentry` — Sentry internal-integration issue webhook; opens, reopens and closes one GitHub Issue per production Sentry issue (signature-verified)
 - `/v1/notify` — ad-hoc Discord notifications for cogs and scripts
 - `/v1/contact` — public contact form (CORS + Turnstile gated)
 - `/v1/resume` — resume PDF proxy (Google Drive)
@@ -358,6 +359,7 @@ Deliberately unauthenticated, per API-008 / DOC-011:
 | `GET /v1/spotify/authorize`, `/v1/spotify/callback` | Browser re-auth flow; the callback refuses any Spotify account but `SPOTIFY_OWNER_USER_ID`. |
 | `POST /v1/webhooks/github` | GitHub org webhook. Gated by `X-Hub-Signature-256` over the raw body — the only credential GitHub can present — not by a bearer token. Signed with `GITHUB_WEBHOOK_SECRET`, or `GITHUB_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. |
 | `POST /v1/webhooks/doppler` | Doppler's secrets.update webhook. Gated by `X-Doppler-Signature` over the raw body, signed with `DOPPLER_WEBHOOK_SECRET`, or `DOPPLER_WEBHOOK_SECRET_PREVIOUS` while a rotation overlaps. Stores names only. |
+| `POST /v1/webhooks/sentry` | Sentry's issue webhook, from the internal integration. Gated by `Sentry-Hook-Signature` (hex HMAC-SHA256 over the raw body) with the integration's client secret, `SENTRY_WEBHOOK_SECRET`. |
 | `GET /health`, `GET /version`, `GET /` | Platform endpoints. `/` redirects to `/docs`. |
 
 Client parity is maintained with `mini_app_polis.api.KaianoApiClient`,
@@ -548,7 +550,7 @@ channel's webhook is not a way to silence it — the channel falls back to
 
 ### Signals: detected problems that may become GitHub Issues
 
-The GitHub webhook, `POST /v1/notify`, `POST /v1/evaluations` and this
+The GitHub webhook, the Sentry webhook, `POST /v1/notify`, `POST /v1/evaluations` and this
 service's own 5xx answers feed `services/signals.py`, independently of what is announced on Discord. A
 detector turns an event into a signal (a kind, a key naming the problem,
 failing or recovered); a streak holds one problem from its
@@ -563,6 +565,7 @@ files a task from an Issue by hand. Production only.
 | `cog-run` | `<repo>/<flow>`, from run reports | none: the next run is the retry. `SIGNAL_RUN_ESCALATE_AFTER` (2) failing runs (`ERROR` or `CRITICAL`) escalate | a run reported at `SUCCESS`, `INFO` or `WARN`. An idle run is not reported, so it does not close a streak |
 | `api-fault` | `<method> <route template> <status>`, from the activity middleware. Paths in `NOTIFY_EXCLUDED_PATHS` are not watched | none: the first 5xx escalates. Each further one comments with its time, request id and Sentry event, where known | a 502, 503 or 504 (a dependency failing): once the route has gone `SIGNAL_FAULT_QUIET_HOURS` (24) without it, by the scheduled quiet sweep or the next fault. Any other 5xx (500 above all, this service's bug): never on its own; a pull request saying `Fixes #N` closes its Issue. See below |
 | `conformance` | `<repo>/<source>/<rule>`, from any finding, `INFO` included, posted to `POST /v1/evaluations` by `conformance_deterministic` or `conformance_llm` | none: the first finding escalates; each later run that reports it comments | a `SUCCESS` row for the repo and source: the evaluator posts one only for a complete evaluation that found nothing, so a run with other findings, or one that did not finish, closes nothing |
+| `sentry-issue` | the Sentry short id (`COGS-1K`), from `POST /v1/webhooks/sentry`; the Issue opens in the repository that owns it. See below | none: a new production issue escalates | the issue resolved in Sentry. Unresolved again, the same Issue reopens |
 | `evaluator-status` | `<repo>/<source>/<not-evaluated\|not-assessed>`, from the evaluator's `STATUS` rows; the Issue opens in evaluator-cog | none | the same `SUCCESS` row |
 
 A remediation that cannot start (no `GITHUB_ACTIONS_TOKEN`, GitHub refuses)
@@ -625,6 +628,35 @@ the route answered itself has one only if the route reported to Sentry.
   such streak gone quiet and answers how many it found and closed. The next
   fault on the route makes the same check, so a sweep that did not run
   delays a close and never loses one.
+
+#### Sentry issues
+
+A Sentry internal integration subscribed to `issue` webhooks posts each
+issue's lifecycle to `POST /v1/webhooks/sentry`, verified by
+`Sentry-Hook-Signature` with `SENTRY_WEBHOOK_SECRET`. Any other resource
+(`Sentry-Hook-Resource`), and the `assigned` and `ignored` actions, answer
+200 and do nothing. Deterministic: no model is asked anything.
+
+- **created** opens one GitHub Issue for the Sentry issue, named by its short
+  id (marker `sentry-issue/<short id>`), linking back to it. A repeat
+  delivery opens nothing: the streak is already escalated.
+- **unresolved** (a regression) reopens the Issue the issue last opened, with
+  a comment, rather than opening another.
+- **resolved** comments on the Issue and closes it.
+
+The repository: the issue's `service` tag (the one `init_sentry` sets), as
+`SIGNAL_ISSUE_OWNER/<service>`, where the payload carries it; otherwise its
+Sentry project's repository in `SENTRY_PROJECT_REPOS` (`python-apis` →
+`api-kaianolevine-com`, `deejaytools-com` → `deejaytools-com`). `cogs` has
+none, so a cogs issue whose payload names no service is skipped and logged.
+A project not listed is ignored.
+
+Sentry's issue webhook carries neither the issue's tags nor its
+environment, and this service holds no Sentry API token to read them. So an
+environment read from the payload that is not `production` opens nothing,
+and an issue that names none is taken to be production: a development event
+opens an Issue unless development does not report to these projects. For
+the same reason, today a cogs issue is always skipped.
 
 Streaks escalated before Issues asked task-manager-cog for a board task. When
 one of those closes, the API still sends a `task.update` that comments on the

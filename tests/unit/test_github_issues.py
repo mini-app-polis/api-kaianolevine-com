@@ -176,6 +176,23 @@ async def test_closing_comments_then_closes_as_completed(settings) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_reopening_reopens_then_comments(settings) -> None:
+    _app_token_routes()
+    patched = respx.patch(f"{GH}/repos/{REPO}/issues/5").mock(
+        return_value=Response(200, json={})
+    )
+    commented = respx.post(f"{GH}/repos/{REPO}/issues/5/comments").mock(
+        return_value=Response(201, json={})
+    )
+
+    await github_issues.reopen(REPO, 5, body="Again.", settings=settings)
+
+    assert json.loads(patched.calls.last.request.content) == {"state": "open"}
+    assert json.loads(commented.calls.last.request.content) == {"body": "Again."}
+
+
+@respx.mock
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("state", "expected"), [("open", True), ("closed", False)])
 async def test_an_issues_state_is_read_from_github(
     settings, state: str, expected: bool

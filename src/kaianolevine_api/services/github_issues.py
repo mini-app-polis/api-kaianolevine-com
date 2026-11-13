@@ -254,3 +254,19 @@ async def close(repo: str, number: int, *, body: str, settings: Settings) -> Non
         f"closing {repo}#{number}",
     )
     logger.info("issues: closed %s#%d", repo, number)
+
+
+async def reopen(repo: str, number: int, *, body: str, settings: Settings) -> None:
+    """Reopen a closed Issue, then comment on it."""
+    _expect(
+        await _call(
+            "PATCH",
+            f"/repos/{repo}/issues/{number}",
+            authorization=await _authorized(repo, settings),
+            json={"state": "open"},
+        ),
+        200,
+        f"reopening {repo}#{number}",
+    )
+    await comment(repo, number, body, settings=settings)
+    logger.info("issues: reopened %s#%d", repo, number)
