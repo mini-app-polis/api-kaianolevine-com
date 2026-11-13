@@ -1,3 +1,11 @@
+# [2.91.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.90.0...v2.91.0) (2026-11-13)
+
+
+### Features
+
+* **signals:** open a GitHub Issue for each new production Sentry issue ([89f7443](https://github.com/mini-app-polis/api-kaianolevine-com/commit/89f74431e46a94973d99b7a95b8633136bd08728))
+* **signals:** read a new Sentry issue's latest event for its service and environment ([2edd2e6](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2edd2e636571488a06558f1448b4ebd10e911f17))
+
 # [2.90.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.89.2...v2.90.0) (2026-11-12)
 
 
