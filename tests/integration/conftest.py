@@ -245,10 +245,17 @@ async def settle_deliveries() -> AsyncIterator[None]:
 
     yield
     while _in_flight:
+        # A delivery that finished around the test's end can stay in the set:
+        # the done callback that removes it does not run here. Gathering it
+        # again returns at once, so without dropping finished tasks this loop
+        # spins forever (seen 2026-11-13, once feed messages went to the
+        # outbox and so finished quickly).
+        _in_flight.difference_update({t for t in _in_flight if t.done()})
         pending = list(_in_flight)
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        await asyncio.sleep(0)
 
 
 @pytest.fixture(autouse=True)

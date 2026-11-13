@@ -16,15 +16,17 @@ import httpx
 import pytest
 import respx
 from httpx import AsyncClient, Response
+from mini_app_polis import _sentry
 from mini_app_polis import discord as transport
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from kaianolevine_api.config import get_settings
-from kaianolevine_api.services import discord, discord_outbox
+from kaianolevine_api.services import activity, discord, discord_outbox
 from kaianolevine_api.services.discord_outbox import _Row, _units
 
 RUNS_URL = "https://discord.test/api/webhooks/4/runs-secret"
+ACTIVITY_URL = "https://discord.test/api/webhooks/3/activity-secret"
 ERRORS_URL = "https://discord.test/api/webhooks/2/errors-secret"
 DEFAULT_URL = "https://discord.test/api/webhooks/1/token"
 
@@ -296,6 +298,51 @@ async def test_a_burst_stays_under_the_per_webhook_budget(
     assert [_body(c)["content"] for c in runs.calls] == [
         f"m{i}" for i in range(burst + rate)
     ]
+
+
+@respx.mock
+async def test_a_burst_of_feed_messages_past_the_bucket_all_arrive(
+    channels, clocks: Clocks, maker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seen 2026-11-11: a library scan's registrations posted a burst of
+    change summaries to activity, and the one Discord's rate limit held was
+    dropped. The feed now goes through the outbox: what is held is kept and
+    sent once the limit lifts, and nothing is reported as dropped."""
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_ACTIVITY", ACTIVITY_URL)
+    get_settings.cache_clear()
+    settings = get_settings()
+    dropped: list[str] = []
+    monkeypatch.setattr(
+        _sentry, "capture_message", lambda message, *a, **k: dropped.append(message)
+    )
+    feed = respx.post(ACTIVITY_URL).mock(return_value=Response(204))
+    total = settings.DISCORD_WEBHOOK_BURST + 6
+
+    delivered = [
+        await activity.deliver(
+            settings, discord.CHANNEL_ACTIVITY, {"content": f"c{i}"}, f"change/{i}"
+        )
+        for i in range(total)
+    ]
+
+    # None lost: each was sent or kept.
+    assert delivered == [True] * total
+    kept = await _rows(maker, discord.CHANNEL_ACTIVITY)
+    assert feed.call_count + len(kept) == total
+    assert kept, "the burst should outrun the bucket"
+    assert all(r["caller"] == activity.FEED_CALLER for r in kept)
+
+    for _ in range(total):
+        if not await _rows(maker, discord.CHANNEL_ACTIVITY):
+            break
+        clocks.advance(1)
+        await discord_outbox.drain_once(settings, maker)
+
+    assert await _rows(maker, discord.CHANNEL_ACTIVITY) == []
+    sent = [_body(c).get("content", "") for c in feed.calls]
+    for i in range(total):
+        assert any(text.startswith(f"c{i}") for text in sent), f"c{i} never arrived"
+    assert dropped == []
 
 
 @respx.mock

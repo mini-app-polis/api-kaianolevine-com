@@ -12,8 +12,9 @@ What stays here is this service's policy, read from ``Settings`` on every
 request: ``NOTIFY_*`` switches, the per-environment event allow-list
 (``DISCORD_NOTIFY_EVENTS``), suppressed tables and excluded paths, its
 machine callers (``request.state.caller_kind``, stamped by ``auth``), and
-delivery through ``services.discord`` so webhooks resolve from
-``Settings``. Every message's footer names ``api-kaianolevine-com`` and
+delivery through ``services.discord_outbox`` (:func:`deliver`) so webhooks
+resolve from ``Settings`` and a message a rate limit holds is kept and sent
+later rather than dropped. Every message's footer names ``api-kaianolevine-com`` and
 ``settings.ENVIRONMENT``. Only production posts change summaries and
 faults, as in api-deejaytools: the channels are production's record, and a
 development process logs what it changed and what broke instead.
@@ -43,7 +44,8 @@ from mini_app_polis.activity import _in_flight as _in_flight
 from mini_app_polis.environment import is_production
 
 from ..config import Settings, get_settings
-from . import discord, fault_signals
+from ..database import get_sessionmaker
+from . import discord, discord_outbox, fault_signals
 
 __all__ = [
     "BULK",
@@ -85,13 +87,41 @@ def _is_machine(request: Any) -> bool:
     return getattr(request.state, "caller_kind", None) == "machine"
 
 
+#: The caller the outbox records for a feed message it keeps.
+FEED_CALLER = "api-kaianolevine-com"
+
+
+async def deliver(
+    settings: Settings, channel: str, payload: dict[str, Any], context: str
+) -> bool:
+    """Send a feed message now, or keep it in the Discord outbox when a rate
+    limit or the send budget holds it, as the notification routes do.
+
+    A burst of changes (a library scan's file registrations, say) outruns
+    Discord's bucket; the messages it holds are sent by the outbox's drainer
+    once the limit lifts, packed together where they can be, instead of
+    dropped. The feed is posted from a task of its own, after the response,
+    so waiting here never holds up the request. True unless the message is
+    lost: refused outright, or the outbox could not keep it.
+    """
+    sessionmaker = get_sessionmaker(settings.DATABASE_URL)
+    async with sessionmaker() as session:
+        outcome = await discord_outbox.deliver_message(
+            session,
+            settings,
+            payload=payload,
+            channel=channel,
+            context=context,
+            caller=FEED_CALLER,
+        )
+    return outcome is not discord.Outcome.REFUSED
+
+
 def _config(settings: Settings) -> _activity.ActivityConfig:
     """This service's feed policy, as ``Settings`` has it right now."""
 
     async def send(channel: str, payload: dict[str, Any], context: str) -> bool:
-        return await discord.send_message(
-            settings=settings, payload=payload, channel=channel, context=context
-        )
+        return await deliver(settings, channel, payload, context)
 
     return _activity.ActivityConfig(
         # Named because api-deejaytools posts to the same channels.
