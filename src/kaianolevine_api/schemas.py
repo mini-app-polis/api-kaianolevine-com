@@ -223,6 +223,28 @@ class ApiFaultSweepResult(BaseModel):
     )
 
 
+class SentryWebhookResult(BaseModel):
+    """What a Sentry delivery was taken as."""
+
+    outcome: str | None = Field(
+        default=None,
+        max_length=100,
+        description=(
+            "What was done for the issue: escalated (an Issue opened), "
+            "reopened, recovered (its Issue closed), duplicate, dropped, "
+            "healed, quiet. Null when it was ignored."
+        ),
+    )
+    reason: str | None = Field(
+        default=None,
+        max_length=100,
+        description=(
+            "Why it was ignored: other_resource, other_action, no_issue, "
+            "other_project, not_production, observing_off, no_repository, error."
+        ),
+    )
+
+
 class SetListItem(BaseModel):
     """Summary view of one set returned by list endpoints."""
 

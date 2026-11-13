@@ -2,7 +2,8 @@
 
 GitHub (X-Hub-Signature-256) and Doppler (X-Doppler-Signature) both sign a
 delivery the same way: ``sha256=`` and the hex HMAC-SHA256 of the exact bytes
-sent, keyed with the secret set on the webhook.
+sent, keyed with the secret set on the webhook. Sentry (Sentry-Hook-Signature)
+sends the same hex digest with no prefix.
 """
 
 from __future__ import annotations
@@ -13,7 +14,11 @@ from collections.abc import Sequence
 
 
 def verify_sha256_signature(
-    *, secrets: Sequence[str], raw_body: bytes, signature: str | None
+    *,
+    secrets: Sequence[str],
+    raw_body: bytes,
+    signature: str | None,
+    prefix: str = "sha256=",
 ) -> bool:
     """Whether ``signature`` is the HMAC-SHA256 of exactly these bytes.
 
@@ -33,7 +38,7 @@ def verify_sha256_signature(
     matched = False
     for secret in secrets:
         expected = (
-            "sha256="
+            prefix
             + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
         ).encode("ascii")
         matched = hmac.compare_digest(expected, presented) or matched
