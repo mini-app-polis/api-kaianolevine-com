@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     # webhooks reach POST /v1/webhooks/sentry (services.sentry_signals).
     # Unset means every delivery is rejected.
     SENTRY_WEBHOOK_SECRET: str | None = None
-    # A Sentry auth token with event:read, used to read a new issue's latest
+    # A Sentry auth token with event:read. It reads a new issue's latest
     # event for its service and environment tags, which the issue webhook
     # does not carry. Unset, they are read only where the payload holds
     # them, so a cogs issue opens nothing.
