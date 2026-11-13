@@ -1,3 +1,14 @@
+## [2.91.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.91.0...v2.91.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **activity:** keep feed messages a Discord rate limit holds in the outbox instead of dropping them ([3a56053](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3a5605383aba2378bcf3d4fa57d57c75173d7dc8))
+* **deps:** bump miniapppolis-common-utils to 9.10.2 ([52295ef](https://github.com/mini-app-polis/api-kaianolevine-com/commit/52295ef45a4c4a2ee3ed8462ad756f8a93047dc4))
+* **deps:** bump miniapppolis-common-utils to 9.10.3 ([1325c09](https://github.com/mini-app-polis/api-kaianolevine-com/commit/1325c09b637d8848d3be40628dd9d7b157daab95))
+* **deps:** bump miniapppolis-common-utils to 9.10.4 ([5c0d113](https://github.com/mini-app-polis/api-kaianolevine-com/commit/5c0d1139f49fb13cb049c1e0ededaeeb9b5dddc3))
+* **deps:** patch vulnerable dependencies (opentelemetry-api) ([de50456](https://github.com/mini-app-polis/api-kaianolevine-com/commit/de504565e9f8d73eeeadf1e4893884dd5c56eb64))
+
 # [2.91.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.90.0...v2.91.0) (2026-11-13)
 
 
