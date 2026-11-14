@@ -474,9 +474,9 @@ async def test_list_evaluations_orders_most_recent_first_with_non_null_timestamp
 
     # Every returned row carries a non-null timestamp.
     for row in body["data"]:
-        assert (
-            row["evaluated_at"] is not None
-        ), f"evaluated_at must be non-null on every row, got {row!r}"
+        assert row["evaluated_at"] is not None, (
+            f"evaluated_at must be non-null on every row, got {row!r}"
+        )
 
 
 async def test_list_evaluations_supports_source_filter(client) -> None:

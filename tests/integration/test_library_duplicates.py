@@ -8,6 +8,8 @@ trashed through its group.
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -91,6 +93,27 @@ async def test_a_report_stores_its_groups_with_their_files(client) -> None:
     assert files["f1"]["title"] == "Temple"
     assert files["f1"]["bitrate_kbps"] == 320
     assert files["f1"]["edit_label"] is None
+
+
+async def test_files_show_title_and_artist_as_the_catalog_renders_them(
+    client, async_engine
+) -> None:
+    a = await _entry(client, "Happy", "Pharell Williams")
+    await _register(client, "f1", a)
+    await _register(client, "f2", a)
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        entry = (
+            await session.execute(select(DbCatalog).where(DbCatalog.id == uuid.UUID(a)))
+        ).scalar_one()
+        entry.base_title = "Happy"
+        entry.main_artists = ["Pharrell Williams"]
+        await session.commit()
+    await _report(client, _group("k", "f1", "f2"))
+
+    [group] = await _open(client)
+    assert {f["artist"] for f in group["files"]} == {"Pharrell Williams"}
+    assert {f["title"] for f in group["files"]} == {"Happy"}
 
 
 async def test_a_report_replaces_the_open_groups_of_its_root(client) -> None:

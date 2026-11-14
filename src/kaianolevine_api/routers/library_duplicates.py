@@ -52,7 +52,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
-from ..services.display import load_rules
+from ..services.display import load_rules, render
 
 router = APIRouter()
 
@@ -103,10 +103,12 @@ async def _groups_out(
             else []
         )
     }
+    rules = await load_rules(session)
     by_group: dict[uuid.UUID, list[DuplicateFileOut]] = {g.id: [] for g in groups}
     for m in members:
         f = files.get(m.drive_file_id)
         entry = entries.get(f.catalog_id) if f and f.catalog_id else None
+        shown = render(entry, rules) if entry else None
         by_group[m.group_id].append(
             DuplicateFileOut(
                 drive_file_id=m.drive_file_id,
@@ -121,8 +123,8 @@ async def _groups_out(
                 why_kept=m.why_kept,
                 outcome=m.outcome,  # type: ignore[arg-type]
                 catalog_id=f.catalog_id if f else None,
-                title=entry.title if entry else None,
-                artist=entry.artist if entry else None,
+                title=shown.title if shown else None,
+                artist=shown.artist if shown else None,
                 play_count=entry.play_count if entry else None,
             )
         )
