@@ -1,3 +1,10 @@
+## [2.92.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.92.0...v2.92.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **library:** duplicates page shows title and artist as the catalog renders them ([beb9d3e](https://github.com/mini-app-polis/api-kaianolevine-com/commit/beb9d3ed145ad9194de2d4e8d05e5ee612667e9d))
+
 # [2.92.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.91.1...v2.92.0) (2026-11-14)
 
 
