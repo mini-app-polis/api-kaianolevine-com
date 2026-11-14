@@ -1,3 +1,10 @@
+# [2.92.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.91.1...v2.92.0) (2026-11-14)
+
+
+### Features
+
+* **cleanup:** drop_alias removes spellings an entry should not match under ([9305a69](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9305a69873c4d61ca23a38f616a9b906ded57049))
+
 ## [2.91.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.91.0...v2.91.1) (2026-11-13)
 
 
