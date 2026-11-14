@@ -1,3 +1,10 @@
+# [2.94.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.93.0...v2.94.0) (2026-11-14)
+
+
+### Features
+
+* **deejay:** send new-music runs to the intake worker's own queue ([687b3eb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/687b3ebc732d75a422f6bdf002c9722cd9f53c09))
+
 # [2.93.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.92.1...v2.93.0) (2026-11-14)
 
 
