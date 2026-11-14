@@ -58,6 +58,7 @@ from mini_app_polis.api.contract import (  # noqa: F401 -- re-exported
     ReconcileApprovals,
     ReconcileApprovalsSet,
     ReconcileDifference,
+    ReconcileOpenFields,
     ReconcileReport,
     ReconcileReportResult,
     RefiningBudgetSpentMarked,
