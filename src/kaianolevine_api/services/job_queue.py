@@ -65,6 +65,7 @@ AWS_ACCOUNT_ID = "400200465748"
 FIFO_COGS: frozenset[str] = frozenset(
     {
         "deejay",
+        "deejay-intake",
         "deejay-library",
         "rotator",
         "task-manager",
