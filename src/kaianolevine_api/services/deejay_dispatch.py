@@ -17,7 +17,11 @@ can express.
 
 Every ``library-*`` mode goes to deejay-cog's library worker, on a queue of
 its own (``deejay-library``), so a long library run never holds up
-process-new-files or ingest-live-history on the shared deejay queue.
+process-new-files or ingest-live-history on the shared deejay queue. The
+new-music mode goes to the intake worker, on its own queue
+(``deejay-intake``), for the same reason: a batch of hundreds of files
+drains run after run, and on the shared queue it held live plays and sets
+for hours.
 
 The mechanics of sending, and of insisting that a send landed, are shared
 with every dispatcher; see :mod:`.job_queue`.
@@ -44,6 +48,9 @@ __all__ = [
 #: Modes starting with this run on the library worker's own queue.
 LIBRARY_MODE_PREFIX = "library-"
 
+#: The mode that runs on the intake worker's own queue.
+INTAKE_MODE = "new-music"
+
 
 @dataclass(frozen=True)
 class DeejayJob:
@@ -53,10 +60,13 @@ class DeejayJob:
 
     @property
     def cog(self) -> str:
-        """The queue the job goes to: the library worker's for a library mode."""
-        return (
-            "deejay-library" if self.mode.startswith(LIBRARY_MODE_PREFIX) else "deejay"
-        )
+        """The queue the job goes to: the library worker's for a library mode,
+        the intake worker's for new music, the shared deejay queue otherwise."""
+        if self.mode.startswith(LIBRARY_MODE_PREFIX):
+            return "deejay-library"
+        if self.mode == INTAKE_MODE:
+            return "deejay-intake"
+        return "deejay"
 
     def as_message(self) -> dict[str, Any]:
         """Render this job as one ``deejay.run`` queue message."""

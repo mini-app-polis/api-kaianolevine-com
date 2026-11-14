@@ -149,14 +149,16 @@ async def test_a_standard_queue_gets_no_deduplication_id(monkeypatch) -> None:
     [
         ("library-backfill", "deejay-library"),
         ("library-sync", "deejay-library"),
+        ("new-music", "deejay-intake"),
         ("process-new-files", "deejay"),
         ("ingest-live-history", "deejay"),
     ],
 )
-async def test_a_library_mode_goes_to_the_library_queue(
+async def test_library_and_intake_modes_go_to_their_own_queues(
     monkeypatch, mode: str, queue: str
 ) -> None:
-    """A long library run never queues ahead of intake or live-play ingest."""
+    """A long library run or a large new-music batch never queues ahead of
+    sets or live-play ingest."""
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     sqs = MagicMock()
     sqs.send_message.return_value = {"MessageId": "m-1"}
