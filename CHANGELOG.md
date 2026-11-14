@@ -1,3 +1,10 @@
+# [2.93.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.92.1...v2.93.0) (2026-11-14)
+
+
+### Features
+
+* **library:** list each file's fields with an open reconcile difference for the sync ([8f80111](https://github.com/mini-app-polis/api-kaianolevine-com/commit/8f80111e5960a568348b26424b13a0f89693e40f))
+
 ## [2.92.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.92.0...v2.92.1) (2026-11-14)
 
 
