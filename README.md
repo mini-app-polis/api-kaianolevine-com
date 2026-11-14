@@ -241,6 +241,14 @@ library and out of it, case by case, is deejay-cog's
   entry, the values before its first revision in the window, unless the
   entry was edited again since. `--apply` writes them as the catalog editor
   would (revision kind `edit`, by `cleanup.revert`, source manual).
+- `python -m kaianolevine_api.cleanup.drop_alias --entry ID` — lists the
+  spellings an entry matches under; each `--drop TITLE ARTIST` names one to
+  remove (case and spacing ignored, any version). Every edit keeps the new
+  display as a spelling, so an entry once renamed to another song keeps
+  finding that song's plays, lookups and new library entries after it is
+  put back; dropping the spelling stops that. The entry's own title and
+  artist are never dropped. `--apply` deletes only the named spellings; the
+  entry, its plays and its files are unchanged.
 - `python -m kaianolevine_api.cleanup.unmerge --entry ID` — puts back one
   entry that a merge archived (by the duplicates page or the merge
   clean-up): its values as they were before the merge, and the plays and
