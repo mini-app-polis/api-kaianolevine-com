@@ -50,6 +50,7 @@ class Spelling:
 
     @property
     def label(self) -> str:
+        """The spelling as the report shows it: title, artist, version, source."""
         version = f" [{self.remix}]" if self.remix else ""
         return f"{self.title} — {self.artist}{version} ({self.source})"
 

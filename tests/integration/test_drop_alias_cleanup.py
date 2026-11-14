@@ -1,6 +1,6 @@
 """The drop-alias clean-up (kaianolevine_api.cleanup.drop_alias) against the
-real schema: an entry renamed to another song and put back loses that
-song's spelling, so a new entry for that song is no longer filed to it."""
+real schema: dropping a spelling an entry holds for another song means a
+lookup of that song does not find the entry."""
 
 from __future__ import annotations
 
