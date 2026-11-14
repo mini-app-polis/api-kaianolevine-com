@@ -12,7 +12,8 @@ over the file; approved for the file, the file's value goes up to its entry
 (through ``POST /v1/catalog/library/files/edited`` with ``keep_file``) and
 the file is not written. Either way the two then match. The reconcile's
 write runs read the approvals and do only what they cover; nothing here
-writes music.
+writes music. The library sync reads which fields of each file have an open
+difference and leaves those to the reconcile (deejay-cog ADR-0008).
 
 Seeding carries approvals the owner gave before the API held them (deejay-
 cog's state file) and is refused once any are set, so the machine scope can
@@ -21,9 +22,9 @@ never change approvals the owner set here.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from identity.types import Principal
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -39,6 +40,7 @@ from ..schemas import (
     ReconcileApprovals,
     ReconcileApprovalsSet,
     ReconcileDifferenceOut,
+    ReconcileOpenFields,
     ReconcileReport,
     ReconcileReportResult,
     ReconcileReview,
@@ -156,6 +158,45 @@ async def report_reconcile_differences(
         )
     await session.commit()
     return success_envelope(await _counts(session), count=1, total=1)
+
+
+@router.get(
+    f"{RECONCILE}/differences",
+    response_model=Envelope[list[ReconcileOpenFields]],
+    summary="Each file's fields with an open reconcile difference",
+    description=(
+        "Every present file with an open difference, by Drive id, and its "
+        "fields that differ; only library_root_id's files when given. The "
+        "library sync leaves those fields to the reconcile. Requires "
+        "catalog.library.write."
+    ),
+)
+async def list_reconcile_open_fields(
+    library_root_id: Annotated[str | None, Query()] = None,
+    principal: Principal = Depends(require_scope("catalog.library.write")),
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[list[ReconcileOpenFields]]:
+    """The fields a sync must leave to the reconcile, file by file."""
+    del principal
+    stmt = (
+        select(DbDifference.drive_file_id, DbDifference.field)
+        .join(
+            DbLibraryFile,
+            DbLibraryFile.drive_file_id == DbDifference.drive_file_id,
+        )
+        .where(DbLibraryFile.present.is_(True))
+        .order_by(DbDifference.drive_file_id, DbDifference.field)
+    )
+    if library_root_id is not None:
+        stmt = stmt.where(DbLibraryFile.library_root_id == library_root_id)
+    by_file: dict[str, list[str]] = {}
+    for drive_file_id, field in (await session.execute(stmt)).all():
+        by_file.setdefault(drive_file_id, []).append(field)
+    rows = [
+        ReconcileOpenFields.model_validate({"drive_file_id": f, "fields": fields})
+        for f, fields in by_file.items()
+    ]
+    return success_envelope(rows, count=len(rows), total=len(rows))
 
 
 @router.get(

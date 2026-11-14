@@ -134,6 +134,43 @@ async def test_a_file_gone_from_the_library_is_not_reviewed(client) -> None:
     assert [d["drive_file_id"] for d in review["differences"]] == ["a"]
 
 
+async def test_the_open_fields_are_listed_file_by_file(client) -> None:
+    for name in ("a", "b", "c"):
+        await _linked(client, name)
+    response = await client.post(
+        FILES,
+        json={
+            "drive_file_id": "fx",
+            "library_root_id": "root-2",
+            "path": "FX/fx.mp3",
+            "identification_status": "identified",
+            "catalog_id": await _linked(client, "d"),
+        },
+    )
+    assert response.status_code == 200, response.text
+    await _report(
+        client,
+        ["a", "b", "c", "fx"],
+        _diff("a", "title"),
+        _diff("a", "bpm", "bpm_rounding"),
+        _diff("b", "year", "year_filled"),
+        _diff("c", "genre", "genre_remapped"),
+        _diff("fx", "label", "label_differs"),
+    )
+    await client.post(f"{FILES}/absent", json={"drive_file_ids": ["c"]})
+
+    every = await client.get(DIFFERENCES)
+    one_root = await client.get(DIFFERENCES, params={"library_root_id": "root-1"})
+
+    assert every.status_code == one_root.status_code == 200, every.text
+    assert every.json()["data"] == [
+        {"drive_file_id": "a", "fields": ["bpm", "title"]},
+        {"drive_file_id": "b", "fields": ["year"]},
+        {"drive_file_id": "fx", "fields": ["label"]},
+    ]
+    assert [r["drive_file_id"] for r in one_root.json()["data"]] == ["a", "b"]
+
+
 async def test_approvals_start_empty_and_the_owner_sets_them(client) -> None:
     await _linked(client, "a")
     await _report(
@@ -297,5 +334,6 @@ async def test_the_machine_side_needs_the_library_scope(role_client) -> None:
             DIFFERENCES, json={"run_id": "r", "compared": [], "differences": []}
         )
         assert report.status_code == 403
+        assert (await editor.get(DIFFERENCES)).status_code == 403
         assert (await editor.get(APPROVALS)).status_code == 403
         assert (await editor.post(SEED, json={})).status_code == 403
