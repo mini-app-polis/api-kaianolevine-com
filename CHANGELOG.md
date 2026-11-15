@@ -1,3 +1,15 @@
+# [2.95.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.94.0...v2.95.0) (2026-11-15)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.12.0 ([731f91f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/731f91f0c9e3b54262611aacc5c9c3c64e524801))
+
+
+### Features
+
+* **api:** store agent Done when answers and per-file reconcile kind approvals, on commons 9.13.0 ([2aec637](https://github.com/mini-app-polis/api-kaianolevine-com/commit/2aec6372a806f600c3ffc92a96259fd8ece2e537))
+
 # [2.94.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.93.0...v2.94.0) (2026-11-14)
 
 
