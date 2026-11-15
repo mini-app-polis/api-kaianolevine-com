@@ -53,6 +53,9 @@ jobs:
       model: ${{ inputs.model }}
       budget_usd: ${{ inputs.budget_usd }}
       dry_run: ${{ inputs.dry_run }}
+      # The integration suite needs Postgres, as ci.yml's test job runs it.
+      postgres: true
+      postgres-db: kaianolevine_test
     # The agent's Anthropic key, the agent App and the task-agent API key:
     # org secrets visible only to the repositories the agent may change.
     secrets: inherit
