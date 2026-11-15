@@ -186,6 +186,8 @@ async def test_approvals_start_empty_and_the_owner_sets_them(client) -> None:
         "files": {},
         "file_wins_kinds": [],
         "file_wins_files": {},
+        "kinds_by_file": {},
+        "file_wins_kinds_by_file": {},
         "updated_at": None,
         "updated_by": None,
     }
@@ -248,6 +250,59 @@ async def test_a_difference_can_be_approved_for_the_file(client) -> None:
         ("b", "artist"): (True, "file"),
         ("b", "genre"): (True, "catalog"),
     }
+
+
+async def test_one_files_kind_is_approved_ahead_of_the_kind(client) -> None:
+    await _linked(client, "a")
+    await _linked(client, "b")
+    await _report(
+        client,
+        ["a", "b"],
+        _diff("a", "year", "year_later"),
+        _diff("b", "year", "year_later"),
+        _diff("a", "bpm", "bpm_differs"),
+    )
+
+    response = await client.put(
+        APPROVALS,
+        json={
+            "file_wins_kinds": ["year_later"],
+            "kinds_by_file": {"a": ["year_later", "year_later"], "z": []},
+            "file_wins_kinds_by_file": {"a": ["bpm_differs"]},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    saved = response.json()["data"]
+    assert saved["kinds_by_file"] == {"a": ["year_later"]}
+    assert saved["file_wins_kinds_by_file"] == {"a": ["bpm_differs"]}
+    assert saved["file_wins_kinds"] == ["year_later"]
+    assert (await client.get(APPROVALS)).json()["data"] == saved
+    sides = {
+        (d["drive_file_id"], d["field"]): d["approved_for"]
+        for d in (await _review(client))["differences"]
+    }
+    assert sides == {
+        ("a", "year"): "catalog",
+        ("b", "year"): "file",
+        ("a", "bpm"): "file",
+    }
+
+
+async def test_one_files_kind_cannot_be_approved_both_ways(client) -> None:
+    both = await client.put(
+        APPROVALS,
+        json={
+            "kinds_by_file": {"a": ["year_later"]},
+            "file_wins_kinds_by_file": {"a": ["year_later"]},
+        },
+    )
+    other = await client.put(APPROVALS, json={"kinds_by_file": {"a": ["other"]}})
+    nothing_to_send = await client.put(
+        APPROVALS, json={"file_wins_kinds_by_file": {"a": ["fill_up"]}}
+    )
+
+    assert [r.status_code for r in (both, other, nothing_to_send)] == [422, 422, 422]
 
 
 async def test_an_unapproved_difference_is_approved_for_neither_side(client) -> None:
