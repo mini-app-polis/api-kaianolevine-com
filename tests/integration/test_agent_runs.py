@@ -151,6 +151,44 @@ async def test_a_result_is_recorded_and_queued_for_the_task_manager(
     assert listed[0]["actions_run_url"] == RUN_URL
 
 
+async def test_a_succeeded_run_is_recorded_and_queued_with_its_done_when_answers(
+    client, monkeypatch
+) -> None:
+    _aws(monkeypatch)
+    run = await _dispatch(client)
+    answers = [
+        "Added the setting; test_setting_is_read in tests/unit/test_config.py.",
+        "README's Settings section names it, in the pull request's commit.",
+    ]
+    result = {
+        "run_id": run["id"],
+        "outcome": "succeeded",
+        "pr_url": PR,
+        "done_when_answers": answers,
+    }
+    with _queued() as dispatched:
+        response = await client.post("/v1/tasks/agent-runs/results", json=result)
+
+    assert response.status_code == 202, response.text
+    queued: AgentRun = dispatched.await_args.args[0]
+    assert queued.done_when_answers == answers
+    (listed,) = (await client.get("/v1/tasks/agent-runs")).json()["data"]
+    assert listed["done_when_answers"] == answers
+
+
+async def test_a_result_with_no_done_when_answers_is_recorded_with_none(
+    client, monkeypatch
+) -> None:
+    _aws(monkeypatch)
+    run = await _dispatch(client)
+    result = {"run_id": run["id"], "outcome": "succeeded", "pr_url": PR}
+    with _queued() as dispatched:
+        await client.post("/v1/tasks/agent-runs/results", json=result)
+    assert dispatched.await_args.args[0].done_when_answers == []
+    (listed,) = (await client.get("/v1/tasks/agent-runs")).json()["data"]
+    assert listed["done_when_answers"] == []
+
+
 async def test_a_second_result_for_a_run_is_refused(client, monkeypatch) -> None:
     _aws(monkeypatch)
     run = await _dispatch(client)
@@ -244,6 +282,7 @@ async def test_other_outcomes_are_recorded_with_no_questions(
     [
         {"outcome": "needs_refining"},  # no questions
         {"outcome": "failed", "questions": ["Which one?"]},
+        {"outcome": "failed", "done_when_answers": ["Done."]},
         {"outcome": "succeeded"},  # no pull request
         {"outcome": "failed", "pr_url": PR},
         {"cost_usd": -1},

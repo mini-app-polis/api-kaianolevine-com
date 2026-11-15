@@ -6,8 +6,9 @@ Each run reports the files it compared and their differences, under
 ``catalog.library.write``; for those files the report replaces what is held.
 The owner reviews the open differences on the WCS site and sets the
 approvals, under ``catalog.tracks.write`` (the catalog-editor role): whole
-kinds, or ``other`` differences one file and field at a time, each in one
-of two directions. Approved for the catalog, the catalog's value is written
+kinds, ``other`` differences one file and field at a time, or one file's
+differences of a kind (applied to that file ahead of the kind's approval),
+each in one of two directions. Approved for the catalog, the catalog's value is written
 over the file; approved for the file, the file's value goes up to its entry
 (through ``POST /v1/catalog/library/files/edited`` with ``keep_file``) and
 the file is not written. Either way the two then match. The reconcile's
@@ -63,6 +64,8 @@ def _approvals_out(row: DbApprovals | None) -> ReconcileApprovals:
             "files": dict(row.files),
             "file_wins_kinds": list(row.file_wins_kinds or []),
             "file_wins_files": dict(row.file_wins_files or {}),
+            "kinds_by_file": dict(row.kinds_by_file or {}),
+            "file_wins_kinds_by_file": dict(row.file_wins_kinds_by_file or {}),
             "updated_at": row.updated_at,
             "updated_by": row.updated_by,
         }
@@ -72,15 +75,20 @@ def _approvals_out(row: DbApprovals | None) -> ReconcileApprovals:
 def approved_for(
     approvals: ReconcileApprovals, kind: str, file_id: str, field: str
 ) -> Literal["catalog", "file"] | None:
-    """Which value ``approvals`` let win for one difference: by its kind, or
-    for ``other``, its file and field (as the reconcile's write run reads
-    them). None when not approved."""
+    """Which value ``approvals`` let win for one difference: for ``other``,
+    by its file and field; for any other kind, by the file's own approval of
+    that kind, then by the kind (as the reconcile's write run reads them).
+    None when not approved."""
     if kind == "other":
         if field in approvals.files.get(file_id, []):
             return "catalog"
         if field in approvals.file_wins_files.get(file_id, []):
             return "file"
         return None
+    if kind in approvals.kinds_by_file.get(file_id, []):
+        return "catalog"
+    if kind in approvals.file_wins_kinds_by_file.get(file_id, []):
+        return "file"
     if kind in approvals.kinds:
         return "catalog"
     if kind in approvals.file_wins_kinds:
@@ -96,6 +104,12 @@ def _stored(payload: ReconcileApprovalsSet) -> dict[str, object]:
         "file_wins_kinds": sorted(set(payload.file_wins_kinds)),
         "file_wins_files": {
             k: sorted(set(v)) for k, v in payload.file_wins_files.items() if v
+        },
+        "kinds_by_file": {
+            k: sorted(set(v)) for k, v in payload.kinds_by_file.items() if v
+        },
+        "file_wins_kinds_by_file": {
+            k: sorted(set(v)) for k, v in payload.file_wins_kinds_by_file.items() if v
         },
     }
 
@@ -306,9 +320,11 @@ async def review_reconcile(
         "files), the catalog's value is written over the file; for the file "
         "(file_wins_kinds, file_wins_files), the file's value goes up to the "
         "entry. Kinds are approved whole (never 'other'); 'other' "
-        "differences by file and field. A kind, or a file's field, goes one "
-        "way only. A file's entry with no fields is dropped. Requires "
-        "catalog.tracks.write."
+        "differences by file and field. One file's differences of a kind "
+        "are approved apart (kinds_by_file, file_wins_kinds_by_file), ahead "
+        "of the kind's approval for that file. A kind, a file's field, or a "
+        "file's kind goes one way only. A file's entry with no fields or "
+        "kinds is dropped. Requires catalog.tracks.write."
     ),
 )
 async def set_reconcile_approvals(

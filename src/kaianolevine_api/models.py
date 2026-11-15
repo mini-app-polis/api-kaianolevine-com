@@ -424,6 +424,11 @@ class LibraryReconcileApprovals(Base):
         PgARRAY(String), nullable=False, default=list
     )
     file_wins_files: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # One file's kinds approved apart from the kind, either way (migration 115).
+    kinds_by_file: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    file_wins_kinds_by_file: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     updated_by: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
