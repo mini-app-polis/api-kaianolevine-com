@@ -43,7 +43,7 @@ Errors return:
 
 * `GET /v1/catalog` — list catalog entries (`artist`, `title`, `confidence`, `min_play_count`, `limit`, `offset`)
 * `GET /v1/catalog/{id}` — catalog entry with play history
-* `PATCH /v1/catalog/{id}` — update `genre`, `bpm`, `release_year` (source becomes `manual`); protected
+* `PATCH /v1/catalog/{id}` — update `genre`, `bpm` (stored as a whole number), `release_year` (source becomes `manual`); protected
 
 ### Evaluations
 

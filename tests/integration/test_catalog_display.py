@@ -181,6 +181,28 @@ async def test_fill_up_takes_no_single_character_label(client) -> None:
     assert response.json()["data"]["filled"] == ["label"]
 
 
+async def test_fill_up_takes_a_bpm_as_a_whole_number(client) -> None:
+    whole = await _entry(client, "Temple", "Thomas Gold")
+    rounded = await _entry(client, "Sundays", "Emotional Oranges")
+
+    first = (await _fill(client, whole, bpm=100.00)).json()["data"]
+    second = (await _fill(client, rounded, bpm=106.9)).json()["data"]
+
+    assert (first["filled"], first["entry"]["bpm"]) == (["bpm"], 100.0)
+    assert (second["filled"], second["entry"]["bpm"]) == (["bpm"], 107.0)
+
+
+async def test_a_library_entry_holds_its_bpm_as_a_whole_number(
+    client, async_engine
+) -> None:
+    entry_id = await _entry(client, "Temple", "Thomas Gold", bpm=106.9)
+
+    maker = async_sessionmaker(async_engine, expire_on_commit=False)
+    async with maker() as session:
+        row = await session.get(DbCatalog, uuid.UUID(entry_id))
+    assert row is not None and row.bpm == 107.0
+
+
 async def test_fill_up_of_an_unknown_entry_is_404(client) -> None:
     response = await _fill(client, str(uuid.uuid4()), bpm=120.0)
     assert response.status_code == 404
