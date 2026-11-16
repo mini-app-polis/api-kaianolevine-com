@@ -22,6 +22,7 @@ from .song_identity import (
     catalog_artist,
     catalog_title_key,
     clean_genre,
+    comparable_loose_key,
     display_title,
     is_placeholder,
     loose_title_key,
@@ -208,12 +209,15 @@ class CatalogMatcher:
     async def find_loose(self, display: str, artist: str) -> TrackCatalog | None:
         """The entry whose title (with its version) and first credited artist
         match ``display`` and ``artist`` with case, spaces and every symbol
-        ignored ("2AM" is "2 AM", "5:19" is "519"), or None. An owner edit
-        matches only an owner-edit entry, and the published song only an
-        entry that is not one."""
-        matches = (await self._load_catalog()).get(
-            (loose_title_key(display), main_artist_key(artist)), []
-        )
+        ignored ("2AM" is "2 AM", "5:19" is "519"), or None. Letters of every
+        script count: a title in Chinese, Hebrew or Korean matches only
+        itself, and a title or artist with no letters or digits at all
+        matches nothing. An owner edit matches only an owner-edit entry, and
+        the published song only an entry that is not one."""
+        key = (loose_title_key(display), main_artist_key(artist))
+        if not comparable_loose_key(key):
+            return None
+        matches = (await self._load_catalog()).get(key, [])
         if not matches:
             return None
         _, norm_artist = normalize_for_matching(display, artist)

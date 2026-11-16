@@ -211,3 +211,24 @@ async def test_the_lookup_needs_the_ingest_scope(role_client) -> None:
             ROUTE, json={"tracks": [_track("Sundays", "Emotional Oranges")]}
         )
     assert response.status_code == 403
+
+
+async def test_songs_written_in_other_scripts_are_each_their_own(client) -> None:
+    entries = "/v1/catalog/library/entries"
+    songs = [
+        ("תל אביב זה אני ואת", "אמיר ובן"),
+        ("有點甜", "汪苏泷"),
+        ("작은 것들을 위한 시", "방탄소년단"),
+    ]
+    made = []
+    for title, artist in songs:
+        response = await client.post(entries, json={"title": title, "artist": artist})
+        assert response.status_code == 200, response.text
+        made.append(response.json()["data"])
+
+    assert [m["created"] for m in made] == [True, True, True]
+    assert len({m["entry"]["id"] for m in made}) == 3
+    found = await _lookup(client, *(_track(t, a) for t, a in songs))
+    assert [f["id"] for f in found] == [m["entry"]["id"] for m in made]
+    [unknown] = await _lookup(client, _track("小幸运", "田馥甄"))
+    assert unknown is None

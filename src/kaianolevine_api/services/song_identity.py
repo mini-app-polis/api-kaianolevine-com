@@ -25,6 +25,8 @@ owner edit never shares a key with the published song or its versions: not
 from __future__ import annotations
 
 import re
+import string
+import unicodedata
 
 from .normalization import normalize_for_matching
 
@@ -48,8 +50,8 @@ _VERSION_WORD = re.compile(
 )
 _BRACKETED = re.compile(r"[\[(]([^\])]*)[\])]")
 _OWNER_EDIT = re.compile(r"<([^<>]*)>")
-#: Marks an owner edit's loose key. ``_compact`` keeps only letters and
-#: digits, so no other key starts with it.
+#: Marks an owner edit's loose key. ``_compact`` keeps only letters, digits
+#: and the marks of non-Latin letters, so no other key starts with it.
 _OWNER_EDIT_MARK = "<"
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
 _FURTHER_ARTISTS = re.compile(
@@ -98,6 +100,9 @@ def is_placeholder(title: str) -> bool:
     return bool(_PLACEHOLDER.match(title.strip()))
 
 
+#: The ASCII characters a key keeps.
+_ASCII_KEPT = frozenset(string.ascii_lowercase + string.digits)
+
 _ARTIST_UNDERSCORE = re.compile(r"(?<!\d)\s*_\s*(?!\d)")
 
 
@@ -107,8 +112,48 @@ def catalog_artist(artist: str) -> str:
     return _ARTIST_UNDERSCORE.sub(", ", artist)
 
 
+def _latin(ch: str) -> bool:
+    """Whether ``ch`` is a Latin letter or mark, or anything else below the
+    Greek block (Latin-1, the Latin Extended blocks, IPA, spacing modifiers,
+    combining diacritics), a fullwidth form of ASCII, or a letter named
+    Latin elsewhere (Latin Extended Additional)."""
+    cp = ord(ch)
+    return cp < 0x0370 or 0xFF01 <= cp <= 0xFF5E or "LATIN" in unicodedata.name(ch, "")
+
+
 def _compact(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", text.lower())
+    """``text`` with case, spacing, punctuation and symbols ignored.
+
+    Latin text keeps only a-z and 0-9, as it always has: an accented letter
+    is dropped ("Beyoncé" is "beyonc"), so no Latin key changes. Letters and
+    digits of every other script are kept, casefolded and NFKC-normalised,
+    with the marks that belong to them (Devanagari vowel signs), so a title
+    written in Chinese, Hebrew or Korean has a key of its own instead of an
+    empty one that every such title shares."""
+    out: list[str] = []
+    run: list[str] = []
+
+    def flush() -> None:
+        if run:
+            folded = unicodedata.normalize("NFKC", "".join(run)).casefold()
+            out.extend(
+                c for c in folded if c.isalnum() or unicodedata.category(c)[0] == "M"
+            )
+            run.clear()
+
+    for ch in text.lower():
+        if ch.isascii():
+            flush()
+            if ch in _ASCII_KEPT:
+                out.append(ch)
+        elif _latin(ch):
+            flush()
+        elif ch.isalnum() or (run and unicodedata.category(ch)[0] == "M"):
+            run.append(ch)
+        else:
+            flush()
+    flush()
+    return "".join(out)
 
 
 def is_release_label(text: str) -> bool:
@@ -211,6 +256,14 @@ def loose_title_key(text: str, owner_edit: bool | None = None) -> str:
     if owner_edit is None:
         owner_edit = is_owner_edit(text)
     return _OWNER_EDIT_MARK + key if owner_edit else key
+
+
+def comparable_loose_key(key: tuple[str, str]) -> bool:
+    """Whether a loose (title, main artist) key has a title and an artist to
+    compare. One with nothing left of either (a title of only symbols or
+    emoji) would be every such song's, so it matches nothing."""
+    title, artist = key
+    return bool(title.removeprefix(_OWNER_EDIT_MARK)) and bool(artist)
 
 
 def main_artist_key(artist: str) -> str:

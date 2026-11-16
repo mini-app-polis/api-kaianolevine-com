@@ -251,6 +251,21 @@ library and out of it, case by case, is deejay-cog's
   entry, the values before its first revision in the window, unless the
   entry was edited again since. `--apply` writes them as the catalog editor
   would (revision kind `edit`, by `cleanup.revert`, source manual).
+- `python -m kaianolevine_api.cleanup.keys` — audits matching keys for
+  songs written in other scripts. Matching's loose keys (title with version,
+  and main artist, case and symbols ignored) keep the letters and digits of
+  every script, casefolded and NFKC-normalised; Latin text keys exactly as
+  before (a-z and 0-9 only), and a title or artist with no letters or
+  digits matches nothing loosely. The dry run lists entries with an empty
+  stored key and the keys they take now (with any collision), live entries
+  whose loose key was empty under the old a-z-only rule (so every such song
+  matched every other) with the entries still sharing their key, their
+  library files and spellings (each marked when it names another song), and
+  spellings in `catalog_aliases` with an empty key. `--apply` re-keys only
+  the entries with an empty stored key whose new keys collide with nothing
+  (revision kind `edit`, by `cleanup.keys`); it never merges, splits or
+  relinks: a file on the wrong entry is moved with
+  `POST /v1/catalog/library/files/{drive_file_id}/link`.
 - `python -m kaianolevine_api.cleanup.drop_alias --entry ID` — lists the
   spellings an entry matches under; each `--drop TITLE ARTIST` names one to
   remove (case and spacing ignored, any version). Every edit keeps the new
