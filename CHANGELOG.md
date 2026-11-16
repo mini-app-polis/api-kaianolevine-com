@@ -1,3 +1,12 @@
+## [2.95.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.2...v2.95.3) (2026-11-16)
+
+
+### Bug Fixes
+
+* **catalog:** keep non-Latin letters in song matching keys ([b408741](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b4087414e70753a3349fed549e30bfd0f524f271))
+* **catalog:** store catalog BPMs as whole numbers ([6036a05](https://github.com/mini-app-polis/api-kaianolevine-com/commit/6036a0506111880d159c51eb844dfc4665c74a2c))
+* **deps:** bump miniapppolis-common-utils to 9.13.2 ([928e61b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/928e61b3088f01c42e3ff657bf59acc4d90c25ad))
+
 ## [2.95.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.1...v2.95.2) (2026-11-16)
 
 
