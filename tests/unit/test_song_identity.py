@@ -90,6 +90,13 @@ def test_loose_keys():
     assert main_artist_key("Alina Baraz feat. Khalid") == "alinabaraz"
 
 
+def test_a_name_that_starts_with_a_joiner_is_the_main_artist():
+    # "X" and "With" here start the name, not join a second artist.
+    assert main_artist_key("X Ambassadors") == "xambassadors"
+    assert main_artist_key("With Love feat. Connor Maynard") == "withlove"
+    assert main_artist_key("X Ambassadors x Jamie N Commons") == "xambassadors"
+
+
 def test_file_tags_are_not_versions():
     for tag in [
         "320kbps4secIntro",
