@@ -194,6 +194,16 @@ library and out of it, case by case, is deejay-cog's
   two-level vocabulary in `config_data/genre_map.yaml` (genre and subgenre;
   values that are not genres are cleared; Instrumental moves to the version).
   The set import and library entries write new genres the same way.
+- `python -m kaianolevine_api.cleanup.bpm` — rounds every entry's BPM that
+  is not a whole number (106.9 -> 107, a half rounded up), live and
+  archived; the dry run lists each with its BPM and the number it becomes.
+  The catalog holds every BPM as a whole number: the fill-up, file edits
+  sent up (`keep_file` too), library entries, the set import's entries and
+  the editor all round the BPM they write (`services/bpm.py`), and a set's
+  plays keep the BPM as played. `--apply` records each change as a revision
+  of kind `edit`, by `cleanup.bpm`, leaves the entry's source as it is, and
+  marks the entry changed so the nightly library sync writes the whole BPM
+  to its files.
 - `python -m kaianolevine_api.cleanup.split` — proposes every entry's parts
   (base title, version, main and featured artists) from its title, artist
   and remix: clear splits as one approvable group, ambiguous ones entry by

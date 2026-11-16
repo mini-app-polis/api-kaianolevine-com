@@ -741,6 +741,56 @@ async def test_a_bpm_kept_from_the_file_is_not_taken_for_a_remeasure(client) -> 
     assert (await _detail(client, entry))["bpm"] == 62.0
 
 
+async def test_a_bpm_edited_in_a_file_goes_up_as_a_whole_number(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=124.0))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(client, "drive-1", {**values, "bpm": "106.9"})
+
+    assert result["fields"][0]["outcome"] == "sent_up"
+    assert (await _detail(client, entry))["bpm"] == 107.0
+
+
+async def test_a_bpm_kept_from_the_file_goes_up_as_a_whole_number(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=124.0))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "bpm": "100.00"}, keep_file=["bpm"]
+    )
+
+    assert result["fields"][0]["outcome"] == "sent_up"
+    assert (await _detail(client, entry))["bpm"] == 100.0
+
+
+async def test_a_bpm_near_the_whole_one_recorded_is_still_a_remeasure(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=106.9))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+    assert values["bpm"] == "107"
+
+    near = await _edited(client, "drive-1", {**values, "bpm": "106.9"})
+    half = await _edited(client, "drive-1", {**values, "bpm": "53.5"})
+
+    assert near["fields"][0]["outcome"] == "reanalysed"
+    assert half["fields"][0]["outcome"] == "reanalysed"
+    assert (await _detail(client, entry))["bpm"] == 107.0
+
+
+async def test_a_bpm_that_rounds_to_nothing_is_held(client) -> None:
+    entry = (await _entry(client, "Temple", "Thomas Gold", bpm=124.0))["entry"]["id"]
+    values = await _in_step(client, "drive-1", entry=entry)
+
+    result = await _edited(
+        client, "drive-1", {**values, "bpm": "0.3"}, keep_file=["bpm"]
+    )
+
+    assert (result["fields"][0]["outcome"], result["fields"][0]["why"]) == (
+        "held",
+        "not a BPM",
+    )
+    assert (await _detail(client, entry))["bpm"] == 124.0
+
+
 async def test_a_never_synced_file_sends_up_only_the_fields_kept(client) -> None:
     entry = (await _entry(client, "Temple", "Thomas Gold", bpm=120.0, genre="House"))[
         "entry"

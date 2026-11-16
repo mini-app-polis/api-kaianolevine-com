@@ -49,6 +49,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.bpm import whole_bpm
 from ..services.display import Rules, load_rules, with_release_label
 from ..services.fill_up import label_taken
 from ..services.genres import catalog_genre, vocabulary_genre
@@ -525,7 +526,8 @@ def _changes(
         else:
             changes.update(genre=genre, subgenre=subgenre)
     if "bpm" in edited:
-        bpm = _bpm(edited["bpm"])
+        # The catalog holds every BPM as a whole number: 106.9 goes up as 107.
+        bpm = whole_bpm(_bpm(edited["bpm"]))
         if bpm is None or bpm <= 0:
             held["bpm"] = "not a BPM"
         else:
@@ -550,7 +552,8 @@ def _changes(
         "the catalog did not change goes up to the entry as a revision "
         "(source library); one the catalog changed too stays the catalog's "
         "(overwritten); a BPM within 1.5 of the recorded one, or of its "
-        "double or half, is a re-measure; a title or artist that does not "
+        "double or half, is a re-measure, and a BPM that goes up is stored "
+        "as the nearest whole number; a title or artist that does not "
         "split into parts cleanly, a genre the vocabulary does not place, or "
         "a one-character label is held. A field sent up takes the file's "
         "value as its recorded one. A file with nothing sent up or "
@@ -750,7 +753,7 @@ async def make_library_entry(
         confidence="low",
         genre=genre,
         subgenre=subgenre,
-        bpm=track.bpm,
+        bpm=whole_bpm(track.bpm),
         release_year=track.release_year,
         play_count=0,
         first_played=None,

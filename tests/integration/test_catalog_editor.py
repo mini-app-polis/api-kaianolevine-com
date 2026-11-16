@@ -58,7 +58,8 @@ async def test_an_edit_sets_the_parts_and_owned_fields_and_is_recorded(
     assert (data["title"], data["artist"]) == ("Honesty", "Pink Sweat$ feat. Kehlani")
     assert data["main_artists"] == ["Pink Sweat$"]
     assert data["featured_artists"] == ["Kehlani"]
-    assert (data["subgenre"], data["label"], data["bpm"]) == ("Soul", "Atlantic", 95.5)
+    # The catalog holds a BPM as a whole number: 95.5 is stored as 96.
+    assert (data["subgenre"], data["label"], data["bpm"]) == ("Soul", "Atlantic", 96.0)
     assert data["source"] == "manual"
     assert data["updated_at"] is not None
 

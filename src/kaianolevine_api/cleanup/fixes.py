@@ -16,7 +16,8 @@ Reads DATABASE_URL. The list is ``config_data/catalog_fixes.yaml``; each
   style) and an artist containing the given one. It must match exactly one
   entry, or every match with ``"all": true``. ``set`` takes the editor's
   fields: base_title, version, main_artists, featured_artists, genre,
-  subgenre, bpm, release_year and label; null clears one.
+  subgenre, bpm (stored as the nearest whole number), release_year and
+  label; null clears one.
 - **new version**: ``{"new_version": {"of": {"title": ..., "artist": ...},
   "version": "Remix", "files": [drive file ids]}}``, a library file that is
   another version of the entry found (as an entry fix finds it) gets an
@@ -58,6 +59,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CatalogRevision, LibraryFile, TrackCatalog
+from ..services.bpm import whole_bpm
 from ..services.display import Rules, load_rules, render
 from ..services.libraries import MAIN, library_of
 from ..services.reconciliation import IngestTrack, record_alias, track_keys
@@ -106,6 +108,9 @@ def _names(value: Any) -> list[str]:
 def _clean(name: str, value: Any) -> Any:
     if name.endswith("_artists"):
         return _names(value)
+    if name == "bpm" and isinstance(value, int | float):
+        # The catalog holds every BPM as a whole number.
+        return whole_bpm(float(value))
     if isinstance(value, str):
         return value.strip() or None
     return value

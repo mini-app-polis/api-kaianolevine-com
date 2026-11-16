@@ -35,6 +35,7 @@ from ..schemas import (
     api_error,
     success_envelope,
 )
+from ..services.bpm import whole_bpm
 from ..services.display import DEFAULT_RULES, Rules, load_rules, render
 from ..services.fill_up import label_taken
 from ..services.genres import vocabulary_genre
@@ -240,7 +241,8 @@ async def read_catalog_display(
     description=(
         "Sets only the fields the entry leaves empty (year, genre, BPM, "
         "label) from the file's values; a value the catalog has is never "
-        "overwritten. A genre is placed on the catalog's vocabulary first, and "
+        "overwritten. A BPM is taken as the nearest whole number (106.9 is "
+        "107), as the catalog holds every BPM. A genre is placed on the catalog's vocabulary first, and "
         "one the vocabulary does not place is not taken; a label of a single "
         "character (an explicit or clean marker) is not taken either. "
         "An entry that gains a value is marked as coming from the library. "
@@ -270,8 +272,9 @@ async def fill_up_catalog_entry(
             if entry.subgenre is None and subgenre is not None:
                 entry.subgenre = subgenre
                 filled.append("subgenre")
-    if entry.bpm is None and payload.bpm is not None:
-        entry.bpm = payload.bpm
+    bpm = whole_bpm(payload.bpm)
+    if entry.bpm is None and bpm is not None and bpm > 0:
+        entry.bpm = bpm
         filled.append("bpm")
     label = label_taken(payload.label)
     if entry.label is None and label is not None:
@@ -469,6 +472,9 @@ def _cleaned(name: str, value: object) -> object:
     if name == "cut_from_id":
         # A revision holds it as text.
         return uuid.UUID(str(value)) if value is not None else None
+    if name == "bpm":
+        # The catalog holds every BPM as a whole number.
+        return whole_bpm(value)  # type: ignore[arg-type]
     if isinstance(value, str):
         return value.strip() or None
     return value
@@ -492,7 +498,8 @@ def _edit_values(entry: DbCatalog) -> dict[str, object]:
     summary="Edit a catalog entry's parts and owned fields",
     description=(
         "Sets the fields sent: base title, version, main and featured "
-        "artists, genre, subgenre, BPM, year, label, whether the version is "
+        "artists, genre, subgenre, BPM (stored as the nearest whole "
+        "number), year, label, whether the version is "
         "an owner edit, and the published entry an owner edit was cut from "
         "(another live entry, not one that is itself an owner edit); a "
         "field sent as null is cleared. The title and artist shown are "

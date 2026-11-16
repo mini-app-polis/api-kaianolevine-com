@@ -373,3 +373,37 @@ async def test_ingest_losing_the_insert_race_reuses_the_winners_set(
     detail = await client.get(f"/v1/sets/{rival_ids[0]}/tracks")
     assert detail.status_code == 200
     assert [t["title"] for t in detail.json()["data"]] == ["Raced"]
+
+
+async def test_a_play_keeps_its_bpm_and_its_entry_holds_it_whole(client) -> None:
+    first = _payload(
+        "2026-03-08",
+        "MADjam",
+        "2026-03-08 MADjam.csv",
+        [
+            {"play_order": 1, "title": "My Boo", "artist": "Artist", "bpm": 106.9},
+            {"play_order": 2, "title": "Sundays", "artist": "Emotional Oranges"},
+        ],
+    )
+    assert (await client.post("/v1/ingest", json=first)).status_code == 200
+    second = _payload(
+        "2026-03-09",
+        "MADjam",
+        "2026-03-09 MADjam.csv",
+        [
+            {
+                "play_order": 1,
+                "title": "Sundays",
+                "artist": "Emotional Oranges",
+                "bpm": 95.5,
+            }
+        ],
+    )
+    assert (await client.post("/v1/ingest", json=second)).status_code == 200
+
+    entries = (await client.get("/v1/catalog", params={"limit": 10})).json()["data"]
+    by_title = {e["title"]: e for e in entries}
+    assert by_title["My Boo"]["bpm"] == 107.0
+    assert by_title["Sundays"]["bpm"] == 96.0  # filled from the later play
+    tracks = (await client.get("/v1/tracks", params={"title": "My Boo"})).json()["data"]
+    assert [t["bpm"] for t in tracks] == [106.9]
