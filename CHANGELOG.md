@@ -1,3 +1,10 @@
+## [2.95.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.3...v2.95.4) (2026-11-16)
+
+
+### Bug Fixes
+
+* **catalog:** read an artist name that starts with a joiner as the main artist ([44028a7](https://github.com/mini-app-polis/api-kaianolevine-com/commit/44028a7b4dc844653043d579c956c13ba22ee177))
+
 ## [2.95.3](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.2...v2.95.3) (2026-11-16)
 
 
