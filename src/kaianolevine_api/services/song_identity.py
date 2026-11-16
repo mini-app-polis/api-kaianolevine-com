@@ -54,8 +54,10 @@ _OWNER_EDIT = re.compile(r"<([^<>]*)>")
 #: and the marks of non-Latin letters, so no other key starts with it.
 _OWNER_EDIT_MARK = "<"
 _DASH_SUFFIX = re.compile(r"\s+-\s+(.*)$")
+#: Where the first credited artist ends: a joiner after some name, never one
+#: that starts the credit ("X Ambassadors", "With Love" are names).
 _FURTHER_ARTISTS = re.compile(
-    r"\s*(,|_|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bx\b|\bwith\b).*$",
+    r"(?<=\S)\s*(,|_|&|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bx\b|\bwith\b).*$",
     re.IGNORECASE,
 )
 
