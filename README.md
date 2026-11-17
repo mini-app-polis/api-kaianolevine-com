@@ -426,14 +426,19 @@ because that is the last place that knows what a message means:
 |---|---|
 | `errors` | failed CI on the default branch, `/v1/notify` run reports declaring ERROR or worse (copied from `runs`; a WARN stays in `runs`), jobs dropped before reaching a queue, the last Spotify token-expiry reminder, this service's own 5xx and machine-facing 4xx, and a failed identity reconcile at boot |
 | `activity` | the running list of committed data changes, from the request middleware |
-| `runs` | cog run reports through `/v1/notify`, every severity (outside production, only the contract suite's result) |
+| `runs` | cog run reports through `/v1/notify`, every severity (outside production, only the contract suite's result), except those of a repo with a channel of its own |
+| `deejay-cog-runs` | deejay-cog's run reports, every severity, when `DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS` is set; unset, they stay in `runs` |
 | `default` | everything else — pushes, pull requests, issues, releases, green CI |
 
 Each channel has its own webhook variable — `DISCORD_WEBHOOK_URL_DEFAULT`,
 `DISCORD_WEBHOOK_URL_ERRORS`, `DISCORD_WEBHOOK_URL_ACTIVITY`,
 `DISCORD_WEBHOOK_URL_RUNS` — and each falls back to `DISCORD_WEBHOOK_URL`
 when unset. Separate variables rather than one map so each rotates on its
-own and reads at a glance in Doppler.
+own and reads at a glance in Doppler. A repo's own runs channel
+(`DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS`; `RUNS_CHANNELS` in
+`routers/notifications.py` names the repos) falls back to `runs` instead,
+and a report from it that declares ERROR or worse is still copied to
+`errors`.
 
 The fallback is the rollout strategy: channels are configured one at a
 time, and a channel that exists in code but not yet in Discord delivers to

@@ -1,8 +1,8 @@
 """Discord notification routes — one for GitHub, one for the fleet.
 
 Two callers, two admission rules, and three channels between them: failed CI
-goes to ``errors``, cog run reports to ``runs``, everything else to
-``default``. A run report that says something failed (ERROR or worse) is
+goes to ``errors``, cog run reports to ``runs`` (or to their repo's own
+channel, ``RUNS_CHANNELS``), everything else to ``default``. A run report that says something failed (ERROR or worse) is
 also copied to ``errors``, so ``runs`` stays the complete record and
 ``errors`` is still the one channel to watch. A WARN stays in ``runs``: it
 is worth reading, not worth being interrupted for. ``services.discord`` resolves a
@@ -546,6 +546,31 @@ COPY_TO_ERRORS: frozenset[str] = frozenset({"ERROR", "CRITICAL"})
 _REPORT_SEVERITIES: frozenset[str] = COPY_TO_ERRORS | {"SUCCESS", "INFO", "WARN"}
 
 
+#: Repos whose run reports go to a channel of their own instead of runs.
+RUNS_CHANNELS: dict[str, str] = {"deejay-cog": discord.CHANNEL_DEEJAY_COG_RUNS}
+
+#: How ``mini_app_polis.pipeline_status`` marks a report from outside
+#: production: ``"[DEVELOPMENT] "`` before the title.
+_ENV_LABEL = re.compile(r"^\[[^\]]*\]\s*")
+
+
+def runs_channel(payload: NotifyRequest) -> str:
+    """The channel a message to ``/v1/notify`` goes to: its repo's own
+    (``RUNS_CHANNELS``) when it is a run report from one, else runs.
+
+    The repo is read from the run report's title, which
+    ``pipeline_status`` writes as ``"<repo> · <flow>"``.
+    """
+    for embed in payload.embeds or []:
+        title = embed.get("title") if isinstance(embed, dict) else None
+        if not isinstance(title, str):
+            continue
+        repo, sep, _flow = _ENV_LABEL.sub("", title).partition(" · ")
+        if sep and repo.strip() in RUNS_CHANNELS:
+            return RUNS_CHANNELS[repo.strip()]
+    return discord.CHANNEL_RUNS
+
+
 def report_severity(payload: NotifyRequest) -> str | None:
     """The severity a run report declares, or None for any other message.
 
@@ -594,6 +619,8 @@ def is_contract_suite_result(payload: NotifyRequest, principal: Principal) -> bo
         "message body (content and/or embeds) and posts it to the runs "
         "channel, whatever the severity — a cog's reports stay together so "
         "that channel is a complete record of the fleet's runs. A run report "
+        "from a repo with a runs channel of its own (deejay-cog) goes there "
+        "instead, falling back to runs while its webhook is unset. A run report "
         "whose footer declares ERROR or CRITICAL is also copied to the "
         "errors channel. A run that died too hard to report itself is caught "
         "by its own cog's backstop where it has one — a queue-fed Lambda "
@@ -653,7 +680,7 @@ async def notify(
         session,
         settings,
         payload=message,
-        channel=discord.CHANNEL_RUNS,
+        channel=runs_channel(payload),
         context="notify",
         caller=caller,
         severity=severity,
