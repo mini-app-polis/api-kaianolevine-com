@@ -487,6 +487,9 @@ class PipelineEvaluation(Base):
     #: (migration 092). Null for rows that predate it and for self-reports.
     repo_version: Mapped[str | None] = mapped_column(String, nullable=True)
     repo_commit: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: pre-release or post-release when the release path asked for the
+    #: evaluation (migration 116). Null otherwise, and for rows before it.
+    phase: Mapped[str | None] = mapped_column(String, nullable=True)
     source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     flow_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 

@@ -922,3 +922,61 @@ async def test_losing_the_insert_race_answers_with_the_winners_row(
     assert resp.json()["data"]["id"] == str(rival_ids[0])
     assert resp.json()["data"]["deduplicated"] is True
     assert await _stored_rows(db_session) == 1
+
+
+# ── the release phase a finding was graded in ────────────────────────────
+
+
+async def _stored(db_session, finding_id: str) -> tuple:
+    result = await db_session.execute(
+        text(
+            "SELECT phase, repo_commit, repo_version FROM pipeline_evaluations "
+            "WHERE id = :id"
+        ),
+        {"id": finding_id},
+    )
+    return tuple(result.one())
+
+
+async def test_a_finding_records_its_phase_sha_and_version(client, db_session) -> None:
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    pre = await client.post(
+        "/v1/evaluations",
+        json=_finding(phase="pre-release", repo_commit=sha),
+    )
+    post = await client.post(
+        "/v1/evaluations",
+        json=_finding(
+            run_id="deterministic-7.0.0-def456",
+            phase="post-release",
+            repo_commit=sha,
+            repo_version="v1.44.0",
+        ),
+    )
+
+    assert pre.status_code == 200, pre.text
+    assert post.status_code == 200, post.text
+    # No tag exists before the release, so a pre-release row has no version.
+    assert await _stored(db_session, pre.json()["data"]["id"]) == (
+        "pre-release",
+        sha,
+        None,
+    )
+    assert await _stored(db_session, post.json()["data"]["id"]) == (
+        "post-release",
+        sha,
+        "v1.44.0",
+    )
+
+
+async def test_a_finding_without_a_phase_stores_none(client, db_session) -> None:
+    res = await client.post("/v1/evaluations", json=_finding())
+
+    assert res.status_code == 200, res.text
+    assert (await _stored(db_session, res.json()["data"]["id"]))[0] is None
+
+
+async def test_an_unknown_phase_is_refused(client) -> None:
+    res = await client.post("/v1/evaluations", json=_finding(phase="mid-release"))
+
+    assert res.status_code == 422

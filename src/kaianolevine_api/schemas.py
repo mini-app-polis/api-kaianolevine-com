@@ -1851,6 +1851,27 @@ class StandardsCatalogItem(BaseModel):
 
 # ── Evaluation trigger schemas ────────────────────────────────────────────────
 
+#: Where in a release an evaluation sits: the commit about to be released, or
+#: the release just published.
+EvaluationPhase = Literal["pre-release", "post-release"]
+
+
+class EvaluationFindingCreate(PipelineEvaluationCreate):
+    """``PipelineEvaluationCreate`` with the release phase it was graded in.
+
+    The shared contract does not carry ``phase`` yet and refuses fields it
+    does not know. Optional, so a finding without it is exactly the shared
+    model's.
+    """
+
+    phase: EvaluationPhase | None = Field(
+        default=None,
+        description=(
+            "pre-release or post-release when the release path asked for the "
+            "evaluation; null otherwise."
+        ),
+    )
+
 
 class EvaluationRunRequest(BaseModel):
     """Ask for one repository to be evaluated.
@@ -1895,6 +1916,31 @@ class EvaluationRunRequest(BaseModel):
         max_length=200,
         description="Group these findings with an existing run. Usually omitted.",
     )
+    sha: str | None = Field(
+        None,
+        min_length=7,
+        max_length=40,
+        pattern=r"^[0-9a-f]{7,40}$",
+        description=(
+            "The commit to evaluate, read instead of `ref`. Pins the "
+            "evaluation to the commit CI built; no release tag is needed."
+        ),
+    )
+    phase: EvaluationPhase | None = Field(
+        None,
+        description=(
+            "Where in the release this evaluation sits. Recorded on every "
+            "finding. A pre-release evaluation must name its `sha`: the "
+            "commit has no release tag yet, so nothing else says what was "
+            "graded."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _pre_release_names_its_commit(self) -> EvaluationRunRequest:
+        if self.phase == "pre-release" and not self.sha:
+            raise ValueError("a pre-release evaluation must name its sha")
+        return self
 
 
 class EvaluationRunAccepted(BaseModel):
@@ -1920,6 +1966,12 @@ class EvaluationRunAccepted(BaseModel):
     repo: str = Field(..., description="Repository that will be evaluated.")
     ref: str = Field(..., description="Ref that will be evaluated.")
     mode: str = Field(..., description="Engine that will run.")
+    sha: str | None = Field(
+        None, description="Commit that will be evaluated, when one was named."
+    )
+    phase: str | None = Field(
+        None, description="Release phase the findings will record, if any."
+    )
 
 
 class EvaluationIntrospectionRequest(BaseModel):
