@@ -170,6 +170,8 @@ export default defineRailway((ctx) => {
       CLERK_ISSUERS: preserve(),
       // The fallback for every Discord channel without its own webhook.
       DISCORD_WEBHOOK_URL: preserve(),
+      // deejay-cog's run reports' own channel; unset, they post to runs.
+      DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS: preserve(),
       // Switches config.py documents as changed without a deploy.
       GITHUB_NOTIFY_EVENTS: preserve(),
       SIGNAL_ORGS: preserve(),

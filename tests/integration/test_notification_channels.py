@@ -264,6 +264,30 @@ async def test_cog_reports_reach_the_runs_webhook(
     assert not errors.called
 
 
+DEEJAY_COG_URL = "https://discord.test/api/webhooks/5/deejay-cog"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_deejay_cog_reports_reach_their_own_webhook(
+    client: AsyncClient, channels, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """deejay-cog's run reports go to its own channel, not runs, once it is set."""
+    monkeypatch.setenv("DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS", DEEJAY_COG_URL)
+    get_settings.cache_clear()
+    runs = respx.post(RUNS_URL).mock(return_value=Response(204))
+    own = respx.post(DEEJAY_COG_URL).mock(return_value=Response(204))
+
+    resp = await client.post(
+        "/v1/notify",
+        json={"embeds": [{"title": "deejay-cog · new_music"}]},
+    )
+
+    assert resp.status_code == 200
+    assert own.called
+    assert not runs.called
+
+
 def _report(severity: str) -> dict:
     """A run report as mini_app_polis.pipeline_status renders one."""
     return {

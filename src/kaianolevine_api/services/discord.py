@@ -70,6 +70,7 @@ from ..config import Settings
 
 __all__ = [
     "CHANNEL_ACTIVITY",
+    "CHANNEL_DEEJAY_COG_RUNS",
     "CHANNEL_DEFAULT",
     "CHANNEL_ERRORS",
     "CHANNEL_RUNS",
@@ -86,6 +87,16 @@ __all__ = [
 ]
 
 logger = get_logger()
+
+#: deejay-cog's run reports, in a channel of their own.
+CHANNEL_DEEJAY_COG_RUNS = "deejay-cog-runs"
+
+#: This service's own channels: each one's ``Settings`` webhook, and the
+#: shared channel it posts to while that webhook is unset or blank, so a
+#: channel that exists in code before it exists in Discord still delivers.
+OWN_CHANNELS: dict[str, tuple[str, str]] = {
+    CHANNEL_DEEJAY_COG_RUNS: ("DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS", CHANNEL_RUNS),
+}
 
 #: Seconds a GitHub delivery's notification may wait on Discord's rate
 #: limits before it is dropped. GitHub gives a delivery ten seconds to be
@@ -258,14 +269,33 @@ def webhook_source(settings: Settings) -> dict[str, str | None]:
     return {name: getattr(settings, name, None) for name in names}
 
 
+def _source_for(settings: Settings, channel: str) -> dict[str, str | None]:
+    """Where ``channel``'s webhook is read from, in the shared transport's
+    terms: ``webhook_source`` for a shared channel; for one of this
+    service's own channels (``OWN_CHANNELS``), its own webhook when set,
+    else the source of the shared channel it falls back to.
+    """
+    own = OWN_CHANNELS.get(channel)
+    if own is None:
+        return webhook_source(settings)
+    setting, fallback = own
+    url = (getattr(settings, setting, None) or "").strip()
+    if url:
+        # The transport reads an unknown channel from the fallback name.
+        return {_transport.FALLBACK_ENV: url}
+    return {_transport.FALLBACK_ENV: discord_base_url(settings, fallback)}
+
+
 def discord_base_url(settings: Settings, channel: str = CHANNEL_DEFAULT) -> str | None:
     """This channel's webhook URL with any ``/github`` suffix removed.
 
     Reads this channel's own ``DISCORD_WEBHOOK_URL_*`` setting and falls
     back to ``DISCORD_WEBHOOK_URL`` when it is unset, so an unsplit channel
-    delivers to the original webhook rather than nowhere.
+    delivers to the original webhook rather than nowhere. One of this
+    service's own channels (``OWN_CHANNELS``) reads its own setting and
+    falls back to the shared channel named there.
     """
-    return _transport.webhook_url(channel, source=webhook_source(settings))
+    return _transport.webhook_url(channel, source=_source_for(settings, channel))
 
 
 def _github_headers(event: str, delivery: str | None) -> dict[str, str]:
@@ -379,7 +409,7 @@ async def send_message(
         channel,
         payload,
         context=context,
-        source=webhook_source(settings),
+        source=_source_for(settings, channel),
         timeout=settings.HTTP_CLIENT_TIMEOUT_SECS,
         max_wait=max_wait,
     )
