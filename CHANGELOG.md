@@ -1,3 +1,10 @@
+## [2.98.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.98.0...v2.98.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **signals:** pace new Issues and wait out GitHub's rate limit instead of reporting it ([f80970f](https://github.com/mini-app-polis/api-kaianolevine-com/commit/f80970fe21f41f6c524048fff4ac82d58b51b8fe))
+
 # [2.98.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.97.1...v2.98.0) (2026-11-17)
 
 
