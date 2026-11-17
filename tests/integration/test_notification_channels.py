@@ -371,6 +371,57 @@ async def test_data_changes_reach_the_activity_webhook(channels) -> None:
     assert not errors.called
 
 
+DEEJAY_COG_ACTIVITY_URL = "https://discord.test/api/webhooks/6/deejay-cog-activity"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_deejay_cog_changes_reach_their_own_webhook(
+    channels, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """deejay-cog's data changes go to its own channel, not activity, once set."""
+    monkeypatch.setenv(
+        "DEEJAY_COG_DISCORD_WEBHOOK_URL_ACTIVITY", DEEJAY_COG_ACTIVITY_URL
+    )
+    get_settings.cache_clear()
+    act = respx.post(ACTIVITY_URL).mock(return_value=Response(204))
+    own = respx.post(DEEJAY_COG_ACTIVITY_URL).mock(return_value=Response(204))
+
+    await activity.emit_change(
+        settings=get_settings(),
+        method="POST",
+        path="/v1/deejay/library/files",
+        actor="deejay-cog",
+        summary="`library_files` +3",
+        legend=False,
+    )
+
+    assert own.called
+    assert not act.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_deejay_cog_changes_stay_in_activity_while_unset(
+    channels, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With its own webhook unset, deejay-cog's changes still reach activity."""
+    monkeypatch.delenv("DEEJAY_COG_DISCORD_WEBHOOK_URL_ACTIVITY", raising=False)
+    get_settings.cache_clear()
+    act = respx.post(ACTIVITY_URL).mock(return_value=Response(204))
+
+    await activity.emit_change(
+        settings=get_settings(),
+        method="POST",
+        path="/v1/deejay/library/files",
+        actor="deejay-cog",
+        summary="`library_files` +3",
+        legend=False,
+    )
+
+    assert act.called
+
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_faults_reach_the_errors_webhook(channels) -> None:

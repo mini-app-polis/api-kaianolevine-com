@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # deejay-cog's run reports, in a channel of their own
     # (services.discord.OWN_CHANNELS). Unset or blank, they post to runs.
     DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS: str | None = None
+    # deejay-cog's data changes, in a channel of their own
+    # (services.activity.CHANGE_CHANNELS). Unset or blank, they post to activity.
+    DEEJAY_COG_DISCORD_WEBHOOK_URL_ACTIVITY: str | None = None
     # ── Discord delivery (services.discord, services.discord_outbox) ─────
     # The wait a route's send, or one of the outbox drainer's, gets on
     # Discord's rate limits before the message is kept in the outbox and
