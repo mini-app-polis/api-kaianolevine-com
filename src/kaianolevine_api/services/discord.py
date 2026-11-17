@@ -70,6 +70,7 @@ from ..config import Settings
 
 __all__ = [
     "CHANNEL_ACTIVITY",
+    "CHANNEL_DEEJAY_COG_ACTIVITY",
     "CHANNEL_DEEJAY_COG_RUNS",
     "CHANNEL_DEFAULT",
     "CHANNEL_ERRORS",
@@ -91,11 +92,18 @@ logger = get_logger()
 #: deejay-cog's run reports, in a channel of their own.
 CHANNEL_DEEJAY_COG_RUNS = "deejay-cog-runs"
 
+#: deejay-cog's data changes (the running list), in a channel of their own.
+CHANNEL_DEEJAY_COG_ACTIVITY = "deejay-cog-activity"
+
 #: This service's own channels: each one's ``Settings`` webhook, and the
 #: shared channel it posts to while that webhook is unset or blank, so a
 #: channel that exists in code before it exists in Discord still delivers.
 OWN_CHANNELS: dict[str, tuple[str, str]] = {
     CHANNEL_DEEJAY_COG_RUNS: ("DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS", CHANNEL_RUNS),
+    CHANNEL_DEEJAY_COG_ACTIVITY: (
+        "DEEJAY_COG_DISCORD_WEBHOOK_URL_ACTIVITY",
+        CHANNEL_ACTIVITY,
+    ),
 }
 
 #: Seconds a GitHub delivery's notification may wait on Discord's rate

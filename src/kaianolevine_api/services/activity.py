@@ -12,7 +12,8 @@ What stays here is this service's policy, read from ``Settings`` on every
 request: ``NOTIFY_*`` switches, the per-environment event allow-list
 (``DISCORD_NOTIFY_EVENTS``), suppressed tables and excluded paths, its
 machine callers (``request.state.caller_kind``, stamped by ``auth``), and
-delivery through ``services.discord_outbox`` (:func:`deliver`) so webhooks
+the callers whose changes have a channel of their own (``CHANGE_CHANNELS``),
+and delivery through ``services.discord_outbox`` (:func:`deliver`) so webhooks
 resolve from ``Settings`` and a message a rate limit holds is kept and sent
 later rather than dropped. Every message's footer names ``api-kaianolevine-com`` and
 ``settings.ENVIRONMENT``. Only production posts change summaries and
@@ -49,6 +50,7 @@ from . import discord, discord_outbox, fault_signals
 
 __all__ = [
     "BULK",
+    "CHANGE_CHANNELS",
     "CREATED",
     "DATA_CHANGED",
     "DELETED",
@@ -57,6 +59,7 @@ __all__ = [
     "UPDATED",
     "Recorder",
     "activity_middleware",
+    "change_channel",
     "emit_change",
     "emit_fault",
     "event_enabled",
@@ -117,6 +120,26 @@ async def deliver(
     return outcome is not discord.Outcome.REFUSED
 
 
+#: Callers whose change summaries go to a channel of their own instead of
+#: activity, by the actor the feed names them with (a machine's principal
+#: display name). ``services.discord.OWN_CHANNELS`` falls each one back to
+#: activity while its webhook is unset or blank.
+CHANGE_CHANNELS: dict[str, str] = {
+    "deejay-cog": discord.CHANNEL_DEEJAY_COG_ACTIVITY,
+}
+
+
+def change_channel(actor: str, machine: bool) -> str:
+    """The channel ``actor``'s change summary goes to: its own
+    (``CHANGE_CHANNELS``), else activity.
+
+    Matched on the actor alone: ``machine`` is only known when
+    ``NOTIFY_MACHINE_CLIENT_ERRORS`` sets ``is_machine``, and the names in
+    ``CHANGE_CHANNELS`` are machine principals' names.
+    """
+    return CHANGE_CHANNELS.get(actor, discord.CHANNEL_ACTIVITY)
+
+
 def _config(settings: Settings) -> _activity.ActivityConfig:
     """This service's feed policy, as ``Settings`` has it right now."""
 
@@ -135,6 +158,7 @@ def _config(settings: Settings) -> _activity.ActivityConfig:
         is_machine=_is_machine if settings.NOTIFY_MACHINE_CLIENT_ERRORS else None,
         send=send,
         label=True,
+        change_channel=change_channel,
     )
 
 

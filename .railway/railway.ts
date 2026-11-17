@@ -172,6 +172,8 @@ export default defineRailway((ctx) => {
       DISCORD_WEBHOOK_URL: preserve(),
       // deejay-cog's run reports' own channel; unset, they post to runs.
       DEEJAY_COG_DISCORD_WEBHOOK_URL_RUNS: preserve(),
+      // deejay-cog's data changes' own channel; unset, they post to activity.
+      DEEJAY_COG_DISCORD_WEBHOOK_URL_ACTIVITY: preserve(),
       // Switches config.py documents as changed without a deploy.
       GITHUB_NOTIFY_EVENTS: preserve(),
       SIGNAL_ORGS: preserve(),
