@@ -314,20 +314,25 @@ async def reminder_loop(settings: Settings) -> None:
 
     Started from the app's lifespan and cancelled at shutdown. Never raises
     out of an iteration: a Doppler or database blip is logged and the next
-    tick tries again.
+    tick tries again. Reminders are days apart, so one failed check logs at
+    WARNING; only a second consecutive failure logs at ERROR.
     """
     from ..database import get_sessionmaker
 
     interval = max(settings.SPOTIFY_TOKEN_CHECK_INTERVAL_SECS, 60)
+    failures = 0
     while True:
         try:
             maker = get_sessionmaker(settings.DATABASE_URL)
             async with maker() as session:
                 await check_and_remind(settings, session)
+            failures = 0
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - see docstring
-            logger.error(
+            failures += 1
+            log = logger.error if failures >= 2 else logger.warning
+            log(
                 with_log_prefix(
                     LOG_FAILURE,
                     f"spotify token check failed: {type(exc).__name__}",

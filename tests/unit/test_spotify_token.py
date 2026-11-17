@@ -122,3 +122,61 @@ def test_reminder_messages_carry_the_link_and_never_a_token(monkeypatch) -> None
         assert embed["url"] == "https://api.example/v1/spotify/authorize"
         assert "https://api.example/v1/spotify/authorize" in embed["description"]
         assert "2027-04-09" in embed["description"]
+
+
+class _FakeSession:
+    async def __aenter__(self) -> _FakeSession:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+
+def _run_loop(monkeypatch, caplog, outcomes: list[bool]) -> list[tuple[str, str]]:
+    """Run reminder_loop once per outcome (True = success); return (level, msg)."""
+    import asyncio
+
+    from kaianolevine_api import database
+
+    monkeypatch.setattr(database, "get_sessionmaker", lambda _url: _FakeSession)
+    remaining = iter(outcomes)
+
+    async def fake_check(_settings, _session) -> None:
+        if not next(remaining):
+            raise RuntimeError("doppler timeout")
+
+    class _Stop(BaseException):
+        pass
+
+    ticks = 0
+
+    async def fake_sleep(_secs) -> None:
+        nonlocal ticks
+        ticks += 1
+        if ticks >= len(outcomes):
+            raise _Stop
+
+    monkeypatch.setattr(st, "check_and_remind", fake_check)
+    monkeypatch.setattr(st.asyncio, "sleep", fake_sleep)
+    with caplog.at_level("DEBUG"), pytest.raises(_Stop):
+        asyncio.run(st.reminder_loop(get_settings()))
+    return [
+        (r.levelname, r.getMessage())
+        for r in caplog.records
+        if "spotify token check failed" in r.getMessage()
+    ]
+
+
+def test_one_failed_check_logs_at_warning(monkeypatch, caplog) -> None:
+    logs = _run_loop(monkeypatch, caplog, [False])
+    assert [level for level, _ in logs] == ["WARNING"]
+
+
+def test_a_second_consecutive_failure_logs_at_error(monkeypatch, caplog) -> None:
+    logs = _run_loop(monkeypatch, caplog, [False, False])
+    assert [level for level, _ in logs] == ["WARNING", "ERROR"]
+
+
+def test_a_success_resets_the_failure_count(monkeypatch, caplog) -> None:
+    logs = _run_loop(monkeypatch, caplog, [False, True, False])
+    assert [level for level, _ in logs] == ["WARNING", "WARNING"]
