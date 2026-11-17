@@ -531,6 +531,17 @@ async def _escalate(
             {"id": streak_id},
         )
         await session.commit()
+        if isinstance(exc, github_issues.IssueRateLimited):
+            # Not a fault: GitHub asked to slow down. Reporting it would
+            # file one more signal per refusal, each wanting an Issue too.
+            logger.warning(
+                "signals: %s %s waits for its next failure, GitHub is rate "
+                "limiting: %s",
+                signal.kind,
+                signal.key,
+                exc,
+            )
+            return "dropped"
         await job_queue.report_dropped(
             f"could not open an Issue for {signal.kind} {signal.key}: {exc}",
             label="signals",

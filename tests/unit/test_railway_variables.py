@@ -30,6 +30,7 @@ DEVELOPMENT_ONLY = {m.name for m in identity_registry.MACHINES if m.development_
 NOT_DECLARED: dict[str, str] = {
     "HTTP_CLIENT_TIMEOUT_SECS": "overridden by tests only",
     "GITHUB_DEFAULT_BRANCH": "fallback for payloads without a default branch",
+    "GITHUB_ISSUE_CREATE_INTERVAL_SECONDS": "code default, reviewed in config.py",
     "SPOTIFY_DOPPLER_PROJECT": "the code default is the production project",
     "SPOTIFY_DOPPLER_CONFIG": "the code default is the production config",
     "DOPPLER_WEBHOOK_PROJECT": "the code default is the recorded Doppler project",

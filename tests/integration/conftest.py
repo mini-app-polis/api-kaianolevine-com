@@ -93,6 +93,7 @@ os.environ.setdefault(
     "DISCORD_WEBHOOK_URL", "https://discord.test/api/webhooks/1/token"
 )
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-github-secret")
+os.environ.setdefault("GITHUB_ISSUE_CREATE_INTERVAL_SECONDS", "0")
 os.environ.setdefault("DOPPLER_WEBHOOK_SECRET", "test-doppler-secret")
 os.environ.setdefault("SENTRY_WEBHOOK_SECRET", "test-sentry-secret")
 # Discord embed titles stay unmarked unless a test opts into non-production.

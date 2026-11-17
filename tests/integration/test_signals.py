@@ -342,6 +342,31 @@ async def test_an_issue_that_cannot_be_opened_is_reported_and_retried(
 
 
 @pytest.mark.asyncio
+async def test_a_rate_limited_issue_waits_without_a_report(
+    db_session: AsyncSession, issues
+) -> None:
+    settings = get_settings()
+    rule = signals.Rule(escalate_after=1)
+    issues.open.side_effect = [
+        github_issues.IssueRateLimited(
+            "a new Issue in x: GitHub answered 403 (secondary rate limit)"
+        ),
+        github_issues.Issue(REPO, 9, f"https://github.com/{REPO}/issues/9"),
+    ]
+    with patch.object(job_queue, "report_dropped", AsyncMock()) as reported:
+        first = await signals.observe(
+            db_session, _signal(), rule=rule, settings=settings
+        )
+        second = await signals.observe(
+            db_session, _signal(), rule=rule, settings=settings
+        )
+
+    assert (first, second) == ("dropped", "escalated")
+    reported.assert_not_awaited()
+    assert await _streaks(db_session) == [(2, 0, True, False)]
+
+
+@pytest.mark.asyncio
 async def test_a_signal_that_names_no_repository_is_reported(
     db_session: AsyncSession, issues
 ) -> None:

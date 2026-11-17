@@ -13,10 +13,17 @@ and issued by ``SIGNALS_APP_CLIENT_ID`` buys an installation token for the
 repository, kept for its owner until shortly before it expires. Without the
 App's credentials, or on any refusal, a call raises :class:`IssueError`;
 nothing here retries.
+
+GitHub limits how fast content is created and answers a burst with 403 or
+429 (its secondary rate limit). New Issues are therefore opened one at a
+time, ``GITHUB_ISSUE_CREATE_INTERVAL_SECONDS`` apart, and a refusal for the
+rate is raised as :class:`IssueRateLimited`, so a caller can treat it as
+"later" rather than as a fault.
 """
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import time
 from dataclasses import dataclass
@@ -49,9 +56,18 @@ _PAGE_SIZE = 100
 # Installation tokens by repository owner: (token, expires at, epoch seconds).
 _tokens: dict[str, tuple[str, float]] = {}
 
+# Issue creation, one at a time: the lock, and when the last one was sent
+# (monotonic seconds).
+_create_lock = asyncio.Lock()
+_last_create = 0.0
+
 
 class IssueError(Exception):
     """GitHub could not be asked, or refused."""
+
+
+class IssueRateLimited(IssueError):
+    """GitHub refused for the rate of requests, not for the request itself."""
 
 
 @dataclass(frozen=True)
@@ -116,9 +132,35 @@ async def _call(
         raise IssueError(f"{method} {path}: {type(exc).__name__}") from exc
 
 
+def _github_message(response: httpx.Response) -> str:
+    """GitHub's own ``message`` for a refusal, or an empty string."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    return str(body.get("message") or "") if isinstance(body, dict) else ""
+
+
+def _rate_limited(response: httpx.Response, message: str) -> bool:
+    """Whether a 403 or 429 is GitHub's rate limit rather than a refusal."""
+    if response.status_code not in (403, 429):
+        return False
+    return (
+        "retry-after" in response.headers
+        or response.headers.get("x-ratelimit-remaining") == "0"
+        or "rate limit" in message.lower()
+    )
+
+
 def _expect(response: httpx.Response, status: int, what: str) -> Any:
     if response.status_code != status:
-        raise IssueError(f"{what}: GitHub answered {response.status_code}")
+        message = _github_message(response)
+        error = f"{what}: GitHub answered {response.status_code}"
+        if message:
+            error += f" ({message})"
+        if _rate_limited(response, message):
+            raise IssueRateLimited(error)
+        raise IssueError(error)
     return response.json() if response.content else None
 
 
@@ -205,22 +247,29 @@ async def open_issue(
     repo: str, *, marker: str, title: str, body: str, settings: Settings
 ) -> Issue:
     """Open an Issue named by ``marker``, or return the one already open."""
+    global _last_create
     existing = await find_open(repo, marker, settings=settings)
     if existing is not None:
         logger.info(
             "issues: %s#%d is already open for %s", repo, existing.number, marker
         )
         return existing
-    created = _expect(
-        await _call(
-            "POST",
-            f"/repos/{repo}/issues",
-            authorization=await _authorized(repo, settings),
-            json={"title": title, "body": f"{body}\n\n{marker_comment(marker)}"},
-        ),
-        201,
-        f"a new Issue in {repo}",
-    )
+    authorization = await _authorized(repo, settings)
+    async with _create_lock:
+        wait = _last_create + settings.GITHUB_ISSUE_CREATE_INTERVAL_SECONDS
+        wait -= time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            response = await _call(
+                "POST",
+                f"/repos/{repo}/issues",
+                authorization=authorization,
+                json={"title": title, "body": f"{body}\n\n{marker_comment(marker)}"},
+            )
+        finally:
+            _last_create = time.monotonic()
+    created = _expect(response, 201, f"a new Issue in {repo}")
     issue = Issue(repo, int(created["number"]), str(created["html_url"]))
     logger.info("issues: opened %s#%d for %s", repo, issue.number, marker)
     return issue

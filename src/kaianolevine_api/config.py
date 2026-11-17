@@ -166,6 +166,10 @@ class Settings(BaseSettings):
     # Consecutive failing runs of one cog flow (run reports at ERROR or
     # CRITICAL) before an Issue. There is no remedy: the next run is the retry.
     SIGNAL_RUN_ESCALATE_AFTER: int = 2
+    # The least time between two new Issues. GitHub asks for at least a
+    # second between requests that create content, and answers a burst
+    # (one evaluation's findings across the fleet) with its rate limit.
+    GITHUB_ISSUE_CREATE_INTERVAL_SECONDS: float = 1.0
     # Every 5xx opens an Issue on its route's first fault. A 502, 503 or 504
     # (a dependency failing) closes once its route has gone this many hours
     # without it; a 500 closes only through a fixing pull request.
