@@ -330,7 +330,7 @@ async def reminder_loop(settings: Settings) -> None:
             logger.error(
                 with_log_prefix(
                     LOG_FAILURE,
-                    f"spotify token check failed: {type(exc).__name__}",
+                    f"spotify token check failed: {type(exc).__name__}: {exc}",
                 )
             )
         await asyncio.sleep(interval)
