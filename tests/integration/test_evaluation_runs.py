@@ -110,6 +110,68 @@ async def test_an_unknown_mode_is_rejected(client) -> None:
     assert response.status_code == 422
 
 
+_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+@pytest.mark.parametrize("phase", ["pre-release", "post-release"])
+async def test_a_sha_and_phase_are_passed_through(client, monkeypatch, phase) -> None:
+    """CI names the commit it built and where in the release it stands."""
+    _configured(monkeypatch)
+
+    with patch.object(
+        dispatch, "dispatch_evaluation", AsyncMock(return_value={"message_id": "m-9"})
+    ) as dispatched:
+        response = await client.post(
+            "/v1/evaluations/runs",
+            json={"repo": "watcher-cog", "ref": "main", "sha": _SHA, "phase": phase},
+        )
+
+    assert response.status_code == 202, response.text
+    data = response.json()["data"]
+    assert (data["sha"], data["phase"]) == (_SHA, phase)
+
+    job = dispatched.await_args.args[0]
+    assert (job.ref, job.sha, job.phase) == ("main", _SHA, phase)
+
+
+async def test_a_request_without_sha_or_phase_is_unchanged(client, monkeypatch) -> None:
+    _configured(monkeypatch)
+
+    with patch.object(
+        dispatch, "dispatch_evaluation", AsyncMock(return_value={"message_id": "m-9"})
+    ) as dispatched:
+        response = await client.post(
+            "/v1/evaluations/runs", json={"repo": "watcher-cog"}
+        )
+
+    assert response.status_code == 202, response.text
+    data = response.json()["data"]
+    assert (data["sha"], data["phase"]) == (None, None)
+    job = dispatched.await_args.args[0]
+    assert (job.sha, job.phase) == (None, None)
+    assert "sha" not in job.as_message()["payload"]
+    assert "phase" not in job.as_message()["payload"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A pre-release commit has no tag yet, so only its sha says what
+        # was graded.
+        {"phase": "pre-release"},
+        {"phase": "mid-release", "sha": _SHA},
+        {"sha": "not-a-sha"},
+        {"sha": "abc12"},
+        {"sha": _SHA.upper()},
+    ],
+)
+async def test_an_unusable_sha_or_phase_is_rejected(client, body) -> None:
+    response = await client.post(
+        "/v1/evaluations/runs", json={"repo": "watcher-cog", **body}
+    )
+    assert response.status_code == 422, response.text
+
+
 # ── the seam itself ──────────────────────────────────────────────────────
 
 
@@ -144,6 +206,33 @@ async def test_enqueue_sends_the_repository_message_shape(monkeypatch) -> None:
     # Readable without parsing the body — one queue serves the whole fleet,
     # so a consumer has to recognise a shape it does not handle.
     assert sent["MessageAttributes"]["type"]["StringValue"] == ("evaluation.repository")
+
+
+async def test_enqueue_carries_the_sha_and_phase(monkeypatch) -> None:
+    settings = _settings(monkeypatch)
+    sqs = _sqs("m-1")
+
+    job = dispatch.EvaluationJob(
+        repo="watcher-cog",
+        ref="main",
+        org="mini-app-polis",
+        mode="deterministic",
+        sha=_SHA,
+        phase="pre-release",
+    )
+    with patch.object(job_queue.boto3, "client", return_value=sqs):
+        await dispatch.dispatch_evaluation(job, settings=settings)
+
+    body = json.loads(sqs.send_message.call_args.kwargs["MessageBody"])
+    assert body["type"] == "evaluation.repository"
+    assert body["payload"] == {
+        "repo": "watcher-cog",
+        "ref": "main",
+        "org": "mini-app-polis",
+        "mode": "deterministic",
+        "sha": _SHA,
+        "phase": "pre-release",
+    }
 
 
 async def test_development_cannot_reach_the_production_queue(monkeypatch) -> None:

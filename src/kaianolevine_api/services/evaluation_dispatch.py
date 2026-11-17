@@ -37,16 +37,17 @@ the message it enqueued, so that is what it returns.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from mini_app_polis import activity
 from mini_app_polis.api.contract import (
     EvaluationIntrospectionMessage,
     EvaluationIntrospectionPayload,
-    EvaluationRepositoryMessage,
     EvaluationRepositoryPayload,
+    QueueMessage,
 )
 from mini_app_polis.logger import get_logger
+from pydantic import Field
 
 from ..config import Settings
 from . import fleet_registry, job_queue
@@ -58,13 +59,31 @@ logger = get_logger()
 _HEADING = "Evaluation not dispatched"
 
 
+class RepositoryPayload(EvaluationRepositoryPayload):
+    """The shared payload plus the commit and release phase CI pinned.
+
+    The shared contract does not carry ``sha`` or ``phase`` yet, and would
+    drop them unsent. Both optional and omitted when unset, so a message
+    without them is byte-for-byte the shared model's.
+    """
+
+    sha: str | None = Field(default=None, description="The commit to evaluate.")
+    phase: str | None = Field(default=None, description="pre-release or post-release.")
+
+
+class RepositoryMessage(QueueMessage[RepositoryPayload]):
+    """``evaluation.repository``, carrying :class:`RepositoryPayload`."""
+
+    type: Literal["evaluation.repository"] = "evaluation.repository"
+
+
 def _repository_message(payload: dict[str, Any]) -> dict[str, Any]:
     """One ``evaluation.repository`` message carrying ``payload``.
 
     Fields the payload leaves out stay out, rather than being sent as null.
     """
-    return EvaluationRepositoryMessage(
-        payload=EvaluationRepositoryPayload.model_validate(payload)
+    return RepositoryMessage(
+        payload=RepositoryPayload.model_validate(payload)
     ).model_dump(mode="json", exclude_none=True)
 
 
@@ -78,6 +97,10 @@ class EvaluationJob:
     mode: str
     repo_id: str | None = None
     run_id: str | None = None
+    #: The commit to read instead of ``ref``, when CI pinned one.
+    sha: str | None = None
+    #: ``pre-release`` or ``post-release``, when the release path asked.
+    phase: str | None = None
 
     def as_message(self) -> dict[str, Any]:
         """Render this job as one ``evaluation.repository`` queue message.
@@ -95,6 +118,10 @@ class EvaluationJob:
             payload["repo_id"] = self.repo_id
         if self.run_id:
             payload["run_id"] = self.run_id
+        if self.sha:
+            payload["sha"] = self.sha
+        if self.phase:
+            payload["phase"] = self.phase
         return _repository_message(payload)
 
 

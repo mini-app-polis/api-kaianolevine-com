@@ -18,6 +18,7 @@ from ..models import PipelineEvaluation as DbEval
 from ..models import StandardsCatalog as DbCatalog
 from ..schemas import (
     Envelope,
+    EvaluationFindingCreate,
     EvaluationFleetAccepted,
     EvaluationFleetRepo,
     EvaluationFleetRequest,
@@ -26,7 +27,6 @@ from ..schemas import (
     EvaluationRunAccepted,
     EvaluationRunRequest,
     EvaluationSummaryItem,
-    PipelineEvaluationCreate,
     PipelineEvaluationItem,
     PipelineEvaluationWriteResult,
     api_error,
@@ -315,7 +315,7 @@ def _write_result(
     description="Write pipeline evaluation findings. Protected (owner-based placeholder auth).",
 )
 async def create_evaluation(
-    payload: PipelineEvaluationCreate,
+    payload: EvaluationFindingCreate,
     owner_id_principal: Principal = Depends(
         require_scope("pipeline.evaluations.write")
     ),
@@ -383,6 +383,7 @@ async def create_evaluation(
         evaluator_version=payload.evaluator_version,
         repo_version=payload.repo_version,
         repo_commit=payload.repo_commit,
+        phase=payload.phase,
         source=payload.source,
         flow_name=payload.flow_name,
         fingerprint=fingerprint,
@@ -487,6 +488,8 @@ async def create_evaluation_run(
         mode=payload.mode,
         repo_id=payload.repo_id,
         run_id=payload.run_id,
+        sha=payload.sha,
+        phase=payload.phase,
     )
 
     try:
@@ -505,6 +508,8 @@ async def create_evaluation_run(
         repo=payload.repo,
         ref=payload.ref,
         mode=payload.mode,
+        sha=payload.sha,
+        phase=payload.phase,
     )
     return success_envelope(data, count=1, total=1)
 
