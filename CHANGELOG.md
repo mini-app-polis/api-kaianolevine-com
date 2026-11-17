@@ -1,3 +1,15 @@
+# [2.96.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.4...v2.96.0) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.14.0 ([9d0f4eb](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9d0f4eb09c6f2dad9a07a853a43d01ea94c382d2))
+
+
+### Features
+
+* **notify:** post deejay-cog's run reports to their own Discord channel ([00a46fe](https://github.com/mini-app-polis/api-kaianolevine-com/commit/00a46fe8b54801cf021726fec911afc3484e78ea))
+
 ## [2.95.4](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.3...v2.95.4) (2026-11-16)
 
 
