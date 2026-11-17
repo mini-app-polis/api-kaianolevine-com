@@ -637,7 +637,10 @@ an error, the route no longer answering the status), what a fix must not do
 (silence the check), and the streak so far. Each further failure of an
 escalated streak comments on the Issue. An Issue that cannot be opened (the
 App not configured, GitHub refuses) is reported and the claim released, so
-the next failure tries again.
+the next failure tries again. New Issues are opened one at a time,
+`GITHUB_ISSUE_CREATE_INTERVAL_SECONDS` (1) apart, since GitHub answers a burst
+of new content with its rate limit; a refusal that is that rate limit is only
+logged, not reported, and the claim is released the same way.
 
 When an escalated streak closes, its Issue is commented and closed: a streak
 closed by its recovery event names that event and links it where the event

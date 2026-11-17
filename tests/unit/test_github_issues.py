@@ -42,6 +42,7 @@ def settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SIGNALS_APP_CLIENT_ID", "Iv-signals")
     # Held in one line, as a secret store keeps it.
     monkeypatch.setenv("SIGNALS_APP_PRIVATE_KEY", PRIVATE_PEM.replace("\n", "\\n"))
+    monkeypatch.setenv("GITHUB_ISSUE_CREATE_INTERVAL_SECONDS", "0")
     get_settings.cache_clear()
     github_issues._tokens.clear()
     yield get_settings()
@@ -212,3 +213,78 @@ async def test_a_refusal_raises_an_issue_error(settings) -> None:
 
     with pytest.raises(github_issues.IssueError, match="404"):
         await github_issues.comment(REPO, 5, "x", settings=settings)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_refusal_carries_githubs_message(settings) -> None:
+    _app_token_routes()
+    respx.post(f"{GH}/repos/{REPO}/issues/5/comments").mock(
+        return_value=Response(
+            403, json={"message": "Resource not accessible by integration"}
+        )
+    )
+
+    with pytest.raises(github_issues.IssueError) as raised:
+        await github_issues.comment(REPO, 5, "x", settings=settings)
+    assert not isinstance(raised.value, github_issues.IssueRateLimited)
+    assert "403 (Resource not accessible by integration)" in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("status", "headers", "message"),
+    [
+        (403, {"retry-after": "60"}, "slow down"),
+        (403, {"x-ratelimit-remaining": "0"}, "API rate limit exceeded"),
+        (403, {}, "You have exceeded a secondary rate limit."),
+        (429, {}, "Too many requests, rate limit"),
+    ],
+)
+@respx.mock
+@pytest.mark.asyncio
+async def test_a_rate_limit_is_raised_as_rate_limited(
+    settings, status: int, headers: dict[str, str], message: str
+) -> None:
+    _app_token_routes()
+    respx.get(f"{GH}/repos/{REPO}/issues").mock(return_value=Response(200, json=[]))
+    respx.post(f"{GH}/repos/{REPO}/issues").mock(
+        return_value=Response(status, headers=headers, json={"message": message})
+    )
+
+    with pytest.raises(github_issues.IssueRateLimited, match=str(status)):
+        await github_issues.open_issue(
+            REPO, marker=MARKER, title="t", body="b", settings=settings
+        )
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_new_issues_are_spaced_by_the_configured_interval(
+    settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "GITHUB_ISSUE_CREATE_INTERVAL_SECONDS", 30.0)
+    monkeypatch.setattr(github_issues, "_last_create", 0.0)
+    clock = [1000.0]
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(github_issues.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(github_issues.asyncio, "sleep", fake_sleep)
+    _app_token_routes()
+    respx.get(f"{GH}/repos/{REPO}/issues").mock(return_value=Response(200, json=[]))
+    respx.post(f"{GH}/repos/{REPO}/issues").mock(
+        return_value=Response(
+            201, json={"number": 5, "html_url": f"https://github.com/{REPO}/issues/5"}
+        )
+    )
+
+    for _ in range(2):
+        await github_issues.open_issue(
+            REPO, marker=MARKER, title="t", body="b", settings=settings
+        )
+
+    # The first goes at once; the second waits out the interval.
+    assert slept == [30.0]
