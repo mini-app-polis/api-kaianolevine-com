@@ -1,3 +1,10 @@
+# [2.98.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.97.1...v2.98.0) (2026-11-17)
+
+
+### Features
+
+* **evaluations:** accept a commit sha and release phase on evaluation runs ([bfb397d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/bfb397d7f8564d9d937ce0b9f917a0464c8f3c41))
+
 ## [2.97.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.97.0...v2.97.1) (2026-11-17)
 
 
