@@ -1,3 +1,17 @@
+# [2.97.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.96.0...v2.97.0) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.14.1 ([40c63cf](https://github.com/mini-app-polis/api-kaianolevine-com/commit/40c63cf05cbc20f8db0db0944bbbc1b63c8ed3c0))
+* **spotify-token:** log the exception message when the token check fails ([9be372d](https://github.com/mini-app-polis/api-kaianolevine-com/commit/9be372da0339753a4cc7068358bc83574bf76686))
+
+
+### Features
+
+* **notify:** post deejay-cog's data changes to their own Discord channel ([b754f16](https://github.com/mini-app-polis/api-kaianolevine-com/commit/b754f168ef510fe7d1a3d33476dbbc994b49ddfe))
+* **notify:** route deejay-cog's change summaries to their own channel by caller ([316fa2b](https://github.com/mini-app-polis/api-kaianolevine-com/commit/316fa2b7fa6747ecc0c463486d5ce0d136af3a12))
+
 # [2.96.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.95.4...v2.96.0) (2026-11-17)
 
 
