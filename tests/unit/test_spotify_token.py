@@ -122,3 +122,39 @@ def test_reminder_messages_carry_the_link_and_never_a_token(monkeypatch) -> None
         assert embed["url"] == "https://api.example/v1/spotify/authorize"
         assert "https://api.example/v1/spotify/authorize" in embed["description"]
         assert "2027-04-09" in embed["description"]
+
+
+def test_a_failed_check_logs_the_message_with_the_class(monkeypatch, caplog) -> None:
+    import asyncio
+    import contextlib
+
+    from kaianolevine_api import database
+
+    class _Session(contextlib.AbstractAsyncContextManager):
+        async def __aexit__(self, *exc_info):
+            return None
+
+        async def __aenter__(self):
+            return self
+
+    async def boom(settings, session):
+        raise RuntimeError("Doppler unreachable reading X: ReadTimeout")
+
+    async def stop(_secs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(database, "get_sessionmaker", lambda _url: _Session)
+    monkeypatch.setattr(st, "check_and_remind", boom)
+    monkeypatch.setattr(st.asyncio, "sleep", stop)
+
+    with caplog.at_level("ERROR"), pytest.raises(asyncio.CancelledError):
+        asyncio.run(st.reminder_loop(get_settings()))
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(
+        m.startswith(st.with_log_prefix(st.LOG_FAILURE, ""))
+        and "spotify token check failed: RuntimeError: "
+        "Doppler unreachable reading X: ReadTimeout"
+        in m
+        for m in messages
+    )
