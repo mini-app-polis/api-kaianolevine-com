@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import insert, text
 from sqlalchemy import inspect as sa_inspect
@@ -980,3 +980,146 @@ async def test_an_unknown_phase_is_refused(client) -> None:
     res = await client.post("/v1/evaluations", json=_finding(phase="mid-release"))
 
     assert res.status_code == 422
+
+
+# ── the outcome of one commit's evaluation, for a release that waits ─────
+
+_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _graded(**overrides) -> dict:
+    """A finding of a pre-release evaluation of _SHA."""
+    return _finding(**{"phase": "pre-release", "repo_commit": _SHA, **overrides})
+
+
+def _clean(**overrides) -> dict:
+    """The one row the evaluator closes a clean evaluation with."""
+    return _graded(
+        **{
+            "violation_id": None,
+            "dimension": "structural_conformance",
+            "severity": "SUCCESS",
+            "finding": "watcher-cog passed all deterministic checks for standards v7.0.0.",
+            "suggestion": None,
+            **overrides,
+        }
+    )
+
+
+async def _outcome(client, **params):
+    query = {"repo": "watcher-cog", "sha": _SHA, "phase": "pre-release", **params}
+    return await client.get("/v1/evaluations/runs/outcome", params=query)
+
+
+async def test_an_outcome_with_nothing_arrived_is_pending(client) -> None:
+    res = await _outcome(client)
+
+    assert res.status_code == 200, res.text
+    data = res.json()["data"]
+    assert data["state"] == "pending"
+    assert data["run_id"] is None
+    assert data["counts"] == {
+        "CRITICAL": 0,
+        "ERROR": 0,
+        "WARN": 0,
+        "INFO": 0,
+        "SUCCESS": 0,
+    }
+    assert data["findings"] == []
+
+
+async def test_a_clean_evaluation_is_complete(client) -> None:
+    assert (await client.post("/v1/evaluations", json=_clean())).status_code == 200
+
+    data = (await _outcome(client)).json()["data"]
+
+    assert data["state"] == "complete"
+    assert data["run_id"] == "deterministic-7.0.0-abc123"
+    assert data["counts"]["SUCCESS"] == 1
+    assert data["counts"]["ERROR"] == 0
+    assert data["last_evaluated_at"]
+
+
+async def test_findings_without_a_closing_row_are_running_and_counted(client) -> None:
+    """An ERROR that has arrived stays, so it can be acted on while running."""
+    await client.post(
+        "/v1/evaluations", json=_graded(severity="WARN", violation_id="CD-031")
+    )
+    await client.post("/v1/evaluations", json=_graded())
+
+    data = (await _outcome(client)).json()["data"]
+
+    assert data["state"] == "running"
+    assert data["counts"]["ERROR"] == 1
+    assert data["counts"]["WARN"] == 1
+    # Most severe first, so a caller can name what blocks.
+    assert [f["severity"] for f in data["findings"]] == ["ERROR", "WARN"]
+    assert data["findings"][0]["violation_id"] == "CD-026"
+
+
+async def test_only_the_newest_run_of_the_commit_is_counted(client, db_session) -> None:
+    await client.post("/v1/evaluations", json=_graded())
+    await client.post(
+        "/v1/evaluations", json=_clean(run_id="deterministic-7.0.0-def456")
+    )
+    # The first run's row is older, whatever order the inserts landed in.
+    await db_session.execute(
+        text(
+            "UPDATE pipeline_evaluations SET evaluated_at = now() - interval '1 hour' "
+            "WHERE run_id = 'deterministic-7.0.0-abc123'"
+        )
+    )
+    await db_session.commit()
+
+    data = (await _outcome(client)).json()["data"]
+
+    assert data["run_id"] == "deterministic-7.0.0-def456"
+    assert data["state"] == "complete"
+    assert data["counts"]["ERROR"] == 0
+
+
+async def test_since_leaves_out_an_evaluation_from_before_the_request(
+    client, db_session
+) -> None:
+    await client.post("/v1/evaluations", json=_clean())
+    await db_session.execute(
+        text("UPDATE pipeline_evaluations SET evaluated_at = now() - interval '1 hour'")
+    )
+    await db_session.commit()
+    since = datetime.now(UTC) - timedelta(minutes=5)
+
+    data = (await _outcome(client, since=since.isoformat())).json()["data"]
+
+    assert data["state"] == "pending"
+
+
+async def test_other_commits_phases_repos_and_engines_are_not_counted(client) -> None:
+    # A run of its own each: one run stores a finding once (PIPE-002).
+    others = [
+        {"repo_commit": "f" * 40},
+        {"phase": "post-release"},
+        {"phase": None},
+        {"repo": "deejay-cog"},
+        {"source": "conformance_check"},
+    ]
+    for i, other in enumerate(others):
+        res = await client.post(
+            "/v1/evaluations", json=_graded(run_id=f"run-{i}", **other)
+        )
+        assert res.json()["data"]["deduplicated"] is False
+
+    deterministic = (await _outcome(client)).json()["data"]
+    llm = (await _outcome(client, mode="llm")).json()["data"]
+
+    assert deterministic["state"] == "pending"
+    assert llm["state"] == "running"
+    assert llm["counts"]["ERROR"] == 1
+
+
+async def test_an_outcome_needs_a_commit_and_a_known_phase(client) -> None:
+    assert (await _outcome(client, sha="main")).status_code == 422
+    assert (await _outcome(client, phase="mid-release")).status_code == 422
+    missing = await client.get(
+        "/v1/evaluations/runs/outcome", params={"repo": "watcher-cog"}
+    )
+    assert missing.status_code == 422

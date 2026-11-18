@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime as dt
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from identity.types import Principal
@@ -24,6 +25,9 @@ from ..schemas import (
     EvaluationFleetRequest,
     EvaluationIntrospectionAccepted,
     EvaluationIntrospectionRequest,
+    EvaluationOutcome,
+    EvaluationOutcomeFinding,
+    EvaluationPhase,
     EvaluationRunAccepted,
     EvaluationRunRequest,
     EvaluationSummaryItem,
@@ -510,6 +514,117 @@ async def create_evaluation_run(
         mode=payload.mode,
         sha=payload.sha,
         phase=payload.phase,
+    )
+    return success_envelope(data, count=1, total=1)
+
+
+#: Every severity a row can hold, most severe first: the order an outcome
+#: counts and lists them in.
+_SEVERITIES = ("CRITICAL", "ERROR", "WARN", "INFO", "SUCCESS")
+
+#: The source each engine files its findings under.
+_SOURCE_FOR_MODE = {
+    "deterministic": "conformance_deterministic",
+    "llm": "conformance_check",
+}
+
+_OUTCOME_FINDINGS_LIMIT = 100
+
+
+@router.get(
+    "/evaluations/runs/outcome",
+    response_model=Envelope[EvaluationOutcome],
+    summary="What the newest evaluation of a commit holds",
+    description=(
+        "The findings of the newest evaluation of one commit in one release "
+        "phase, counted by severity, and whether more can arrive. For a "
+        "release pipeline waiting on the evaluation it asked for."
+        " Intentionally public: read-only Pipeline Health, with no per-owner content."
+    ),
+)
+async def evaluation_outcome(
+    repo: Annotated[str, Query(min_length=1, max_length=200)],
+    sha: Annotated[str, Query(pattern=r"^[0-9a-f]{7,40}$")],
+    phase: Annotated[EvaluationPhase, Query()],
+    mode: Annotated[Literal["deterministic", "llm"], Query()] = "deterministic",
+    since: Annotated[dt.datetime | None, Query()] = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> Envelope[EvaluationOutcome]:
+    """Answer "has the evaluation I asked for finished, and what did it find".
+
+    POST /v1/evaluations/runs acknowledges before anything is evaluated, and
+    GET /v1/evaluations cannot answer this: it shows each repository's
+    newest run whatever it graded, and has no filter for the commit or the
+    phase. This reads only rows of ``repo`` whose ``repo_commit`` is ``sha``
+    (as the evaluation was asked for it), recorded in ``phase`` by the
+    engine ``mode`` names.
+
+    **The newest run, not every run.** A pipeline re-run asks again, and
+    the API enqueues a second evaluation of the same commit under its own
+    run id. The run whose newest row arrived last is the one reported; an
+    older one is never mixed into its counts.
+
+    ``since`` keeps out evaluations from before the caller asked, so a
+    re-run decides on the evaluation it asked for rather than finding the
+    previous run's result already there.
+
+    **What "complete" can mean today.** The evaluator posts a run's
+    findings one at a time and writes no row that says it has finished,
+    except for a clean evaluation, which it closes with a single SUCCESS
+    row and nothing else. So a run holding a SUCCESS row is complete; one
+    holding findings is ``running`` until the evaluator closes those too.
+    A caller that blocks on ERROR can still decide on a running one: rows
+    are only ever added to a run, so an ERROR that has arrived stays.
+    """
+    source = _SOURCE_FOR_MODE[mode]
+    stmt = select(DbEval).where(
+        DbEval.repo == repo,
+        DbEval.repo_commit == sha,
+        DbEval.phase == phase,
+        DbEval.source == source,
+    )
+    if since is not None:
+        stmt = stmt.where(_EVALUATED_AT >= since)
+    stmt = stmt.order_by(_EVALUATED_AT.desc(), DbEval.id.desc())
+    rows = (await session.execute(stmt)).scalars().all()
+
+    counts = dict.fromkeys(_SEVERITIES, 0)
+    if not rows:
+        data = EvaluationOutcome(
+            repo=repo,
+            sha=sha,
+            phase=phase,
+            mode=mode,
+            state="pending",
+            counts=counts,
+        )
+        return success_envelope(data, count=1, total=1)
+
+    newest = rows[0]
+    run = [row for row in rows if row.run_id == newest.run_id]
+    for row in run:
+        counts[row.severity] = counts.get(row.severity, 0) + 1
+    rank = {severity: i for i, severity in enumerate(_SEVERITIES)}
+    listed = sorted(run, key=lambda row: rank.get(row.severity, len(rank)))
+    data = EvaluationOutcome(
+        repo=repo,
+        sha=sha,
+        phase=phase,
+        mode=mode,
+        state="complete" if counts["SUCCESS"] else "running",
+        run_id=newest.run_id,
+        repo_version=next((row.repo_version for row in run if row.repo_version), None),
+        counts=counts,
+        findings=[
+            EvaluationOutcomeFinding(
+                violation_id=row.violation_id,
+                severity=row.severity,
+                dimension=row.dimension,
+                finding=row.finding or "",
+            )
+            for row in listed[:_OUTCOME_FINDINGS_LIMIT]
+        ],
+        last_evaluated_at=newest.evaluated_at or newest.created_at,
     )
     return success_envelope(data, count=1, total=1)
 
