@@ -1,3 +1,10 @@
+# [2.99.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.98.1...v2.99.0) (2026-11-18)
+
+
+### Features
+
+* **evaluations:** answer what the newest evaluation of a commit holds, for a release that waits ([17ce772](https://github.com/mini-app-polis/api-kaianolevine-com/commit/17ce7721415fe9b22fcc87f0ff457de95ebb3da4))
+
 ## [2.98.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.98.0...v2.98.1) (2026-11-17)
 
 
