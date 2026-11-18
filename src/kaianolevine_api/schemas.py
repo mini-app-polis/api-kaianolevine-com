@@ -1974,6 +1974,63 @@ class EvaluationRunAccepted(BaseModel):
     )
 
 
+class EvaluationOutcomeFinding(BaseModel):
+    """One row of the evaluation an outcome reports on."""
+
+    violation_id: str | None = Field(
+        None, description="The rule the finding is against; null for a status row."
+    )
+    severity: str = Field(..., description="CRITICAL, ERROR, WARN, INFO or SUCCESS.")
+    dimension: str = Field(..., description="The dimension the finding grades.")
+    finding: str = Field(..., description="What the evaluator found.")
+
+
+class EvaluationOutcome(BaseModel):
+    """What the newest evaluation of one commit, in one release phase, holds.
+
+    For a release pipeline that has to wait for its evaluation: it asked
+    with POST /v1/evaluations/runs, which answers before anything is
+    evaluated, and reads this until it can decide. The counts are the
+    evaluation's findings so far; ``state`` says whether more can come.
+    """
+
+    repo: str = Field(..., description="Repository the evaluation graded.")
+    sha: str = Field(..., description="Commit the evaluation graded.")
+    phase: EvaluationPhase = Field(..., description="Release phase it was asked in.")
+    mode: Literal["deterministic", "llm"] = Field(
+        ..., description="Engine whose findings are counted."
+    )
+    state: Literal["pending", "running", "complete"] = Field(
+        ...,
+        description=(
+            "pending: no finding of this evaluation has arrived. running: "
+            "findings have arrived, and nothing yet says they are all of "
+            "them. complete: the evaluation holds its closing row, so no "
+            "more findings will arrive. Today the evaluator closes only a "
+            "clean evaluation, with its one SUCCESS row; an evaluation with "
+            "findings reads running until the evaluator closes those too."
+        ),
+    )
+    run_id: str | None = Field(
+        None, description="The run the findings are filed under; null while pending."
+    )
+    repo_version: str | None = Field(
+        None,
+        description="The release tag the evaluator found on the commit, if any.",
+    )
+    counts: dict[str, int] = Field(
+        ...,
+        description="Findings of the run by severity, every severity named.",
+    )
+    findings: list[EvaluationOutcomeFinding] = Field(
+        default_factory=list,
+        description="The run's rows, most severe first, at most 100.",
+    )
+    last_evaluated_at: dt.datetime | None = Field(
+        None, description="When the newest of the run's rows arrived."
+    )
+
+
 class EvaluationIntrospectionRequest(BaseModel):
     """Ask for the checks that are scoped to no repository.
 
