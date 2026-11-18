@@ -2004,11 +2004,10 @@ class EvaluationOutcome(BaseModel):
         ...,
         description=(
             "pending: no finding of this evaluation has arrived. running: "
-            "findings have arrived, and nothing yet says they are all of "
-            "them. complete: the evaluation holds its closing row, so no "
-            "more findings will arrive. Today the evaluator closes only a "
-            "clean evaluation, with its one SUCCESS row; an evaluation with "
-            "findings reads running until the evaluator closes those too."
+            "findings have arrived within the last settle_seconds, so more "
+            "may follow. complete: the evaluation holds its SUCCESS row (a "
+            "clean evaluation), or its findings stopped arriving "
+            "settle_seconds ago; the evaluator posts them together."
         ),
     )
     run_id: str | None = Field(

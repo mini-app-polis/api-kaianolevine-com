@@ -1057,6 +1057,36 @@ async def test_findings_without_a_closing_row_are_running_and_counted(client) ->
     assert data["findings"][0]["violation_id"] == "CD-026"
 
 
+async def test_findings_that_stopped_arriving_are_complete(client, db_session) -> None:
+    """The evaluator posts a repository's findings together; once they stop
+    for settle_seconds, there are no more to come."""
+    await client.post(
+        "/v1/evaluations", json=_graded(severity="WARN", violation_id="CD-031")
+    )
+    await db_session.execute(
+        text(
+            "UPDATE pipeline_evaluations SET evaluated_at = now() - interval '1 minute'"
+        )
+    )
+    await db_session.commit()
+
+    data = (await _outcome(client)).json()["data"]
+
+    assert data["state"] == "complete"
+    assert data["counts"]["WARN"] == 1
+    assert data["counts"]["ERROR"] == 0
+
+
+async def test_the_settle_period_is_the_callers_to_set(client) -> None:
+    await client.post("/v1/evaluations", json=_graded(severity="WARN"))
+
+    running = (await _outcome(client, settle_seconds=600)).json()["data"]
+    settled = (await _outcome(client, settle_seconds=0)).json()["data"]
+
+    assert running["state"] == "running"
+    assert settled["state"] == "complete"
+
+
 async def test_only_the_newest_run_of_the_commit_is_counted(client, db_session) -> None:
     await client.post("/v1/evaluations", json=_graded())
     await client.post(

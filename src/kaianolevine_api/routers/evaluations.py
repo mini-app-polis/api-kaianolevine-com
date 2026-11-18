@@ -518,6 +518,11 @@ async def create_evaluation_run(
     return success_envelope(data, count=1, total=1)
 
 
+#: How long a run's findings must have stopped arriving before the outcome
+#: calls it complete. The evaluator posts a repository's findings together,
+#: within seconds of each other.
+_OUTCOME_SETTLE_SECONDS = 15
+
 #: Every severity a row can hold, most severe first: the order an outcome
 #: counts and lists them in.
 _SEVERITIES = ("CRITICAL", "ERROR", "WARN", "INFO", "SUCCESS")
@@ -548,6 +553,7 @@ async def evaluation_outcome(
     phase: Annotated[EvaluationPhase, Query()],
     mode: Annotated[Literal["deterministic", "llm"], Query()] = "deterministic",
     since: Annotated[dt.datetime | None, Query()] = None,
+    settle_seconds: Annotated[int, Query(ge=0, le=600)] = _OUTCOME_SETTLE_SECONDS,
     session: AsyncSession = Depends(get_db_session),
 ) -> Envelope[EvaluationOutcome]:
     """Answer "has the evaluation I asked for finished, and what did it find".
@@ -568,13 +574,14 @@ async def evaluation_outcome(
     re-run decides on the evaluation it asked for rather than finding the
     previous run's result already there.
 
-    **What "complete" can mean today.** The evaluator posts a run's
-    findings one at a time and writes no row that says it has finished,
-    except for a clean evaluation, which it closes with a single SUCCESS
-    row and nothing else. So a run holding a SUCCESS row is complete; one
-    holding findings is ``running`` until the evaluator closes those too.
-    A caller that blocks on ERROR can still decide on a running one: rows
-    are only ever added to a run, so an ERROR that has arrived stays.
+    **What "complete" means.** The evaluator writes no row that says it
+    has finished, except for a clean evaluation, which it closes with a
+    single SUCCESS row. It does compute every check before posting, then
+    posts all of a repository's findings together, within seconds. So a
+    run is complete when it holds a SUCCESS row, or when no row of it has
+    arrived for ``settle_seconds``; until then it is ``running``. A caller
+    that blocks on ERROR can still decide on a running one: rows are only
+    ever added to a run, so an ERROR that has arrived stays.
     """
     source = _SOURCE_FOR_MODE[mode]
     stmt = select(DbEval).where(
@@ -601,6 +608,12 @@ async def evaluation_outcome(
         return success_envelope(data, count=1, total=1)
 
     newest = rows[0]
+    newest_at = newest.evaluated_at or newest.created_at
+    # The database's clock, the one that stamped the rows.
+    now = await session.scalar(select(func.now()))
+    settled = now is not None and now - newest_at >= dt.timedelta(
+        seconds=settle_seconds
+    )
     run = [row for row in rows if row.run_id == newest.run_id]
     for row in run:
         counts[row.severity] = counts.get(row.severity, 0) + 1
@@ -611,7 +624,7 @@ async def evaluation_outcome(
         sha=sha,
         phase=phase,
         mode=mode,
-        state="complete" if counts["SUCCESS"] else "running",
+        state="complete" if counts["SUCCESS"] or settled else "running",
         run_id=newest.run_id,
         repo_version=next((row.repo_version for row in run if row.repo_version), None),
         counts=counts,
@@ -624,7 +637,7 @@ async def evaluation_outcome(
             )
             for row in listed[:_OUTCOME_FINDINGS_LIMIT]
         ],
-        last_evaluated_at=newest.evaluated_at or newest.created_at,
+        last_evaluated_at=newest_at,
     )
     return success_envelope(data, count=1, total=1)
 
