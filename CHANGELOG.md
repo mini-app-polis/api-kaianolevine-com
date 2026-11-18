@@ -1,3 +1,10 @@
+# [2.100.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.99.0...v2.100.0) (2026-11-18)
+
+
+### Features
+
+* **evaluations:** call an evaluation complete once its findings stop arriving ([fc96d83](https://github.com/mini-app-polis/api-kaianolevine-com/commit/fc96d83389fa350a5ae1233078e3253a9a32e4f3))
+
 # [2.99.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.98.1...v2.99.0) (2026-11-18)
 
 
