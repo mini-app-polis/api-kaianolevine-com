@@ -241,7 +241,7 @@ async def test_errors_and_run_failures_are_never_expired(
 
     # More expiring while the summary waits joins it; Sentry hears once.
     await client.post("/v1/notify", json={"content": "later"})
-    clocks.wall += dt.timedelta(days=1)
+    clocks.wall += dt.timedelta(days=3)
     await discord_outbox.drain_once(channels, maker)
     summary = [r for r in await _rows(maker, "runs") if r["kind"] == "expired"]
     assert len(summary) == 1 and summary[0]["payload"]["count"] == 3
