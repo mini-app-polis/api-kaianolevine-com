@@ -1,3 +1,10 @@
+## [2.100.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.100.0...v2.100.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **discord:** keep outbox messages 48 hours before expiring them ([40b5806](https://github.com/mini-app-polis/api-kaianolevine-com/commit/40b580696501f045b357ce11357a81e6a6499df2))
+
 # [2.100.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.99.0...v2.100.0) (2026-11-18)
 
 
