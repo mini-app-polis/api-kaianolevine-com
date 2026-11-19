@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     # How long a kept message may wait in the outbox before it is counted
     # and not sent. Messages at WARN, ERROR or CRITICAL and anything for the
     # errors channel never expire.
-    DISCORD_OUTBOX_EXPIRE_HOURS: float = 6.0
+    DISCORD_OUTBOX_EXPIRE_HOURS: float = 48.0
     # A message sent from the outbox later than this after it arrived
     # carries the time it arrived.
     DISCORD_LATE_AFTER_SECS: float = 60.0

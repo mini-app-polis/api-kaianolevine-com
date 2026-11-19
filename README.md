@@ -556,7 +556,7 @@ loses nothing:
 | `DISCORD_SEND_WAIT_SECS` | `1.0` | a route's (and the drainer's) wait on rate limits before keeping a message; GitHub deliveries wait `GITHUB_MAX_WAIT_SECS` |
 | `DISCORD_WEBHOOK_RATE_PER_SEC` / `DISCORD_WEBHOOK_BURST` | `2.0` / `4` | the per-webhook budget |
 | `DISCORD_GLOBAL_RATE_PER_SEC` / `DISCORD_GLOBAL_BURST` | `4.0` / `8` | the budget across every webhook |
-| `DISCORD_OUTBOX_EXPIRE_HOURS` | `6.0` | when an expiring message is counted instead of sent |
+| `DISCORD_OUTBOX_EXPIRE_HOURS` | `48.0` | when an expiring message is counted instead of sent |
 | `DISCORD_LATE_AFTER_SECS` | `60.0` | when a sent message carries its original time |
 | `DISCORD_OUTBOX_POLL_SECS` | `2.0` | how often the drainer looks |
 
