@@ -1,3 +1,11 @@
+## [2.100.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.100.1...v2.100.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **deps:** bump miniapppolis-common-utils to 9.14.3 ([3351be2](https://github.com/mini-app-polis/api-kaianolevine-com/commit/3351be2a1db1c07802b9f59bb52cd8b16af5b9a5))
+* **deps:** bump the minor-and-patch group with 7 updates ([1892197](https://github.com/mini-app-polis/api-kaianolevine-com/commit/18921973dc16709e7209f7af83b51a2339244cde))
+
 ## [2.100.1](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.100.0...v2.100.1) (2026-11-19)
 
 
