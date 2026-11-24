@@ -4,6 +4,7 @@ while nobody is using the service (idle.py)."""
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 import pytest
@@ -100,7 +101,9 @@ async def test_the_outbox_drain_holds_off_while_quiet(
         return 0
 
     monkeypatch.setattr(discord_outbox, "drain_once", drain_once)
-    idle.touch(now=0.0)  # long ago: quiet
+    # The last request, just past the quiet window. Not an absolute time: the
+    # monotonic clock starts near zero on a freshly booted CI runner.
+    idle.touch(now=time.monotonic() - idle.QUIET_AFTER_SECONDS - 1)
     loop = asyncio.create_task(discord_outbox.drain_loop(on))
     try:
         await asyncio.sleep(0.05)
