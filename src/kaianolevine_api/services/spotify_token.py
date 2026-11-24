@@ -52,6 +52,7 @@ from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import idle
 from ..config import Settings
 from ..models import SpotifyTokenReminder
 from . import discord
@@ -322,6 +323,11 @@ async def reminder_loop(settings: Settings) -> None:
     interval = max(settings.SPOTIFY_TOKEN_CHECK_INTERVAL_SECS, 60)
     failures = 0
     while True:
+        if idle.quiet(settings):
+            # A check would keep the service from sleeping (idle.py); the
+            # reminders are days apart, so the next request's hour will do.
+            await asyncio.sleep(interval)
+            continue
         try:
             maker = get_sessionmaker(settings.DATABASE_URL)
             async with maker() as session:

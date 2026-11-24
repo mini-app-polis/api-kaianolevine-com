@@ -22,6 +22,7 @@ from mini_app_polis.request_metrics import RequestMetricsMiddleware
 from mini_app_polis.sentry import init_sentry
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
+from . import idle
 from .config import get_settings
 from .retrieval.wcs import auto_refresh
 from .routers import (
@@ -97,7 +98,8 @@ async def lifespan(_app: FastAPI):
         with_log_prefix(
             LOG_START,
             f"kaianolevine-api starting (env={settings.ENVIRONMENT}, "
-            f"sentry={'on' if sentry_on else 'off'})",
+            f"sentry={'on' if sentry_on else 'off'}, "
+            f"sleep_when_idle={'on' if idle.enabled(settings) else 'off'})",
         )
     )
     # One line per setting; a value only for names on SETTINGS_ALLOWLIST.
@@ -240,6 +242,10 @@ def _build_app() -> FastAPI:
     # actually went on the wire, and to be inside the server-error handler
     # below so an unhandled exception reaches it as a raise.
     app.middleware("http")(activity.activity_middleware)
+
+    # Every request tells the background work the service is in use, so it
+    # holds off only while nobody is (idle.py).
+    app.add_middleware(idle.ActivityMiddleware)
 
     # Outermost, so its clock covers everything the client waits for, CORS
     # and the activity middleware included. Records nothing outside

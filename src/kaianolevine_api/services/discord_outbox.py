@@ -59,6 +59,7 @@ from mini_app_polis.logger import (
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from .. import idle
 from ..config import Settings
 from ..database import get_sessionmaker
 from . import discord
@@ -565,6 +566,11 @@ async def drain_loop(settings: Settings) -> None:
     """
     failing = False
     while True:
+        if idle.quiet(settings):
+            # Nothing is queued while nobody is using the service, and a
+            # poll would keep it from sleeping (idle.py).
+            await asyncio.sleep(settings.DISCORD_OUTBOX_POLL_SECS)
+            continue
         try:
             await drain_once(settings)
         except Exception as exc:  # noqa: BLE001 — the loop must outlive one failure

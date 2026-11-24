@@ -189,6 +189,8 @@ export default defineRailway((ctx) => {
       NOTIFY_SUPPRESSED_TABLES: preserve(),
       NOTIFY_EXCLUDED_PATHS: preserve(),
       DISCORD_NOTIFY_EVENTS: preserve(),
+      // Unset in production, where the service never sleeps (idle.py).
+      SLEEP_WHEN_IDLE: preserve(),
     },
   });
 

@@ -48,6 +48,7 @@ from mini_app_polis.logger import (
     with_log_prefix,
 )
 
+from .. import idle
 from ..config import Settings
 from ..schemas import (
     GithubBuildCounts,
@@ -781,4 +782,8 @@ async def refresh_loop(settings: Settings) -> None:
     while True:
         ttl = cache_ttl(settings)
         await asyncio.sleep(max(ttl, 1))
+        if idle.quiet(settings):
+            # Nobody is looking, and the fetch would keep the service from
+            # sleeping (idle.py); the next request serves stale and refreshes.
+            continue
         await _refresh_in_background(settings, load_config(), ttl)
