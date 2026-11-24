@@ -1,3 +1,15 @@
+# [2.101.0](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.100.2...v2.101.0) (2026-11-24)
+
+
+### Features
+
+* let the service sleep when idle in development ([dbaaf05](https://github.com/mini-app-polis/api-kaianolevine-com/commit/dbaaf052045ca491e8f4d9eec679c650f9c7a742))
+
+
+### Performance Improvements
+
+* cap malloc arenas to cut memory ([0d6b4c5](https://github.com/mini-app-polis/api-kaianolevine-com/commit/0d6b4c56ab2838f8c3cf46518092ef784421e912))
+
 ## [2.100.2](https://github.com/mini-app-polis/api-kaianolevine-com/compare/v2.100.1...v2.100.2) (2026-11-23)
 
 
