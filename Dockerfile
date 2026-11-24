@@ -10,6 +10,11 @@
 # which declares the rest of the service's settings, deliberately does not
 # repeat it (CD-017 accepts either, not both). It is wrapped in /bin/sh -c
 # for the `&&` and $PORT.
+#
+# MALLOC_ARENA_MAX caps glibc's per-thread malloc arenas. Work handed to
+# threads (boto3, asyncio.to_thread) gets an arena of its own that keeps what
+# it freed, so the process's memory, which Railway bills by the minute, can
+# keep growing between deploys; two shared arenas let freed memory be reused.
 
 FROM python:3.14-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b
 
@@ -20,6 +25,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PYTHONUNBUFFERED=1 \
+    MALLOC_ARENA_MAX=2 \
     PATH="/app/.venv/bin:${PATH}"
 
 # Dependencies first, so a code-only change reuses this layer. The version
