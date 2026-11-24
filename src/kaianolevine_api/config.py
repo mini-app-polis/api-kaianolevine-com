@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     DISCORD_LATE_AFTER_SECS: float = 60.0
     # How often the outbox drainer looks for messages to send.
     DISCORD_OUTBOX_POLL_SECS: float = 2.0
+    # Hold no database connection and no background work while idle, so
+    # Railway can sleep the service (idle.py). Unset: on in development only.
+    SLEEP_WHEN_IDLE: bool | None = None
     # Shared secret configured on the GitHub org webhook. Unset means the
     # route rejects every delivery rather than accepting unsigned ones.
     GITHUB_WEBHOOK_SECRET: str | None = None

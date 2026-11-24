@@ -297,6 +297,24 @@ applies Terraform: the `dev` → `main` pull request is planned and, once
 merged, applied — removals only with the `allow-destroy` label. Development
 keeps its dashboard settings (`.railway/README.md`).
 
+### Sleeping when idle
+
+Development is unused most of the time, and Railway bills an always-on
+service for its memory around the clock. Its Serverless setting (on the
+service) stops a service once it has sent nothing for 5 to 10 minutes and
+boots it again on the next request, which waits for the boot and may get a
+502. Anything that reaches the database or another service on its own counts
+as sending, so `src/kaianolevine_api/idle.py` keeps the service quiet while
+nobody uses it: the engine holds no connection between requests (`NullPool`),
+and once there has been no request for 3 minutes the Discord outbox drain,
+the GitHub dashboard refresh and the Spotify token check skip their work
+until the next one.
+
+It is on when `SLEEP_WHEN_IDLE` is unset and `ENVIRONMENT` is
+`development`, and `SLEEP_WHEN_IDLE` turns it on or off anywhere. Production
+leaves it unset, so it is off there, and production's Serverless setting
+stays off.
+
 ## Authentication and authorization
 
 This service is a conformant enforcement point for the `identity`

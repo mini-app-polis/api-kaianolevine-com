@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from functools import lru_cache
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from . import idle
 from .config import Settings, get_settings
+
+
+def _pool_options() -> dict[str, Any]:
+    if idle.enabled(get_settings()):
+        # A pooled connection left open keeps Railway from sleeping the
+        # service, so each request connects and closes (idle.py).
+        return {"poolclass": NullPool}
+    return {"pool_pre_ping": True}
 
 
 @lru_cache(maxsize=1)
@@ -21,7 +32,7 @@ def _get_engine(database_url: str):
     return create_async_engine(
         database_url,
         echo=False,
-        pool_pre_ping=True,
+        **_pool_options(),
         # Keeps bound parameters out of every DBAPI exception's string
         # form, which is what anything rendering that exception — a log
         # line, a traceback, a notification — would otherwise carry.
